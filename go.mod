@@ -1,10 +1,9 @@
 module github.com/DragonSecurity/github-org-manager-go
 
-go 1.25.0
+go 1.25.1
 
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.17.0
-	github.com/earthboundkid/versioninfo/v2 v2.24.1
 	github.com/google/go-github/v75 v75.0.0
 	github.com/spf13/cobra v1.10.1
 	golang.org/x/oauth2 v0.31.0
