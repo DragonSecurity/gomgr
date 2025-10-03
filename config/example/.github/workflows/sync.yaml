@@ -11,10 +11,7 @@ jobs:
     strategy:
       matrix:
         config:
-          - { folder: "dragonsecurity/dragonsecurity", gom_version: "v0.12.2" }
-          - { folder: "dragonsecurity/dragondevcc",   gom_version: "v0.10.2" }
-          - { folder: "dragonsecurity/kamuses",       gom_version: "v0.10.2" }
-
+          - { folder: "config/example", gom_version: "v0.0.1" }
     env:
       GH_TOKEN: ${{ github.token }}   # for gh release download
 

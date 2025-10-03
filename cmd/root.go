@@ -27,8 +27,6 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&cfgDir, "config", "c", "", "Path to config directory (required)")
-	_ = rootCmd.MarkPersistentFlagRequired("config")
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable verbose debug logs")
 	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry", false, "Show a plan without applying changes")
 }

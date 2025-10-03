@@ -21,6 +21,7 @@ var syncCmd = &cobra.Command{
 		}
 
 		cfg, err := config.Load(cfgDir)
+
 		if err != nil {
 			return err
 		}
@@ -48,4 +49,8 @@ var syncCmd = &cobra.Command{
 	},
 }
 
-func init() { rootCmd.AddCommand(syncCmd) }
+func init() {
+	syncCmd.PersistentFlags().StringVarP(&cfgDir, "config", "c", "", "Path to config directory (required)")
+	_ = syncCmd.MarkPersistentFlagRequired("config")
+	rootCmd.AddCommand(syncCmd)
+}
