@@ -8,16 +8,20 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-24.04
+    continue-on-error: true
     strategy:
+      max-parallel: 5
+      fail-fast: false
       matrix:
         config:
-          - { folder: "config/example", gom_version: "v0.0.1" }
+          - { folder: "config/example", gom_version: "v0.0.3" }
+
     env:
       GH_TOKEN: ${{ github.token }}   # for gh release download
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
 
       - name: Determine platform
         id: plat
@@ -34,7 +38,7 @@ jobs:
           ASSET_ZIP="gomgr_${VERSION}_${OS}_${ARCH}.zip"
 
           mkdir -p .gomgr
-          gh release download "$VERSION"                 --repo DragonSecurity/github-org-manager-go                 --pattern "$ASSET_TGZ"                 --dir .gomgr || true
+          gh release download "$VERSION" --repo DragonSecurity/github-org-manager-go --pattern "$ASSET_TGZ"                 --dir .gomgr || true
 
           if [ ! -f ".gomgr/$ASSET_TGZ" ]; then
             gh release download "$VERSION" --repo DragonSecurity/github-org-manager-go --pattern "$ASSET_ZIP"                   --dir .gomgr
