@@ -1,0 +1,93 @@
+name: Release gomgr
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build binaries
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.x"
+
+      - name: Set VERSION
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          BIN=gomgr
+          if [ "${{ matrix.goos }}" = "windows" ]; then BIN=gomgr.exe; fi
+          mkdir -p build
+          go build -trimpath -ldflags "-s -w -X github.com/DragonSecurity/github-org-manager-go/internal/version.Version=${VERSION}" -o build/$BIN ./main.go
+
+      - name: Package
+        run: |
+          PKG="gomgr_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}"
+          mkdir -p "dist/${PKG}"
+          cp build/* "dist/${PKG}/"
+          if [ -f README.md ]; then cp README.md "dist/${PKG}/"; fi
+          if [ -f LICENSE ]; then cp LICENSE "dist/${PKG}/"; fi
+          cd dist
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip -r "${PKG}.zip" "${PKG}"
+          else
+            tar -czf "${PKG}.tar.gz" "${PKG}"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "artifacts_${{ matrix.goos }}_${{ matrix.goarch }}"
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-24.04
+    needs: build
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          find . -type f \( -name "*.tar.gz" -o -name "*.zip" \) -print0 | xargs -0 -I {} sh -c 'sha256sum "{}" >> checksums.txt'
+          ls -la
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          prerelease: false
+          files: |
+            dist/**/*.tar.gz
+            dist/**/*.zip
+            dist/checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

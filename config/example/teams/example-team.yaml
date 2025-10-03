@@ -1,0 +1,10 @@
+name: Platform Team
+description: Core platform engineers
+privacy: closed
+parents: []
+maintainers:
+  - octocat
+repositories:
+  infra: maintain
+  api: push
+  web: pull

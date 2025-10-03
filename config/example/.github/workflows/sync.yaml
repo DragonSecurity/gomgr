@@ -1,0 +1,66 @@
+name: Synchronise organization users and teams (gomgr)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        config:
+          - { folder: "dragonsecurity/dragonsecurity", gom_version: "v0.12.2" }
+          - { folder: "dragonsecurity/dragondevcc",   gom_version: "v0.10.2" }
+          - { folder: "dragonsecurity/kamuses",       gom_version: "v0.10.2" }
+
+    env:
+      GH_TOKEN: ${{ github.token }}   # for gh release download
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine platform
+        id: plat
+        run: |
+          echo "os=linux"   >> $GITHUB_OUTPUT
+          echo "arch=amd64" >> $GITHUB_OUTPUT
+
+      - name: Download gomgr binary from releases
+        run: |
+          VERSION="${{ matrix.config.gom_version }}"
+          OS="${{ steps.plat.outputs.os }}"
+          ARCH="${{ steps.plat.outputs.arch }}"
+          ASSET_TGZ="gomgr_${VERSION}_${OS}_${ARCH}.tar.gz"
+          ASSET_ZIP="gomgr_${VERSION}_${OS}_${ARCH}.zip"
+
+          mkdir -p .gomgr
+          gh release download "$VERSION"                 --repo DragonSecurity/github-org-manager-go                 --pattern "$ASSET_TGZ"                 --dir .gomgr || true
+
+          if [ ! -f ".gomgr/$ASSET_TGZ" ]; then
+            gh release download "$VERSION" --repo DragonSecurity/github-org-manager-go --pattern "$ASSET_ZIP"                   --dir .gomgr
+          fi
+
+          if [ -f ".gomgr/$ASSET_TGZ" ]; then
+            tar -xzf ".gomgr/$ASSET_TGZ" -C .gomgr
+          else
+            unzip -o ".gomgr/$ASSET_ZIP" -d .gomgr
+          fi
+
+          GOMGR_PATH=$(find .gomgr -type f -name "gomgr" -o -name "gomgr.exe" | head -n1)
+          sudo mv "$GOMGR_PATH" /usr/local/bin/gomgr
+          sudo chmod +x /usr/local/bin/gomgr
+
+      - name: Show gomgr version
+        run: gomgr version
+
+      # - name: Dry-run sync
+      #   run: gomgr sync -c ${{ matrix.config.folder }} --dry
+
+      - name: Synchronise settings
+        run: gomgr sync -c ${{ matrix.config.folder }}
+        env:
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.DSEC_USER_MANAGEMENT_APP_PRIVATE_KEY }}
+          GITHUB_APP_ID: "1719369"

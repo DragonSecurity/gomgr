@@ -1,0 +1,17 @@
+org: KaMuses
+# PAT path: set env GITHUB_TOKEN
+# GitHub App path:
+app_id: 1719369
+private_key: ./dsec-gom.2025-10-02.private-key.pem
+dry_warnings:
+  warn_unmanaged_teams: true
+  warn_members_without_any_team: true
+remove_members_without_team: true
+delete_unconfigured_teams: true
+create_repo: true
+add_renovate_config: true
+renovate_config: | 
+  { 
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": ["github>DragonSecurity/renovate-presets"]
+  }
