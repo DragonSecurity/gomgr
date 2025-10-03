@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -24,6 +25,10 @@ func Load(dir string) (*Root, error) {
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			continue // ignore non-YAML files like .DS_Store, README, etc.
 		}
 		var t TeamConfig
 		if err := readYAML(filepath.Join(teamDir, e.Name()), &t); err != nil {

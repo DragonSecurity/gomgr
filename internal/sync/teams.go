@@ -29,8 +29,11 @@ func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) (
 	// build desired map
 	for _, t := range cfg.Team {
 		slug := t.Slug
-		if slug == "" {
+		if slug == "" && t.Name != "" {
 			slug = strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
+		}
+		if slug == "" {
+			continue
 		}
 		t.Slug = slug
 		desired[slug] = t
@@ -87,6 +90,10 @@ func planTeamMembership(ctx context.Context, c *gh.Client, cfg *config.Root, st 
 		for {
 			users, resp, err := c.REST.Teams.ListTeamMembersBySlug(ctx, org, slug, mopts)
 			if err != nil {
+				var ghErr *github.ErrorResponse
+				if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusNotFound {
+					break
+				}
 				return nil, err
 			}
 			for _, u := range users {
@@ -102,6 +109,10 @@ func planTeamMembership(ctx context.Context, c *gh.Client, cfg *config.Root, st 
 		for {
 			users, resp, err := c.REST.Teams.ListTeamMembersBySlug(ctx, org, slug, opts)
 			if err != nil {
+				var ghErr *github.ErrorResponse
+				if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusNotFound {
+					break
+				}
 				return nil, err
 			}
 			for _, u := range users {
