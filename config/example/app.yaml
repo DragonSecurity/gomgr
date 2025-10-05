@@ -9,6 +9,7 @@ dry_warnings:
 remove_members_without_team: true
 delete_unconfigured_teams: true
 create_repo: true
+add_default_readme: true
 add_renovate_config: true
 renovate_config: | 
   { 

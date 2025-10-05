@@ -14,6 +14,7 @@ type AppConfig struct {
 	CreateRepo               bool   `yaml:"create_repo"`
 	AddRenovateConfig        bool   `yaml:"add_renovate_config"`
 	RenovateConfig           string `yaml:"renovate_config"`
+	AddDefaultReadme         bool   `yaml:"add_default_readme"`
 }
 
 type OrgConfig struct {

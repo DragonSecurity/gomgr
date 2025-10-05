@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/DragonSecurity/github-org-manager-go/internal/config"
@@ -185,8 +186,62 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 				existing[r] = true
 			}
 			out = append(out, util.Change{Scope: "team-repo", Target: slug + "/" + r, Action: "grant", Details: map[string]any{"org": org, "slug": slug, "repo": repo, "permission": perm}})
+			if cfg.App.AddDefaultReadme {
+				readmeContent := fmt.Sprintf(
+					"# %s\n\n"+
+						"Quick setup — if you’ve done this kind of thing before  \n"+
+						"or clone directly:  \n\n"+
+						"```bash\n"+
+						"git clone git@github.com:%s/%s.git\n"+
+						"```\n\n"+
+						"Get started by creating a new file or uploading an existing one.  \n"+
+						"We recommend every repository include a README, LICENSE, and .gitignore.\n\n"+
+						"…or create a new repository on the command line\n\n"+
+						"```bash\n"+
+						"echo \"# %s\" >> README.md\n"+
+						"git init\n"+
+						"git add README.md\n"+
+						"git commit -m \"first commit\"\n"+
+						"git branch -M main\n"+
+						"git remote add origin git@github.com:%s/%s.git\n"+
+						"git push -u origin main\n"+
+						"```\n\n"+
+						"…or push an existing repository from the command line\n\n"+
+						"```bash\n"+
+						"git remote add origin git@github.com:%s/%s.git\n"+
+						"git branch -M main\n"+
+						"git push -u origin main\n"+
+						"```\n",
+					repo, org, repo, repo, org, repo, org, repo,
+				)
+				out = append(out, util.Change{
+					Scope:  "repo-file",
+					Target: r + ":README.md",
+					Action: "ensure",
+					Details: map[string]any{
+						"org":     org,
+						"repo":    repo,
+						"path":    "README.md",
+						"content": readmeContent,
+						"message": "chore: add default README",
+						"branch":  "main",
+					},
+				})
+			}
 			if cfg.App.AddRenovateConfig && cfg.App.RenovateConfig != "" {
-				out = append(out, util.Change{Scope: "repo-file", Target: r + ":.github/renovate.json", Action: "ensure", Details: map[string]any{"org": org, "repo": repo, "path": ".github/renovate.json", "content": cfg.App.RenovateConfig, "message": "chore: add Renovate config", "branch": "main"}})
+				out = append(out, util.Change{
+					Scope:  "repo-file",
+					Target: r + ":.github/renovate.json",
+					Action: "ensure",
+					Details: map[string]any{
+						"org":     org,
+						"repo":    repo,
+						"path":    ".github/renovate.json",
+						"content": cfg.App.RenovateConfig,
+						"message": "chore: add Renovate config",
+						"branch":  "main",
+					},
+				})
 			}
 		}
 	}
@@ -219,7 +274,12 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 
 	if cfg.App.RemoveMembersWithoutTeam {
 		// list all org members
-		memOpt := &github.ListMembersOptions{ListOptions: github.ListOptions{PerPage: 100}}
+		memOpt := &github.ListMembersOptions{
+			Role: "member",
+			ListOptions: github.ListOptions{
+				PerPage: 100,
+			},
+		}
 		var members []*github.User
 		for {
 			us, resp, err := c.REST.Organizations.ListMembers(ctx, org, memOpt)
@@ -274,6 +334,21 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 // ---- apply ----
 
 func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) error {
+	precedence := map[string]int{
+		"team:create":        10,
+		"repo:ensure":        10,
+		"team-repo:grant":    20,
+		"team-member:ensure": 30,
+		"repo-file:ensure":   40,
+		"team:delete":        90,
+	}
+
+	sort.Slice(changes, func(i, j int) bool {
+		ai := changes[i].Scope + ":" + changes[i].Action
+		aj := changes[j].Scope + ":" + changes[j].Action
+		return precedence[ai] < precedence[aj]
+	})
+
 	for _, ch := range changes {
 		switch ch.Scope + ":" + ch.Action {
 		case "team:create":
@@ -283,11 +358,11 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 			var privacyPtr, descPtr *string
 			if v, ok := d["privacy"]; ok && fmt.Sprint(v) != "" {
 				pv := fmt.Sprint(v)
-				privacyPtr = github.String(pv)
+				privacyPtr = github.Ptr(pv)
 			}
 			if v, ok := d["description"]; ok && fmt.Sprint(v) != "" {
 				dv := fmt.Sprint(v)
-				descPtr = github.String(dv)
+				descPtr = github.Ptr(dv)
 			}
 			newTeam := github.NewTeam{Name: name, Privacy: privacyPtr, Description: descPtr}
 			_, _, err := c.REST.Teams.CreateTeam(ctx, org, newTeam)
@@ -322,7 +397,13 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 			if v, ok := d["private"]; ok {
 				private = fmt.Sprint(v) != "false"
 			}
-			_, _, err := c.REST.Repositories.Create(ctx, org, &github.Repository{Name: github.String(name), Private: github.Bool(private)})
+			_, _, err := c.REST.Repositories.Create(ctx, org, &github.Repository{
+				Name:                github.Ptr(name),
+				Private:             github.Ptr(private),
+				AllowAutoMerge:      github.Ptr(true),
+				AllowMergeCommit:    github.Ptr(false),
+				DeleteBranchOnMerge: github.Ptr(true),
+			})
 			if err != nil {
 				var ghErr *github.ErrorResponse
 				if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == 422 {
@@ -356,7 +437,11 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 				return fmt.Errorf("check %s/%s:%s: %w", org, repo, path, err)
 			}
 			if file == nil {
-				_, _, err := c.REST.Repositories.CreateFile(ctx, org, repo, path, &github.RepositoryContentFileOptions{Message: github.String(message), Content: content, Branch: github.String(branch)})
+				_, _, err := c.REST.Repositories.CreateFile(ctx, org, repo, path, &github.RepositoryContentFileOptions{
+					Message: github.Ptr(message),
+					Content: content,
+					Branch:  github.Ptr(branch),
+				})
 				if err != nil {
 					return fmt.Errorf("create file %s in %s/%s: %w", path, org, repo, err)
 				}
