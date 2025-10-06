@@ -5,7 +5,7 @@ import (
 	rdebug "runtime/debug"
 	"strings"
 
-	"github.com/DragonSecurity/github-org-manager-go/internal/version"
+	"github.com/DragonSecurity/gomgr/internal/version"
 	"github.com/spf13/cobra"
 )
 

@@ -1,6 +1,6 @@
 package main
 
-import "github.com/DragonSecurity/github-org-manager-go/cmd"
+import "github.com/DragonSecurity/gomgr/cmd"
 
 func main() {
 	cmd.Execute()

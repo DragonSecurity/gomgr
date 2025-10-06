@@ -4,10 +4,10 @@ import (
 	"context"
 	"log"
 
-	"github.com/DragonSecurity/github-org-manager-go/internal/config"
-	"github.com/DragonSecurity/github-org-manager-go/internal/gh"
-	insync "github.com/DragonSecurity/github-org-manager-go/internal/sync"
-	"github.com/DragonSecurity/github-org-manager-go/util"
+	"github.com/DragonSecurity/gomgr/internal/config"
+	"github.com/DragonSecurity/gomgr/internal/gh"
+	insync "github.com/DragonSecurity/gomgr/internal/sync"
+	"github.com/DragonSecurity/gomgr/util"
 	"github.com/spf13/cobra"
 )
 

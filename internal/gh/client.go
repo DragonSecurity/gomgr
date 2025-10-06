@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DragonSecurity/github-org-manager-go/internal/config"
+	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/bradleyfalzon/ghinstallation/v2"
 	"github.com/google/go-github/v75/github"
 	"golang.org/x/oauth2"

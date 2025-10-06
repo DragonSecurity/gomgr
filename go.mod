@@ -1,4 +1,4 @@
-module github.com/DragonSecurity/github-org-manager-go
+module github.com/DragonSecurity/gomgr
 
 go 1.25.1
 

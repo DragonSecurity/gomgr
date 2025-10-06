@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/DragonSecurity/github-org-manager-go/internal/config"
+	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/spf13/cobra"
 )
 

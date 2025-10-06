@@ -3,9 +3,9 @@ package sync
 import (
 	"context"
 
-	"github.com/DragonSecurity/github-org-manager-go/internal/config"
-	"github.com/DragonSecurity/github-org-manager-go/internal/gh"
-	"github.com/DragonSecurity/github-org-manager-go/util"
+	"github.com/DragonSecurity/gomgr/internal/config"
+	"github.com/DragonSecurity/gomgr/internal/gh"
+	"github.com/DragonSecurity/gomgr/util"
 )
 
 type State struct{ Org string }
