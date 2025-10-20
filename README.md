@@ -1,6 +1,6 @@
 # github-org-manager-go (gomgr)
 
-[![Build](https://github.com/DragonSecurity/gomgr/actions/workflows/release.yml/badge.svg)](https://github.com/DragonSecurity/gomgr/actions/workflows/release.yml)
+[![Build](https://github.com/DragonSecurity/gomgr/actions/workflows/release.yaml/badge.svg)](https://github.com/DragonSecurity/gomgr/actions/workflows/release.yaml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/DragonSecurity/gomgr.svg)](https://pkg.go.dev/github.com/DragonSecurity/gomgr)
 [![Go Report Card](https://goreportcard.com/badge/github.com/DragonSecurity/gomgr)](https://goreportcard.com/report/github.com/DragonSecurity/gomgr)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
