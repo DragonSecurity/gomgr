@@ -182,10 +182,29 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 		for repo, perm := range t.Repositories {
 			r := strings.ToLower(repo)
 			if !existing[r] && cfg.App.CreateRepo {
-				out = append(out, util.Change{Scope: "repo", Target: r, Action: "ensure", Details: map[string]any{"org": org, "name": repo, "private": true}})
+				out = append(out, util.Change{
+					Scope:  "repo",
+					Target: r,
+					Action: "ensure",
+					Details: map[string]any{
+						"org":     org,
+						"name":    repo,
+						"private": true,
+					},
+				})
 				existing[r] = true
 			}
-			out = append(out, util.Change{Scope: "team-repo", Target: slug + "/" + r, Action: "grant", Details: map[string]any{"org": org, "slug": slug, "repo": repo, "permission": perm}})
+			out = append(out, util.Change{
+				Scope:  "team-repo",
+				Target: slug + "/" + r,
+				Action: "grant",
+				Details: map[string]any{
+					"org":        org,
+					"slug":       slug,
+					"repo":       repo,
+					"permission": perm,
+				},
+			})
 			if cfg.App.AddDefaultReadme {
 				readmeContent := fmt.Sprintf(
 					"# %s\n\n"+
@@ -403,6 +422,7 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 				AllowAutoMerge:      github.Ptr(true),
 				AllowMergeCommit:    github.Ptr(false),
 				DeleteBranchOnMerge: github.Ptr(true),
+				HasIssues:           github.Ptr(true),
 			})
 			if err != nil {
 				var ghErr *github.ErrorResponse
