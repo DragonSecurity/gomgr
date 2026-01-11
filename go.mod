@@ -5,6 +5,7 @@ go 1.25.5
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.17.0
 	github.com/google/go-github/v75 v75.0.0
+	github.com/google/go-github/v78 v78.0.0
 	github.com/google/go-github/v81 v81.0.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/oauth2 v0.34.0
