@@ -11,7 +11,7 @@ import (
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
 	"github.com/DragonSecurity/gomgr/util"
-	"github.com/google/go-github/v75/github"
+	"github.com/google/go-github/v81/github"
 )
 
 type teamMemberChange struct {

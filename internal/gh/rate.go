@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/google/go-github/v75/github"
+	"github.com/google/go-github/v81/github"
 )
 
 func RespectRate(ctx context.Context, c *github.Client) error {
