@@ -748,28 +748,11 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 			org := fmt.Sprint(d["org"])
 			repo := fmt.Sprint(d["repo"])
 
-			// Get the repository to get its node ID (repositoryId)
-			ghRepo, _, err := c.REST.Repositories.Get(ctx, org, repo)
-			if err != nil {
-				return fmt.Errorf("get repo %s/%s for pinning: %w", org, repo, err)
-			}
-
-			// Pin the repository using GraphQL mutation
-			mutation := `
-				mutation($repositoryId: ID!) {
-					pinRepository(input: {repositoryId: $repositoryId}) {
-						clientMutationId
-					}
-				}
-			`
-			variables := map[string]any{
-				"repositoryId": ghRepo.GetNodeID(),
-			}
-
-			var result map[string]any
-			if err := c.DoGraphQL(ctx, mutation, variables, &result); err != nil {
-				return fmt.Errorf("pin repo %s/%s: %w", org, repo, err)
-			}
+			// Note: GitHub's GraphQL API does not support pinning repositories to organization profiles.
+			// The pinRepository mutation only works for user profiles, not organizations.
+			// This is a known limitation of the GitHub API.
+			// See: https://github.com/orgs/community/discussions/184845
+			util.Warnf("Skipping pin for %s/%s: GitHub API does not support pinning to organization profiles", org, repo)
 
 		case "repo:delete":
 			d, _ := ch.Details.(map[string]any)
