@@ -1,5 +1,12 @@
 *.pem
 
+# gomgr binary
+/gomgr
+/build/
+
+# Test coverage
+/coverage/
+
 # Created by https://www.toptal.com/developers/gitignore/api/go,goland
 # Edit at https://www.toptal.com/developers/gitignore?templates=go,goland
 

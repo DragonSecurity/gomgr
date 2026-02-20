@@ -1,0 +1,57 @@
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+  go: '1.26'
+
+linters:
+  enable:
+    - gofmt
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+    - gocyclo
+    - misspell
+    - unconvert
+    - goconst
+    - goimports
+    - revive
+    - gosec
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+  misspell:
+    locale: US
+  revive:
+    confidence: 0.8
+  gosec:
+    excludes:
+      - G204 # Audit use of command execution - we need this for bash commands
+      - G304 # Audit use of file path - we need this for config files
+  goimports:
+    local-prefixes: github.com/DragonSecurity/gomgr
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files.
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - gosec
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+output:
+  formats:
+    - format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true

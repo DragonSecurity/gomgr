@@ -55,7 +55,7 @@ func validateTopic(topic string) error {
 // - a map with permission, topics, pinned fields
 func parseRepoConfig(val any) (repoSettings, error) {
 	settings := repoSettings{}
-	
+
 	switch v := val.(type) {
 	case string:
 		// Simple case: just a permission string
@@ -74,7 +74,7 @@ func parseRepoConfig(val any) (repoSettings, error) {
 			return settings, fmt.Errorf("permission must be a string, got %T", v["permission"])
 		}
 		// Permission is optional if using advanced config for topics/pinning only
-		
+
 		if topics, ok := v["topics"].([]any); ok {
 			for _, t := range topics {
 				if tStr, ok := t.(string); ok {
@@ -95,7 +95,7 @@ func parseRepoConfig(val any) (repoSettings, error) {
 		} else if _, hasPermission := v["permission"]; hasPermission {
 			return settings, fmt.Errorf("permission must be a string, got %T", v["permission"])
 		}
-		
+
 		if topics, ok := v["topics"].([]any); ok {
 			for _, t := range topics {
 				if tStr, ok := t.(string); ok {
@@ -107,7 +107,7 @@ func parseRepoConfig(val any) (repoSettings, error) {
 			settings.pinned = pinned
 		}
 	}
-	
+
 	return settings, nil
 }
 
@@ -269,7 +269,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 
 	// Track which repos are managed
 	managedRepos := map[string]bool{}
-	
+
 	// Map to track desired topics and pinned state per repo
 	desiredTopics := map[string][]string{}
 	desiredPinned := map[string]bool{}
@@ -282,12 +282,12 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 		for repo, val := range t.Repositories {
 			r := strings.ToLower(repo)
 			managedRepos[r] = true
-			
+
 			settings, err := parseRepoConfig(val)
 			if err != nil {
 				return nil, fmt.Errorf("invalid config for repo %s in team %s: %w", repo, slug, err)
 			}
-			
+
 			if !existing[r] && cfg.App.CreateRepo {
 				out = append(out, util.Change{
 					Scope:  "repo",
@@ -312,7 +312,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 					"permission": settings.permission,
 				},
 			})
-			
+
 			// Aggregate topics from all teams (union)
 			if len(settings.topics) > 0 {
 				existingTopics := desiredTopics[r]
@@ -332,12 +332,12 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 				}
 				desiredTopics[r] = existingTopics
 			}
-			
+
 			// Pinned state: if any team wants it pinned, pin it
 			if settings.pinned {
 				desiredPinned[r] = true
 			}
-			
+
 			if cfg.App.AddDefaultReadme {
 				readmeContent := fmt.Sprintf(
 					"# %s\n\n"+
@@ -397,7 +397,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 			}
 		}
 	}
-	
+
 	// Plan topic updates for managed repos - only if different from current state
 	for repo, topics := range desiredTopics {
 		if len(topics) > 0 {
@@ -405,7 +405,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 			if len(topics) > 20 {
 				return nil, fmt.Errorf("repo %s has %d topics (max 20 allowed)", repo, len(topics))
 			}
-			
+
 			// Check if topics differ from current state
 			needsUpdate := false
 			if existingRepo, ok := existingRepos[repo]; ok {
@@ -429,7 +429,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 				// Repo doesn't exist yet, will be created
 				needsUpdate = true
 			}
-			
+
 			if needsUpdate {
 				out = append(out, util.Change{
 					Scope:  "repo-topics",
@@ -444,7 +444,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 			}
 		}
 	}
-	
+
 	// Plan pinning changes - check current pinning state
 	// Note: GitHub REST API doesn't provide pinning status directly
 	// We'll generate changes for all repos marked as pinned
@@ -463,10 +463,10 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 			})
 		}
 	}
-	
+
 	// Store managed repos in state for cleanup phase
 	st.ManagedRepos = managedRepos
-	
+
 	return out, nil
 }
 
@@ -551,7 +551,7 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 			}
 		}
 	}
-	
+
 	// Warn about or delete unmanaged repositories
 	if cfg.App.DeleteUnmanagedRepos || cfg.App.DryWarnings.WarnUnmanagedRepos {
 		var actualRepos []*github.Repository
@@ -590,7 +590,7 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 			warnings = append(warnings, fmt.Sprintf("Found %d unmanaged repositories: %v", len(unmanagedRepos), unmanagedRepos))
 		}
 	}
-	
+
 	return out, warnings, nil
 }
 
@@ -720,7 +720,7 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 			d, _ := ch.Details.(map[string]any)
 			org := fmt.Sprint(d["org"])
 			repo := fmt.Sprint(d["repo"])
-			
+
 			// Handle topics - may come as []string or []any from planning
 			var topicsRaw []string
 			if v, ok := d["topics"]; ok {
@@ -737,7 +737,7 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 					return fmt.Errorf("invalid type for topics for %s/%s: %T", org, repo, v)
 				}
 			}
-			
+
 			_, _, err := c.REST.Repositories.ReplaceAllTopics(ctx, org, repo, topicsRaw)
 			if err != nil {
 				return fmt.Errorf("set topics on %s/%s: %w", org, repo, err)
@@ -747,32 +747,25 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 			d, _ := ch.Details.(map[string]any)
 			org := fmt.Sprint(d["org"])
 			repo := fmt.Sprint(d["repo"])
-			
-			// Get the repository to get its node ID (pinnableId)
+
+			// Get the repository to get its node ID (repositoryId)
 			ghRepo, _, err := c.REST.Repositories.Get(ctx, org, repo)
 			if err != nil {
 				return fmt.Errorf("get repo %s/%s for pinning: %w", org, repo, err)
 			}
-			
-			// Get the organization to get its node ID (ownerId)
-			ghOrg, _, err := c.REST.Organizations.Get(ctx, org)
-			if err != nil {
-				return fmt.Errorf("get org %s for pinning repo %s: %w", org, repo, err)
-			}
-			
+
 			// Pin the repository using GraphQL mutation
 			mutation := `
-				mutation($ownerId: ID!, $pinnableId: ID!) {
-					pinItem(input: {ownerId: $ownerId, pinnableId: $pinnableId}) {
+				mutation($repositoryId: ID!) {
+					pinRepository(input: {repositoryId: $repositoryId}) {
 						clientMutationId
 					}
 				}
 			`
 			variables := map[string]any{
-				"ownerId":    ghOrg.GetNodeID(),
-				"pinnableId": ghRepo.GetNodeID(),
+				"repositoryId": ghRepo.GetNodeID(),
 			}
-			
+
 			var result map[string]any
 			if err := c.DoGraphQL(ctx, mutation, variables, &result); err != nil {
 				return fmt.Errorf("pin repo %s/%s: %w", org, repo, err)
