@@ -297,6 +297,75 @@ jobs:
 
 ---
 
+## Development
+
+### Testing
+
+The project includes a comprehensive test suite and Makefile for development:
+
+```bash
+# Run all tests
+make test
+
+# Run tests with coverage report
+make test-coverage
+
+# Run verbose tests
+make test-verbose
+
+# Check code formatting
+make fmt-check
+
+# Format code
+make fmt
+
+# Run go vet
+make vet
+```
+
+### Code Quality Tools
+
+Install development tools (golangci-lint, gosec):
+```bash
+make install-tools
+```
+
+Run code quality checks:
+```bash
+# Run linter
+make lint
+
+# Run security scanner
+make security
+
+# Run all basic checks (format, vet, test)
+make check
+
+# Run all checks including lint and security
+make check-all
+```
+
+### Building
+
+```bash
+# Build binary
+make build
+
+# Clean build artifacts
+make clean
+
+# Run full CI pipeline
+make ci
+```
+
+### CI/CD
+
+The repository includes GitHub Actions workflows:
+- **`.github/workflows/ci.yaml`**: Runs tests, linting, and security checks on every push/PR
+- **`.github/workflows/release.yaml`**: Builds and releases binaries on version tags
+
+---
+
 ## Troubleshooting
 
 - **404 on `/teams//members`**: empty/invalid team YAML or calling membership on a team that doesn’t exist yet. Loader ignores non‑YAML files and planner guards empty slugs; team creation happens before membership.
@@ -322,7 +391,10 @@ PRs welcome! Please:
 - open an issue first for larger changes,
 - keep commits small & focused,
 - add tests where practical,
-- run `golangci-lint` (if configured).
+- run `make check` before submitting (or `make check-all` for full checks including linting),
+- ensure `make build` succeeds.
+
+See the **Development** section above for available commands and tooling.
 
 ---
 
