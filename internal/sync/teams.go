@@ -748,29 +748,22 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 			org := fmt.Sprint(d["org"])
 			repo := fmt.Sprint(d["repo"])
 			
-			// Get the repository to get its node ID (pinnableId)
+			// Get the repository to get its node ID (repositoryId)
 			ghRepo, _, err := c.REST.Repositories.Get(ctx, org, repo)
 			if err != nil {
 				return fmt.Errorf("get repo %s/%s for pinning: %w", org, repo, err)
 			}
 			
-			// Get the organization to get its node ID (ownerId)
-			ghOrg, _, err := c.REST.Organizations.Get(ctx, org)
-			if err != nil {
-				return fmt.Errorf("get org %s for pinning repo %s: %w", org, repo, err)
-			}
-			
 			// Pin the repository using GraphQL mutation
 			mutation := `
-				mutation($ownerId: ID!, $pinnableId: ID!) {
-					pinItem(input: {ownerId: $ownerId, pinnableId: $pinnableId}) {
+				mutation($repositoryId: ID!) {
+					pinRepository(input: {repositoryId: $repositoryId}) {
 						clientMutationId
 					}
 				}
 			`
 			variables := map[string]any{
-				"ownerId":    ghOrg.GetNodeID(),
-				"pinnableId": ghRepo.GetNodeID(),
+				"repositoryId": ghRepo.GetNodeID(),
 			}
 			
 			var result map[string]any
