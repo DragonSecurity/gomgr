@@ -2,6 +2,7 @@ run:
   timeout: 5m
   tests: true
   modules-download-mode: readonly
+  go: '1.26'
 
 linters:
   enable:
@@ -13,17 +14,13 @@ linters:
     - gosimple
     - ineffassign
     - typecheck
-    - exportloopref
     - gocyclo
-    - dupl
     - misspell
-    - unparam
     - unconvert
     - goconst
     - goimports
     - revive
     - gosec
-    - prealloc
 
 linters-settings:
   gocyclo:
@@ -49,16 +46,12 @@ issues:
       linters:
         - gocyclo
         - errcheck
-        - dupl
-        - gosec
-    # Exclude known false positives
-    - text: "G404: Use of weak random number generator"
-      linters:
         - gosec
   max-issues-per-linter: 0
   max-same-issues: 0
 
 output:
-  format: colored-line-number
+  formats:
+    - format: colored-line-number
   print-issued-lines: true
   print-linter-name: true

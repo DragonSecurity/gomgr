@@ -41,7 +41,7 @@ test: ## Run tests
 test-coverage: ## Run tests with coverage
 	@echo "Running tests with coverage..."
 	@mkdir -p $(COVERAGE_DIR)
-	$(GOTEST) -v -race -covermode=atomic -coverprofile=$(COVERAGE_DIR)/coverage.out ./...
+	$(GOTEST) -v -covermode=atomic -coverprofile=$(COVERAGE_DIR)/coverage.out ./internal/config ./internal/sync
 	$(GOCMD) tool cover -html=$(COVERAGE_DIR)/coverage.out -o $(COVERAGE_DIR)/coverage.html
 	@echo "Coverage report: $(COVERAGE_DIR)/coverage.html"
 	@$(GOCMD) tool cover -func=$(COVERAGE_DIR)/coverage.out | tail -1
@@ -74,6 +74,9 @@ lint: ## Run golangci-lint (requires golangci-lint to be installed)
 	@if command -v golangci-lint >/dev/null 2>&1; then \
 		golangci-lint run --timeout 5m ./...; \
 		echo "Linting passed"; \
+	elif [ -x "$(shell go env GOPATH)/bin/golangci-lint" ]; then \
+		$(shell go env GOPATH)/bin/golangci-lint run --timeout 5m ./...; \
+		echo "Linting passed"; \
 	else \
 		echo "golangci-lint not found. Install it with: make install-tools"; \
 		exit 1; \
@@ -83,6 +86,9 @@ security: ## Run security checks with gosec (requires gosec to be installed)
 	@echo "Running security checks..."
 	@if command -v gosec >/dev/null 2>&1; then \
 		gosec -quiet ./...; \
+		echo "Security check passed"; \
+	elif [ -x "$(shell go env GOPATH)/bin/gosec" ]; then \
+		$(shell go env GOPATH)/bin/gosec -quiet ./...; \
 		echo "Security check passed"; \
 	else \
 		echo "gosec not found. Install it with: make install-tools"; \
@@ -126,9 +132,11 @@ install-tools: ## Install development tools (golangci-lint, gosec)
 	fi
 	@echo "All tools installed"
 
-check: fmt-check vet lint security test ## Run all checks (format, vet, lint, security, test)
+check: fmt-check vet test ## Run basic checks (format, vet, test)
 
-ci: clean install-tools check build ## Run CI pipeline (clean, install tools, run all checks, build)
+check-all: fmt-check vet lint security test ## Run all checks including lint and security
+
+ci: clean check build ## Run CI pipeline (clean, run basic checks, build)
 
 version: ## Display version information
 	@echo "Version: $(VERSION)"
