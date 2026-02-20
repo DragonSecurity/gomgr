@@ -8,7 +8,10 @@ import (
 	"github.com/DragonSecurity/gomgr/util"
 )
 
-type State struct{ Org string }
+type State struct {
+	Org          string
+	ManagedRepos map[string]bool
+}
 
 func BuildPlan(ctx context.Context, c *gh.Client, cfg *config.Root) (util.Plan, error) {
 	st := &State{Org: cfg.App.Org}

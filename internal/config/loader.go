@@ -55,7 +55,7 @@ func BootstrapTeamYAML(path string, name string) error {
 		Name:         name,
 		Maintainers:  []string{},
 		Members:      []string{},
-		Repositories: map[string]string{},
+		Repositories: map[string]any{},
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

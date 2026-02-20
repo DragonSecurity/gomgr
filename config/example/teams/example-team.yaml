@@ -5,6 +5,24 @@ parents: []
 maintainers:
   - octocat
 repositories:
+  # Simple permission string (backward compatible)
   infra: maintain
-  api: push
+  
+  # Advanced config with topics and pinning
+  api:
+    permission: push
+    topics:
+      - backend
+      - api
+      - project-platform
+  
+  # Repository with pinning
+  platform-index:
+    permission: admin
+    topics:
+      - project-platform
+      - documentation
+    pinned: true
+  
+  # Simple read-only access
   web: pull
