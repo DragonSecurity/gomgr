@@ -39,7 +39,7 @@ jobs:
           BIN=gomgr
           if [ "${{ matrix.goos }}" = "windows" ]; then BIN=gomgr.exe; fi
           mkdir -p build
-          go build -trimpath -ldflags "-s -w -X github.com/DragonSecurity/github-org-manager-go/internal/version.Version=${VERSION}" -o build/$BIN ./main.go
+          go build -trimpath -ldflags "-s" -o build/$BIN ./main.go
 
       - name: Package
         run: |

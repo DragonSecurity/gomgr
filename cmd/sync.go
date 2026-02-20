@@ -7,7 +7,7 @@ import (
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
 	insync "github.com/DragonSecurity/gomgr/internal/sync"
-	"github.com/DragonSecurity/gomgr/util"
+	"github.com/DragonSecurity/gomgr/internal/util"
 	"github.com/spf13/cobra"
 )
 

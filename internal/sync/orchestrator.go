@@ -5,7 +5,7 @@ import (
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
-	"github.com/DragonSecurity/gomgr/util"
+	"github.com/DragonSecurity/gomgr/internal/util"
 )
 
 type State struct {
