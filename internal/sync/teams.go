@@ -11,7 +11,8 @@ import (
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
-	"github.com/DragonSecurity/gomgr/util"
+	"github.com/DragonSecurity/gomgr/internal/templates"
+	"github.com/DragonSecurity/gomgr/internal/util"
 	"github.com/google/go-github/v83/github"
 )
 
@@ -355,33 +356,10 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 			}
 
 			if cfg.App.AddDefaultReadme {
-				readmeContent := fmt.Sprintf(
-					"# %s\n\n"+
-						"Quick setup — if you’ve done this kind of thing before  \n"+
-						"or clone directly:  \n\n"+
-						"```bash\n"+
-						"git clone git@github.com:%s/%s.git\n"+
-						"```\n\n"+
-						"Get started by creating a new file or uploading an existing one.  \n"+
-						"We recommend every repository include a README, LICENSE, and .gitignore.\n\n"+
-						"…or create a new repository on the command line\n\n"+
-						"```bash\n"+
-						"echo \"# %s\" >> README.md\n"+
-						"git init\n"+
-						"git add README.md\n"+
-						"git commit -m \"first commit\"\n"+
-						"git branch -M main\n"+
-						"git remote add origin git@github.com:%s/%s.git\n"+
-						"git push -u origin main\n"+
-						"```\n\n"+
-						"…or push an existing repository from the command line\n\n"+
-						"```bash\n"+
-						"git remote add origin git@github.com:%s/%s.git\n"+
-						"git branch -M main\n"+
-						"git push -u origin main\n"+
-						"```\n",
-					repo, org, repo, repo, org, repo, org, repo,
-				)
+				readmeContent, err := templates.GenerateReadme(org, repo)
+				if err != nil {
+					return nil, fmt.Errorf("failed to generate README for %s: %w", repo, err)
+				}
 				out = append(out, util.Change{
 					Scope:  "repo-file",
 					Target: r + ":README.md",

@@ -6,7 +6,7 @@
 # Variables
 BINARY_NAME=gomgr
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-LDFLAGS=-ldflags "-s -w -X github.com/DragonSecurity/github-org-manager-go/internal/version.Version=$(VERSION)"
+LDFLAGS=-ldflags "-s"
 BUILD_DIR=build
 COVERAGE_DIR=coverage
 
