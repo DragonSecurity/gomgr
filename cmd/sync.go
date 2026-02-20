@@ -42,6 +42,7 @@ var syncCmd = &cobra.Command{
 		util.PrintPlan(plan)
 
 		if dryRun {
+			util.PrintSummary(plan)
 			log.Println("dry-run: no changes applied")
 			return nil
 		}

@@ -15,7 +15,7 @@ A fast, idempotent **GitHub Organization Manager** written in Go. Define your or
 - ✅ Teams, maintainers, members (idempotent add/update)
 - ✅ Repo permission grants (pull/triage/push/maintain/admin)
 - ✅ **Repository topics**: add topics/labels to repositories for organization
-- ✅ **Repository pinning**: pin important repositories to organization profile (⚠️ *GitHub API limitation: not currently supported for organizations*)
+- ✅ **Repository pinning**: pin important repositories to organization profile (⚠️ *GitHub API limitation: not currently supported for organizations - configuration accepted but manual pinning required via web UI*)
 - ✅ **Optional**: create repos that don’t exist (`create_repo: true`)
 - ✅ **Optional**: inject `.github/renovate.json` into repos
 - ✅ Warnings & cleanups: unmanaged teams, members without team, unmanaged repos
@@ -68,8 +68,37 @@ go build -trimpath -buildvcs=true -ldflags "-s -w -X github.com/DragonSecurity/g
 
 3. **Run a dry run, then apply**
 ```bash
-gomgr sync -c <config> --dry
-gomgr sync -c <config>
+gomgr sync -c <config> --dry  # Shows JSON plan + summary of changes
+gomgr sync -c <config>         # Actually applies changes
+```
+
+The dry run output includes:
+- Complete JSON plan with all change details
+- Summary showing counts by scope and action
+- List of any warnings
+
+**Example summary output:**
+```
+================================================================
+Summary of Proposed Changes
+================================================================
+
+Total changes: 7
+
+Changes by scope:
+  repo-file:           3
+  repo-pin:            1
+  repo-topics:         1
+  team-repo:           3
+
+Changes by action:
+  ensure:              5
+  grant:               3
+
+Warnings: 1
+  - Skipping pin for KaMuses/platform-index: GitHub API does not support pinning to organization profiles
+
+================================================================
 ```
 
 ---
@@ -138,7 +167,7 @@ repositories:
     topics:
       - project-platform
       - documentation
-    pinned: true  # Will be shown in plan but skipped with a warning
+    pinned: true  # Will be shown in plan but skipped with a warning - pin manually via GitHub web UI
 ```
 
 > Loader ignores non‑YAML files in `teams/` and skips empty/invalid entries.
@@ -220,7 +249,7 @@ Use a classic PAT with scopes:
 ## CLI
 
 - `gomgr sync -c <config> [--dry] [--debug]`  
-  Plans and applies org state.
+  Plans and applies org state. With `--dry`, shows a JSON plan followed by a human-readable summary of proposed changes without applying them.
 
 - `gomgr setup-team -n "Team Name" -c <config> [-f out/path.yaml]`  
   Bootstraps a team YAML.
