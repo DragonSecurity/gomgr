@@ -249,6 +249,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 	org := st.Org
 
 	existing := map[string]bool{}
+	existingRepos := map[string]*github.Repository{}
 	opt := &github.RepositoryListByOrgOptions{ListOptions: github.ListOptions{PerPage: 100}, Type: "all"}
 	for {
 		repos, resp, err := c.REST.Repositories.ListByOrg(ctx, org, opt)
@@ -256,7 +257,9 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 			return nil, err
 		}
 		for _, r := range repos {
-			existing[strings.ToLower(r.GetName())] = true
+			repoName := strings.ToLower(r.GetName())
+			existing[repoName] = true
+			existingRepos[repoName] = r
 		}
 		if resp.NextPage == 0 {
 			break
@@ -395,27 +398,57 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 		}
 	}
 	
-	// Plan topic updates for managed repos
+	// Plan topic updates for managed repos - only if different from current state
 	for repo, topics := range desiredTopics {
 		if len(topics) > 0 {
 			// GitHub allows max 20 topics per repo
 			if len(topics) > 20 {
 				return nil, fmt.Errorf("repo %s has %d topics (max 20 allowed)", repo, len(topics))
 			}
-			out = append(out, util.Change{
-				Scope:  "repo-topics",
-				Target: repo,
-				Action: "ensure",
-				Details: map[string]any{
-					"org":    org,
-					"repo":   repo,
-					"topics": topics,
-				},
-			})
+			
+			// Check if topics differ from current state
+			needsUpdate := false
+			if existingRepo, ok := existingRepos[repo]; ok {
+				currentTopics := existingRepo.Topics
+				if len(currentTopics) != len(topics) {
+					needsUpdate = true
+				} else {
+					// Compare topics (order-independent)
+					currentSet := make(map[string]bool)
+					for _, t := range currentTopics {
+						currentSet[t] = true
+					}
+					for _, t := range topics {
+						if !currentSet[t] {
+							needsUpdate = true
+							break
+						}
+					}
+				}
+			} else {
+				// Repo doesn't exist yet, will be created
+				needsUpdate = true
+			}
+			
+			if needsUpdate {
+				out = append(out, util.Change{
+					Scope:  "repo-topics",
+					Target: repo,
+					Action: "ensure",
+					Details: map[string]any{
+						"org":    org,
+						"repo":   repo,
+						"topics": topics,
+					},
+				})
+			}
 		}
 	}
 	
-	// Plan pinning changes
+	// Plan pinning changes - check current pinning state
+	// Note: GitHub REST API doesn't provide pinning status directly
+	// We'll generate changes for all repos marked as pinned
+	// A future enhancement could use GraphQL to query current pinning state
 	for repo, shouldPin := range desiredPinned {
 		if shouldPin {
 			out = append(out, util.Change{
