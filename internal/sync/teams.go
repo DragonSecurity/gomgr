@@ -149,6 +149,10 @@ func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) (
 		actualBySlug[t.GetSlug()] = t
 	}
 
+	// Track state
+	st.CurrentTeams = len(actual)
+	st.DesiredTeams = len(desired)
+
 	for slug, want := range desired {
 		if _, ok := actualBySlug[slug]; !ok {
 			out = append(out, util.Change{
@@ -172,6 +176,9 @@ func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) (
 func planTeamMembership(ctx context.Context, c *gh.Client, cfg *config.Root, st *State, desiredBySlug map[string]config.TeamConfig) ([]util.Change, error) {
 	var out []util.Change
 	org := st.Org
+
+	totalCurrentMembers := 0
+	totalDesiredMembers := 0
 
 	for slug, want := range desiredBySlug {
 		// actual role map
@@ -228,6 +235,10 @@ func planTeamMembership(ctx context.Context, c *gh.Client, cfg *config.Root, st 
 			}
 		}
 
+		// Track member counts
+		totalCurrentMembers += len(got)
+		totalDesiredMembers += len(wantRole)
+
 		for user, role := range wantRole {
 			if got[user] == role {
 				continue
@@ -241,6 +252,11 @@ func planTeamMembership(ctx context.Context, c *gh.Client, cfg *config.Root, st 
 		}
 		// (optional) removals left for later
 	}
+
+	// Update state
+	st.CurrentTeamMembers = totalCurrentMembers
+	st.DesiredTeamMembers = totalDesiredMembers
+
 	return out, nil
 }
 
@@ -466,6 +482,49 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 
 	// Store managed repos in state for cleanup phase
 	st.ManagedRepos = managedRepos
+
+	// Track repository counts
+	st.CurrentRepos = len(existing)
+	st.DesiredRepos = len(managedRepos)
+
+	// Count permissions (team-repo grants)
+	currentPermsCount := 0
+	desiredPermsCount := 0
+
+	// Count current permissions from GitHub
+	for _, t := range cfg.Team {
+		teamSlug := t.Slug
+		if teamSlug == "" {
+			teamSlug = strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
+		}
+		// List team repos to count current permissions
+		repoOpts := &github.ListOptions{PerPage: 100}
+		for {
+			teamRepos, resp, err := c.REST.Teams.ListTeamReposBySlug(ctx, org, teamSlug, repoOpts)
+			if err != nil {
+				// If team doesn't exist yet, skip counting
+				var ghErr *github.ErrorResponse
+				if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusNotFound {
+					break
+				}
+				// Ignore other errors for counting purposes
+				break
+			}
+			currentPermsCount += len(teamRepos)
+			if resp.NextPage == 0 {
+				break
+			}
+			repoOpts.Page = resp.NextPage
+		}
+	}
+
+	// Count desired permissions
+	for _, t := range cfg.Team {
+		desiredPermsCount += len(t.Repositories)
+	}
+
+	st.CurrentRepoPerms = currentPermsCount
+	st.DesiredRepoPerms = desiredPermsCount
 
 	return out, nil
 }

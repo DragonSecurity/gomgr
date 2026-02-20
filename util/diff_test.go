@@ -71,6 +71,47 @@ func TestPrintSummary(t *testing.T) {
 				"create:",
 			},
 		},
+		{
+			name: "with state statistics",
+			plan: Plan{
+				Changes: []Change{
+					{Scope: "team", Target: "team1", Action: "create", Details: nil},
+					{Scope: "team-member", Target: "user1", Action: "ensure", Details: nil},
+				},
+				Warnings: nil,
+				Stats: &StateStats{
+					Teams: StatePair{
+						Current: 2,
+						Desired: 3,
+					},
+					TeamMembers: StatePair{
+						Current: 5,
+						Desired: 7,
+					},
+					Repositories: StatePair{
+						Current: 10,
+						Desired: 12,
+					},
+					RepoPermissions: StatePair{
+						Current: 15,
+						Desired: 18,
+					},
+				},
+			},
+			expectedContains: []string{
+				"Summary of Proposed Changes",
+				"Current State vs Desired State:",
+				"Teams:",
+				"2 → 3",
+				"Team Members:",
+				"5 → 7",
+				"Repositories:",
+				"10 → 12",
+				"Repo Permissions:",
+				"15 → 18",
+				"Total changes: 2",
+			},
+		},
 	}
 
 	for _, tt := range tests {
