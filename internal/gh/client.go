@@ -105,29 +105,29 @@ func (c *Client) DoGraphQL(ctx context.Context, query string, variables map[stri
 	if len(variables) > 0 {
 		reqBody["variables"] = variables
 	}
-	
+
 	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return fmt.Errorf("marshal graphql request: %w", err)
 	}
-	
+
 	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.github.com/graphql", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create graphql request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("execute graphql request: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("graphql request failed with status %d: %s", resp.StatusCode, string(body))
 	}
-	
+
 	// Parse response to check for GraphQL errors
 	var gqlResp struct {
 		Data   json.RawMessage `json:"data"`
@@ -136,27 +136,27 @@ func (c *Client) DoGraphQL(ctx context.Context, query string, variables map[stri
 			Path    []any  `json:"path,omitempty"`
 		} `json:"errors"`
 	}
-	
+
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("read graphql response: %w", err)
 	}
-	
+
 	if err := json.Unmarshal(respBody, &gqlResp); err != nil {
 		return fmt.Errorf("decode graphql response: %w", err)
 	}
-	
+
 	// Check for GraphQL errors
 	if len(gqlResp.Errors) > 0 {
 		errMsg := gqlResp.Errors[0].Message
 		return fmt.Errorf("graphql error: %s", errMsg)
 	}
-	
+
 	if result != nil && len(gqlResp.Data) > 0 {
 		if err := json.Unmarshal(gqlResp.Data, result); err != nil {
 			return fmt.Errorf("decode graphql data: %w", err)
 		}
 	}
-	
+
 	return nil
 }
