@@ -11,6 +11,7 @@ func TestParseRepoConfig(t *testing.T) {
 		wantPerm   string
 		wantTopics []string
 		wantPinned bool
+		wantError  bool
 	}{
 		{
 			name:       "simple string permission",
@@ -18,6 +19,7 @@ func TestParseRepoConfig(t *testing.T) {
 			wantPerm:   "push",
 			wantTopics: nil,
 			wantPinned: false,
+			wantError:  false,
 		},
 		{
 			name: "advanced config with permission only",
@@ -27,6 +29,7 @@ func TestParseRepoConfig(t *testing.T) {
 			wantPerm:   "maintain",
 			wantTopics: nil,
 			wantPinned: false,
+			wantError:  false,
 		},
 		{
 			name: "advanced config with topics",
@@ -37,6 +40,7 @@ func TestParseRepoConfig(t *testing.T) {
 			wantPerm:   "push",
 			wantTopics: []string{"backend", "api"},
 			wantPinned: false,
+			wantError:  false,
 		},
 		{
 			name: "advanced config with pinning",
@@ -48,6 +52,7 @@ func TestParseRepoConfig(t *testing.T) {
 			wantPerm:   "admin",
 			wantTopics: []string{"documentation"},
 			wantPinned: true,
+			wantError:  false,
 		},
 		{
 			name: "map[any]any format (YAML unmarshal variant)",
@@ -59,15 +64,17 @@ func TestParseRepoConfig(t *testing.T) {
 			wantPerm:   "pull",
 			wantTopics: []string{"frontend", "web"},
 			wantPinned: false,
+			wantError:  false,
 		},
 		{
-			name: "missing permission field",
+			name: "missing permission field (topics only)",
 			input: map[string]any{
 				"topics": []any{"backend"},
 			},
 			wantPerm:   "",
 			wantTopics: []string{"backend"},
 			wantPinned: false,
+			wantError:  false,
 		},
 		{
 			name: "empty topics array",
@@ -78,6 +85,7 @@ func TestParseRepoConfig(t *testing.T) {
 			wantPerm:   "push",
 			wantTopics: nil,
 			wantPinned: false,
+			wantError:  false,
 		},
 		{
 			name: "non-string values in topics array (should be ignored)",
@@ -88,6 +96,7 @@ func TestParseRepoConfig(t *testing.T) {
 			wantPerm:   "push",
 			wantTopics: []string{"valid", "another"},
 			wantPinned: false,
+			wantError:  false,
 		},
 		{
 			name:       "empty string permission",
@@ -95,12 +104,32 @@ func TestParseRepoConfig(t *testing.T) {
 			wantPerm:   "",
 			wantTopics: nil,
 			wantPinned: false,
+			wantError:  true,
+		},
+		{
+			name: "permission as non-string type",
+			input: map[string]any{
+				"permission": 123,
+			},
+			wantPerm:   "",
+			wantTopics: nil,
+			wantPinned: false,
+			wantError:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			settings := parseRepoConfig(tt.input)
+			settings, err := parseRepoConfig(tt.input)
+
+			if (err != nil) != tt.wantError {
+				t.Errorf("parseRepoConfig() error = %v, wantError %v", err, tt.wantError)
+				return
+			}
+
+			if err != nil {
+				return // Skip validation if error was expected
+			}
 
 			if settings.permission != tt.wantPerm {
 				t.Errorf("permission = %q, want %q", settings.permission, tt.wantPerm)

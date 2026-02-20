@@ -53,18 +53,28 @@ func validateTopic(topic string) error {
 // parseRepoConfig parses a repository value which can be either:
 // - a simple string (permission only)
 // - a map with permission, topics, pinned fields
-func parseRepoConfig(val any) repoSettings {
+func parseRepoConfig(val any) (repoSettings, error) {
 	settings := repoSettings{}
 	
 	switch v := val.(type) {
 	case string:
 		// Simple case: just a permission string
+		if v == "" {
+			return settings, fmt.Errorf("permission cannot be empty string")
+		}
 		settings.permission = v
 	case map[string]any:
 		// Advanced case: RepoConfig structure
 		if perm, ok := v["permission"].(string); ok {
+			if perm == "" {
+				return settings, fmt.Errorf("permission cannot be empty string")
+			}
 			settings.permission = perm
+		} else if _, hasPermission := v["permission"]; hasPermission {
+			return settings, fmt.Errorf("permission must be a string, got %T", v["permission"])
 		}
+		// Permission is optional if using advanced config for topics/pinning only
+		
 		if topics, ok := v["topics"].([]any); ok {
 			for _, t := range topics {
 				if tStr, ok := t.(string); ok {
@@ -78,8 +88,14 @@ func parseRepoConfig(val any) repoSettings {
 	case map[any]any:
 		// YAML might unmarshal as map[any]any
 		if perm, ok := v["permission"].(string); ok {
+			if perm == "" {
+				return settings, fmt.Errorf("permission cannot be empty string")
+			}
 			settings.permission = perm
+		} else if _, hasPermission := v["permission"]; hasPermission {
+			return settings, fmt.Errorf("permission must be a string, got %T", v["permission"])
 		}
+		
 		if topics, ok := v["topics"].([]any); ok {
 			for _, t := range topics {
 				if tStr, ok := t.(string); ok {
@@ -92,7 +108,7 @@ func parseRepoConfig(val any) repoSettings {
 		}
 	}
 	
-	return settings
+	return settings, nil
 }
 
 // ---- planning ----
@@ -264,7 +280,10 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 			r := strings.ToLower(repo)
 			managedRepos[r] = true
 			
-			settings := parseRepoConfig(val)
+			settings, err := parseRepoConfig(val)
+			if err != nil {
+				return nil, fmt.Errorf("invalid config for repo %s in team %s: %w", repo, slug, err)
+			}
 			
 			if !existing[r] && cfg.App.CreateRepo {
 				out = append(out, util.Change{
