@@ -89,6 +89,16 @@ func firstNonEmpty(a, b string) string {
 
 // DoGraphQL executes a GraphQL query or mutation
 func (c *Client) DoGraphQL(ctx context.Context, query string, variables map[string]any, result any) error {
+	if c == nil || c.httpClient == nil {
+		return fmt.Errorf("graphql client httpClient is nil")
+	}
+	if strings.TrimSpace(query) == "" {
+		return fmt.Errorf("graphql query must not be empty")
+	}
+	if ctx == nil {
+		return fmt.Errorf("context must not be nil")
+	}
+
 	reqBody := map[string]any{
 		"query": query,
 	}
@@ -118,9 +128,33 @@ func (c *Client) DoGraphQL(ctx context.Context, query string, variables map[stri
 		return fmt.Errorf("graphql request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 	
-	if result != nil {
-		if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
-			return fmt.Errorf("decode graphql response: %w", err)
+	// Parse response to check for GraphQL errors
+	var gqlResp struct {
+		Data   json.RawMessage `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+			Path    []any  `json:"path,omitempty"`
+		} `json:"errors"`
+	}
+	
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read graphql response: %w", err)
+	}
+	
+	if err := json.Unmarshal(respBody, &gqlResp); err != nil {
+		return fmt.Errorf("decode graphql response: %w", err)
+	}
+	
+	// Check for GraphQL errors
+	if len(gqlResp.Errors) > 0 {
+		errMsg := gqlResp.Errors[0].Message
+		return fmt.Errorf("graphql error: %s", errMsg)
+	}
+	
+	if result != nil && len(gqlResp.Data) > 0 {
+		if err := json.Unmarshal(gqlResp.Data, result); err != nil {
+			return fmt.Errorf("decode graphql data: %w", err)
 		}
 	}
 	

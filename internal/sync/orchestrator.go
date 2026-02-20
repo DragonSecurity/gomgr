@@ -36,7 +36,7 @@ func BuildPlan(ctx context.Context, c *gh.Client, cfg *config.Root) (util.Plan, 
 		return plan, err
 	}
 
-	cleanupChanges, err := planCleanups(ctx, c, cfg, st, desiredBySlug)
+	cleanupChanges, warnings, err := planCleanups(ctx, c, cfg, st, desiredBySlug)
 	if err != nil {
 		return plan, err
 	}
@@ -45,6 +45,7 @@ func BuildPlan(ctx context.Context, c *gh.Client, cfg *config.Root) (util.Plan, 
 	plan.Changes = append(plan.Changes, memChanges...)
 	plan.Changes = append(plan.Changes, repoChanges...)
 	plan.Changes = append(plan.Changes, cleanupChanges...)
+	plan.Warnings = warnings
 	return plan, nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -25,6 +26,28 @@ type repoSettings struct {
 	permission string
 	topics     []string
 	pinned     bool
+}
+
+// validateTopic checks if a topic name meets GitHub requirements:
+// - lowercase alphanumeric with hyphens
+// - max 50 characters
+// - cannot start with a hyphen
+func validateTopic(topic string) error {
+	if len(topic) == 0 {
+		return fmt.Errorf("topic cannot be empty")
+	}
+	if len(topic) > 50 {
+		return fmt.Errorf("topic exceeds 50 characters: %q", topic)
+	}
+	if topic[0] == '-' {
+		return fmt.Errorf("topic cannot start with hyphen: %q", topic)
+	}
+	// Match lowercase alphanumeric and hyphens only
+	validTopic := regexp.MustCompile(`^[a-z0-9-]+$`)
+	if !validTopic.MatchString(topic) {
+		return fmt.Errorf("topic contains invalid characters (must be lowercase alphanumeric with hyphens): %q", topic)
+	}
+	return nil
 }
 
 // parseRepoConfig parses a repository value which can be either:
@@ -272,13 +295,17 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 			if len(settings.topics) > 0 {
 				existingTopics := desiredTopics[r]
 				topicSet := map[string]bool{}
-				for _, t := range existingTopics {
-					topicSet[t] = true
+				for _, topic := range existingTopics {
+					topicSet[topic] = true
 				}
-				for _, t := range settings.topics {
-					if !topicSet[t] {
-						existingTopics = append(existingTopics, t)
-						topicSet[t] = true
+				for _, topic := range settings.topics {
+					// Validate topic before adding
+					if err := validateTopic(topic); err != nil {
+						return nil, fmt.Errorf("invalid topic for repo %s: %w", repo, err)
+					}
+					if !topicSet[topic] {
+						existingTopics = append(existingTopics, topic)
+						topicSet[topic] = true
 					}
 				}
 				desiredTopics[r] = existingTopics
@@ -352,6 +379,10 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 	// Plan topic updates for managed repos
 	for repo, topics := range desiredTopics {
 		if len(topics) > 0 {
+			// GitHub allows max 20 topics per repo
+			if len(topics) > 20 {
+				return nil, fmt.Errorf("repo %s has %d topics (max 20 allowed)", repo, len(topics))
+			}
 			out = append(out, util.Change{
 				Scope:  "repo-topics",
 				Target: repo,
@@ -387,8 +418,9 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 	return out, nil
 }
 
-func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State, desired map[string]config.TeamConfig) ([]util.Change, error) {
+func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State, desired map[string]config.TeamConfig) ([]util.Change, []string, error) {
 	var out []util.Change
+	var warnings []string
 	org := st.Org
 	if cfg.App.DeleteUnconfiguredTeams {
 		var actual []*github.Team
@@ -396,7 +428,7 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 		for {
 			ts, resp, err := c.REST.Teams.ListTeams(ctx, org, opt)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			actual = append(actual, ts...)
 			if resp.NextPage == 0 {
@@ -423,7 +455,7 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 		for {
 			us, resp, err := c.REST.Organizations.ListMembers(ctx, org, memOpt)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			members = append(members, us...)
 			if resp.NextPage == 0 {
@@ -437,14 +469,14 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 		for {
 			ts, resp, err := c.REST.Teams.ListTeams(ctx, org, teamOpt)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			for _, t := range ts {
 				page := &github.TeamListTeamMembersOptions{Role: "all", ListOptions: github.ListOptions{PerPage: 100}}
 				for {
 					us, r2, err := c.REST.Teams.ListTeamMembersBySlug(ctx, org, t.GetSlug(), page)
 					if err != nil {
-						return nil, err
+						return nil, nil, err
 					}
 					for _, u := range us {
 						inAnyTeam[strings.ToLower(u.GetLogin())] = true
@@ -468,14 +500,14 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 		}
 	}
 	
-	// Delete unmanaged repositories
-	if cfg.App.DeleteUnmanagedRepos {
+	// Warn about or delete unmanaged repositories
+	if cfg.App.DeleteUnmanagedRepos || cfg.App.DryWarnings.WarnUnmanagedRepos {
 		var actualRepos []*github.Repository
 		repoOpt := &github.RepositoryListByOrgOptions{ListOptions: github.ListOptions{PerPage: 100}, Type: "all"}
 		for {
 			repos, resp, err := c.REST.Repositories.ListByOrg(ctx, org, repoOpt)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			actualRepos = append(actualRepos, repos...)
 			if resp.NextPage == 0 {
@@ -483,23 +515,31 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 			}
 			repoOpt.Page = resp.NextPage
 		}
+		var unmanagedRepos []string
 		for _, repo := range actualRepos {
 			repoName := strings.ToLower(repo.GetName())
 			if !st.ManagedRepos[repoName] {
-				out = append(out, util.Change{
-					Scope:  "repo",
-					Target: repoName,
-					Action: "delete",
-					Details: map[string]any{
-						"org":  org,
-						"repo": repo.GetName(),
-					},
-				})
+				unmanagedRepos = append(unmanagedRepos, repo.GetName())
+				if cfg.App.DeleteUnmanagedRepos {
+					out = append(out, util.Change{
+						Scope:  "repo",
+						Target: repoName,
+						Action: "delete",
+						Details: map[string]any{
+							"org":  org,
+							"repo": repo.GetName(),
+						},
+					})
+				}
 			}
+		}
+		// Add warning if configured and there are unmanaged repos
+		if cfg.App.DryWarnings.WarnUnmanagedRepos && len(unmanagedRepos) > 0 {
+			warnings = append(warnings, fmt.Sprintf("Found %d unmanaged repositories: %v", len(unmanagedRepos), unmanagedRepos))
 		}
 	}
 	
-	return out, nil
+	return out, warnings, nil
 }
 
 // ---- apply ----
@@ -628,7 +668,24 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 			d, _ := ch.Details.(map[string]any)
 			org := fmt.Sprint(d["org"])
 			repo := fmt.Sprint(d["repo"])
-			topicsRaw, _ := d["topics"].([]string)
+			
+			// Handle topics - may come as []string or []any from planning
+			var topicsRaw []string
+			if v, ok := d["topics"]; ok {
+				switch topics := v.(type) {
+				case []string:
+					topicsRaw = topics
+				case []any:
+					for _, t := range topics {
+						if tStr, ok := t.(string); ok {
+							topicsRaw = append(topicsRaw, tStr)
+						}
+					}
+				default:
+					return fmt.Errorf("invalid type for topics for %s/%s: %T", org, repo, v)
+				}
+			}
+			
 			_, _, err := c.REST.Repositories.ReplaceAllTopics(ctx, org, repo, topicsRaw)
 			if err != nil {
 				return fmt.Errorf("set topics on %s/%s: %w", org, repo, err)
@@ -639,22 +696,29 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 			org := fmt.Sprint(d["org"])
 			repo := fmt.Sprint(d["repo"])
 			
-			// Get the repository to get its node ID
+			// Get the repository to get its node ID (pinnableId)
 			ghRepo, _, err := c.REST.Repositories.Get(ctx, org, repo)
 			if err != nil {
 				return fmt.Errorf("get repo %s/%s for pinning: %w", org, repo, err)
 			}
 			
+			// Get the organization to get its node ID (ownerId)
+			ghOrg, _, err := c.REST.Organizations.Get(ctx, org)
+			if err != nil {
+				return fmt.Errorf("get org %s for pinning repo %s: %w", org, repo, err)
+			}
+			
 			// Pin the repository using GraphQL mutation
 			mutation := `
-				mutation($repositoryId: ID!) {
-					pinItem(input: {repositoryId: $repositoryId}) {
+				mutation($ownerId: ID!, $pinnableId: ID!) {
+					pinItem(input: {ownerId: $ownerId, pinnableId: $pinnableId}) {
 						clientMutationId
 					}
 				}
 			`
 			variables := map[string]any{
-				"repositoryId": ghRepo.GetNodeID(),
+				"ownerId":    ghOrg.GetNodeID(),
+				"pinnableId": ghRepo.GetNodeID(),
 			}
 			
 			var result map[string]any

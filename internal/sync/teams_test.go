@@ -60,6 +60,42 @@ func TestParseRepoConfig(t *testing.T) {
 			wantTopics: []string{"frontend", "web"},
 			wantPinned: false,
 		},
+		{
+			name: "missing permission field",
+			input: map[string]any{
+				"topics": []any{"backend"},
+			},
+			wantPerm:   "",
+			wantTopics: []string{"backend"},
+			wantPinned: false,
+		},
+		{
+			name: "empty topics array",
+			input: map[string]any{
+				"permission": "push",
+				"topics":     []any{},
+			},
+			wantPerm:   "push",
+			wantTopics: nil,
+			wantPinned: false,
+		},
+		{
+			name: "non-string values in topics array (should be ignored)",
+			input: map[string]any{
+				"permission": "push",
+				"topics":     []any{"valid", 123, "another"},
+			},
+			wantPerm:   "push",
+			wantTopics: []string{"valid", "another"},
+			wantPinned: false,
+		},
+		{
+			name:       "empty string permission",
+			input:      "",
+			wantPerm:   "",
+			wantTopics: nil,
+			wantPinned: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -82,6 +118,69 @@ func TestParseRepoConfig(t *testing.T) {
 
 			if settings.pinned != tt.wantPinned {
 				t.Errorf("pinned = %v, want %v", settings.pinned, tt.wantPinned)
+			}
+		})
+	}
+}
+
+func TestValidateTopic(t *testing.T) {
+	tests := []struct {
+		name      string
+		topic     string
+		wantError bool
+	}{
+		{
+			name:      "valid topic",
+			topic:     "backend",
+			wantError: false,
+		},
+		{
+			name:      "valid topic with hyphens",
+			topic:     "my-project-backend",
+			wantError: false,
+		},
+		{
+			name:      "valid topic with numbers",
+			topic:     "project123",
+			wantError: false,
+		},
+		{
+			name:      "empty topic",
+			topic:     "",
+			wantError: true,
+		},
+		{
+			name:      "topic too long (>50 chars)",
+			topic:     "this-is-a-very-long-topic-name-that-exceeds-fifty-characters-limit",
+			wantError: true,
+		},
+		{
+			name:      "topic starting with hyphen",
+			topic:     "-invalid",
+			wantError: true,
+		},
+		{
+			name:      "topic with uppercase",
+			topic:     "Backend",
+			wantError: true,
+		},
+		{
+			name:      "topic with underscore",
+			topic:     "my_project",
+			wantError: true,
+		},
+		{
+			name:      "topic with space",
+			topic:     "my project",
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateTopic(tt.topic)
+			if (err != nil) != tt.wantError {
+				t.Errorf("validateTopic() error = %v, wantError %v", err, tt.wantError)
 			}
 		})
 	}
