@@ -662,7 +662,6 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 				return fmt.Errorf("pin repo %s/%s: %w", org, repo, err)
 			}
 
-			
 		case "repo:delete":
 			d, _ := ch.Details.(map[string]any)
 			org := fmt.Sprint(d["org"])
