@@ -1,0 +1,21 @@
+name: Platform Team
+description: Core platform engineers
+privacy: closed
+parents: []
+maintainers:
+  - allanice001
+repositories:
+  infra: maintain
+  api: 
+    permission: push
+    topics:
+      - backend
+      - api
+      - project-platform
+
+  platform-index:
+    permission: admin
+    topics:
+      - project-platform
+      - documentation
+    pinned: true

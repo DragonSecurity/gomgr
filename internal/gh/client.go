@@ -17,7 +17,7 @@ import (
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/bradleyfalzon/ghinstallation/v2"
-	"github.com/google/go-github/v81/github"
+	"github.com/google/go-github/v83/github"
 	"golang.org/x/oauth2"
 )
 

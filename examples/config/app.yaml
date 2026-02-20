@@ -1,0 +1,21 @@
+org: KaMuses
+# GitHub App auth (preferred):
+app_id: 1719369
+private_key: ./dsec-gom.2026-02-20.private-key.pem
+
+dry_warnings:
+  warn_unmanaged_teams: true
+  warn_members_without_any_team: true
+  warn_unmanaged_repos: true
+
+remove_members_without_team: true   # remove org members not in any team
+delete_unconfigured_teams: true     # delete teams not defined in YAML
+delete_unmanaged_repos: true        # delete repos not defined in any team (DESTRUCTIVE!)
+create_repo: true                   # create repos if missing when referenced by teams
+add_renovate_config: true           # create .github/renovate.json in repos
+
+renovate_config: | 
+  { 
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": ["github>DragonSecurity/renovate-presets"]
+  }
