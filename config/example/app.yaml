@@ -6,8 +6,10 @@ private_key: ./dsec-gom.2025-10-02.private-key.pem
 dry_warnings:
   warn_unmanaged_teams: true
   warn_members_without_any_team: true
+  warn_unmanaged_repos: true
 remove_members_without_team: true
 delete_unconfigured_teams: true
+delete_unmanaged_repos: false  # Set to true to delete repos not defined in any team
 create_repo: true
 add_default_readme: true
 add_renovate_config: true

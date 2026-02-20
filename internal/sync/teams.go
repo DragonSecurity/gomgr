@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -19,6 +20,95 @@ type teamMemberChange struct {
 	Slug string
 	User string
 	Role string // "member" or "maintainer"
+}
+
+type repoSettings struct {
+	permission string
+	topics     []string
+	pinned     bool
+}
+
+// validateTopic checks if a topic name meets GitHub requirements:
+// - lowercase alphanumeric with hyphens
+// - max 50 characters
+// - cannot start with a hyphen
+func validateTopic(topic string) error {
+	if len(topic) == 0 {
+		return fmt.Errorf("topic cannot be empty")
+	}
+	if len(topic) > 50 {
+		return fmt.Errorf("topic exceeds 50 characters: %q", topic)
+	}
+	if topic[0] == '-' {
+		return fmt.Errorf("topic cannot start with hyphen: %q", topic)
+	}
+	// Match lowercase alphanumeric and hyphens only
+	validTopic := regexp.MustCompile(`^[a-z0-9-]+$`)
+	if !validTopic.MatchString(topic) {
+		return fmt.Errorf("topic contains invalid characters (must be lowercase alphanumeric with hyphens): %q", topic)
+	}
+	return nil
+}
+
+// parseRepoConfig parses a repository value which can be either:
+// - a simple string (permission only)
+// - a map with permission, topics, pinned fields
+func parseRepoConfig(val any) (repoSettings, error) {
+	settings := repoSettings{}
+	
+	switch v := val.(type) {
+	case string:
+		// Simple case: just a permission string
+		if v == "" {
+			return settings, fmt.Errorf("permission cannot be empty string")
+		}
+		settings.permission = v
+	case map[string]any:
+		// Advanced case: RepoConfig structure
+		if perm, ok := v["permission"].(string); ok {
+			if perm == "" {
+				return settings, fmt.Errorf("permission cannot be empty string")
+			}
+			settings.permission = perm
+		} else if _, hasPermission := v["permission"]; hasPermission {
+			return settings, fmt.Errorf("permission must be a string, got %T", v["permission"])
+		}
+		// Permission is optional if using advanced config for topics/pinning only
+		
+		if topics, ok := v["topics"].([]any); ok {
+			for _, t := range topics {
+				if tStr, ok := t.(string); ok {
+					settings.topics = append(settings.topics, tStr)
+				}
+			}
+		}
+		if pinned, ok := v["pinned"].(bool); ok {
+			settings.pinned = pinned
+		}
+	case map[any]any:
+		// YAML might unmarshal as map[any]any
+		if perm, ok := v["permission"].(string); ok {
+			if perm == "" {
+				return settings, fmt.Errorf("permission cannot be empty string")
+			}
+			settings.permission = perm
+		} else if _, hasPermission := v["permission"]; hasPermission {
+			return settings, fmt.Errorf("permission must be a string, got %T", v["permission"])
+		}
+		
+		if topics, ok := v["topics"].([]any); ok {
+			for _, t := range topics {
+				if tStr, ok := t.(string); ok {
+					settings.topics = append(settings.topics, tStr)
+				}
+			}
+		}
+		if pinned, ok := v["pinned"].(bool); ok {
+			settings.pinned = pinned
+		}
+	}
+	
+	return settings, nil
 }
 
 // ---- planning ----
@@ -159,6 +249,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 	org := st.Org
 
 	existing := map[string]bool{}
+	existingRepos := map[string]*github.Repository{}
 	opt := &github.RepositoryListByOrgOptions{ListOptions: github.ListOptions{PerPage: 100}, Type: "all"}
 	for {
 		repos, resp, err := c.REST.Repositories.ListByOrg(ctx, org, opt)
@@ -166,7 +257,9 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 			return nil, err
 		}
 		for _, r := range repos {
-			existing[strings.ToLower(r.GetName())] = true
+			repoName := strings.ToLower(r.GetName())
+			existing[repoName] = true
+			existingRepos[repoName] = r
 		}
 		if resp.NextPage == 0 {
 			break
@@ -174,13 +267,27 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 		opt.Page = resp.NextPage
 	}
 
+	// Track which repos are managed
+	managedRepos := map[string]bool{}
+	
+	// Map to track desired topics and pinned state per repo
+	desiredTopics := map[string][]string{}
+	desiredPinned := map[string]bool{}
+
 	for _, t := range cfg.Team {
 		slug := t.Slug
 		if slug == "" {
 			slug = strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
 		}
-		for repo, perm := range t.Repositories {
+		for repo, val := range t.Repositories {
 			r := strings.ToLower(repo)
+			managedRepos[r] = true
+			
+			settings, err := parseRepoConfig(val)
+			if err != nil {
+				return nil, fmt.Errorf("invalid config for repo %s in team %s: %w", repo, slug, err)
+			}
+			
 			if !existing[r] && cfg.App.CreateRepo {
 				out = append(out, util.Change{
 					Scope:  "repo",
@@ -202,9 +309,35 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 					"org":        org,
 					"slug":       slug,
 					"repo":       repo,
-					"permission": perm,
+					"permission": settings.permission,
 				},
 			})
+			
+			// Aggregate topics from all teams (union)
+			if len(settings.topics) > 0 {
+				existingTopics := desiredTopics[r]
+				topicSet := map[string]bool{}
+				for _, topic := range existingTopics {
+					topicSet[topic] = true
+				}
+				for _, topic := range settings.topics {
+					// Validate topic before adding
+					if err := validateTopic(topic); err != nil {
+						return nil, fmt.Errorf("invalid topic for repo %s: %w", repo, err)
+					}
+					if !topicSet[topic] {
+						existingTopics = append(existingTopics, topic)
+						topicSet[topic] = true
+					}
+				}
+				desiredTopics[r] = existingTopics
+			}
+			
+			// Pinned state: if any team wants it pinned, pin it
+			if settings.pinned {
+				desiredPinned[r] = true
+			}
+			
 			if cfg.App.AddDefaultReadme {
 				readmeContent := fmt.Sprintf(
 					"# %s\n\n"+
@@ -264,11 +397,82 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 			}
 		}
 	}
+	
+	// Plan topic updates for managed repos - only if different from current state
+	for repo, topics := range desiredTopics {
+		if len(topics) > 0 {
+			// GitHub allows max 20 topics per repo
+			if len(topics) > 20 {
+				return nil, fmt.Errorf("repo %s has %d topics (max 20 allowed)", repo, len(topics))
+			}
+			
+			// Check if topics differ from current state
+			needsUpdate := false
+			if existingRepo, ok := existingRepos[repo]; ok {
+				currentTopics := existingRepo.Topics
+				if len(currentTopics) != len(topics) {
+					needsUpdate = true
+				} else {
+					// Compare topics (order-independent)
+					currentSet := make(map[string]bool)
+					for _, t := range currentTopics {
+						currentSet[t] = true
+					}
+					for _, t := range topics {
+						if !currentSet[t] {
+							needsUpdate = true
+							break
+						}
+					}
+				}
+			} else {
+				// Repo doesn't exist yet, will be created
+				needsUpdate = true
+			}
+			
+			if needsUpdate {
+				out = append(out, util.Change{
+					Scope:  "repo-topics",
+					Target: repo,
+					Action: "ensure",
+					Details: map[string]any{
+						"org":    org,
+						"repo":   repo,
+						"topics": topics,
+					},
+				})
+			}
+		}
+	}
+	
+	// Plan pinning changes - check current pinning state
+	// Note: GitHub REST API doesn't provide pinning status directly
+	// We'll generate changes for all repos marked as pinned
+	// A future enhancement could use GraphQL to query current pinning state
+	for repo, shouldPin := range desiredPinned {
+		if shouldPin {
+			out = append(out, util.Change{
+				Scope:  "repo-pin",
+				Target: repo,
+				Action: "ensure",
+				Details: map[string]any{
+					"org":    org,
+					"repo":   repo,
+					"pinned": true,
+				},
+			})
+		}
+	}
+	
+	// Store managed repos in state for cleanup phase
+	st.ManagedRepos = managedRepos
+	
 	return out, nil
 }
 
-func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State, desired map[string]config.TeamConfig) ([]util.Change, error) {
+func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State, desired map[string]config.TeamConfig) ([]util.Change, []string, error) {
 	var out []util.Change
+	var warnings []string
 	org := st.Org
 	if cfg.App.DeleteUnconfiguredTeams {
 		var actual []*github.Team
@@ -276,7 +480,7 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 		for {
 			ts, resp, err := c.REST.Teams.ListTeams(ctx, org, opt)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			actual = append(actual, ts...)
 			if resp.NextPage == 0 {
@@ -303,7 +507,7 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 		for {
 			us, resp, err := c.REST.Organizations.ListMembers(ctx, org, memOpt)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			members = append(members, us...)
 			if resp.NextPage == 0 {
@@ -317,14 +521,14 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 		for {
 			ts, resp, err := c.REST.Teams.ListTeams(ctx, org, teamOpt)
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			for _, t := range ts {
 				page := &github.TeamListTeamMembersOptions{Role: "all", ListOptions: github.ListOptions{PerPage: 100}}
 				for {
 					us, r2, err := c.REST.Teams.ListTeamMembersBySlug(ctx, org, t.GetSlug(), page)
 					if err != nil {
-						return nil, err
+						return nil, nil, err
 					}
 					for _, u := range us {
 						inAnyTeam[strings.ToLower(u.GetLogin())] = true
@@ -347,7 +551,47 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 			}
 		}
 	}
-	return out, nil
+	
+	// Warn about or delete unmanaged repositories
+	if cfg.App.DeleteUnmanagedRepos || cfg.App.DryWarnings.WarnUnmanagedRepos {
+		var actualRepos []*github.Repository
+		repoOpt := &github.RepositoryListByOrgOptions{ListOptions: github.ListOptions{PerPage: 100}, Type: "all"}
+		for {
+			repos, resp, err := c.REST.Repositories.ListByOrg(ctx, org, repoOpt)
+			if err != nil {
+				return nil, nil, err
+			}
+			actualRepos = append(actualRepos, repos...)
+			if resp.NextPage == 0 {
+				break
+			}
+			repoOpt.Page = resp.NextPage
+		}
+		var unmanagedRepos []string
+		for _, repo := range actualRepos {
+			repoName := strings.ToLower(repo.GetName())
+			if !st.ManagedRepos[repoName] {
+				unmanagedRepos = append(unmanagedRepos, repo.GetName())
+				if cfg.App.DeleteUnmanagedRepos {
+					out = append(out, util.Change{
+						Scope:  "repo",
+						Target: repoName,
+						Action: "delete",
+						Details: map[string]any{
+							"org":  org,
+							"repo": repo.GetName(),
+						},
+					})
+				}
+			}
+		}
+		// Add warning if configured and there are unmanaged repos
+		if cfg.App.DryWarnings.WarnUnmanagedRepos && len(unmanagedRepos) > 0 {
+			warnings = append(warnings, fmt.Sprintf("Found %d unmanaged repositories: %v", len(unmanagedRepos), unmanagedRepos))
+		}
+	}
+	
+	return out, warnings, nil
 }
 
 // ---- apply ----
@@ -359,7 +603,10 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 		"team-repo:grant":    20,
 		"team-member:ensure": 30,
 		"repo-file:ensure":   40,
+		"repo-topics:ensure": 45,
+		"repo-pin:ensure":    45,
 		"team:delete":        90,
+		"repo:delete":        90,
 	}
 
 	sort.Slice(changes, func(i, j int) bool {
@@ -467,6 +714,77 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 				}
 			} else {
 				// optional: update if differs (skipped for now)
+			}
+
+		case "repo-topics:ensure":
+			d, _ := ch.Details.(map[string]any)
+			org := fmt.Sprint(d["org"])
+			repo := fmt.Sprint(d["repo"])
+			
+			// Handle topics - may come as []string or []any from planning
+			var topicsRaw []string
+			if v, ok := d["topics"]; ok {
+				switch topics := v.(type) {
+				case []string:
+					topicsRaw = topics
+				case []any:
+					for _, t := range topics {
+						if tStr, ok := t.(string); ok {
+							topicsRaw = append(topicsRaw, tStr)
+						}
+					}
+				default:
+					return fmt.Errorf("invalid type for topics for %s/%s: %T", org, repo, v)
+				}
+			}
+			
+			_, _, err := c.REST.Repositories.ReplaceAllTopics(ctx, org, repo, topicsRaw)
+			if err != nil {
+				return fmt.Errorf("set topics on %s/%s: %w", org, repo, err)
+			}
+
+		case "repo-pin:ensure":
+			d, _ := ch.Details.(map[string]any)
+			org := fmt.Sprint(d["org"])
+			repo := fmt.Sprint(d["repo"])
+			
+			// Get the repository to get its node ID (pinnableId)
+			ghRepo, _, err := c.REST.Repositories.Get(ctx, org, repo)
+			if err != nil {
+				return fmt.Errorf("get repo %s/%s for pinning: %w", org, repo, err)
+			}
+			
+			// Get the organization to get its node ID (ownerId)
+			ghOrg, _, err := c.REST.Organizations.Get(ctx, org)
+			if err != nil {
+				return fmt.Errorf("get org %s for pinning repo %s: %w", org, repo, err)
+			}
+			
+			// Pin the repository using GraphQL mutation
+			mutation := `
+				mutation($ownerId: ID!, $pinnableId: ID!) {
+					pinItem(input: {ownerId: $ownerId, pinnableId: $pinnableId}) {
+						clientMutationId
+					}
+				}
+			`
+			variables := map[string]any{
+				"ownerId":    ghOrg.GetNodeID(),
+				"pinnableId": ghRepo.GetNodeID(),
+			}
+			
+			var result map[string]any
+			if err := c.DoGraphQL(ctx, mutation, variables, &result); err != nil {
+				return fmt.Errorf("pin repo %s/%s: %w", org, repo, err)
+			}
+
+		case "repo:delete":
+			d, _ := ch.Details.(map[string]any)
+			org := fmt.Sprint(d["org"])
+			repo := fmt.Sprint(d["repo"])
+			_, err := c.REST.Repositories.Delete(ctx, org, repo)
+			if err != nil {
+				return fmt.Errorf("delete repo %s/%s: %w", org, repo, err)
 			}
 
 		default:

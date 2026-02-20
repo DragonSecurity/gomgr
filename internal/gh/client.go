@@ -1,11 +1,14 @@
 package gh
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -18,14 +21,17 @@ import (
 	"golang.org/x/oauth2"
 )
 
-type Client struct{ REST *github.Client }
+type Client struct {
+	REST       *github.Client
+	httpClient *http.Client
+}
 
 func NewClientFromEnv(ctx context.Context, app config.AppConfig) (*Client, string, error) {
 	// PAT
 	if tok := os.Getenv("GITHUB_TOKEN"); tok != "" {
 		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: tok})
 		tc := oauth2.NewClient(ctx, ts)
-		return &Client{REST: github.NewClient(tc)}, "PAT", nil
+		return &Client{REST: github.NewClient(tc), httpClient: tc}, "PAT", nil
 	}
 	// App
 	appID := app.AppID
@@ -53,7 +59,7 @@ func NewClientFromEnv(ctx context.Context, app config.AppConfig) (*Client, strin
 	}
 	itr := ghinstallation.NewFromAppsTransport(atr, inst.GetID())
 	httpClient := &http.Client{Transport: itr, Timeout: 30 * time.Second}
-	return &Client{REST: github.NewClient(httpClient)}, "Github App", nil
+	return &Client{REST: github.NewClient(httpClient), httpClient: httpClient}, "Github App", nil
 }
 
 func maybeReadPEM(s string) ([]byte, error) {
@@ -79,4 +85,78 @@ func firstNonEmpty(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// DoGraphQL executes a GraphQL query or mutation
+func (c *Client) DoGraphQL(ctx context.Context, query string, variables map[string]any, result any) error {
+	if c == nil || c.httpClient == nil {
+		return fmt.Errorf("graphql client httpClient is nil")
+	}
+	if strings.TrimSpace(query) == "" {
+		return fmt.Errorf("graphql query must not be empty")
+	}
+	if ctx == nil {
+		return fmt.Errorf("context must not be nil")
+	}
+
+	reqBody := map[string]any{
+		"query": query,
+	}
+	if len(variables) > 0 {
+		reqBody["variables"] = variables
+	}
+	
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("marshal graphql request: %w", err)
+	}
+	
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.github.com/graphql", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create graphql request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("execute graphql request: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("graphql request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	
+	// Parse response to check for GraphQL errors
+	var gqlResp struct {
+		Data   json.RawMessage `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+			Path    []any  `json:"path,omitempty"`
+		} `json:"errors"`
+	}
+	
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read graphql response: %w", err)
+	}
+	
+	if err := json.Unmarshal(respBody, &gqlResp); err != nil {
+		return fmt.Errorf("decode graphql response: %w", err)
+	}
+	
+	// Check for GraphQL errors
+	if len(gqlResp.Errors) > 0 {
+		errMsg := gqlResp.Errors[0].Message
+		return fmt.Errorf("graphql error: %s", errMsg)
+	}
+	
+	if result != nil && len(gqlResp.Data) > 0 {
+		if err := json.Unmarshal(gqlResp.Data, result); err != nil {
+			return fmt.Errorf("decode graphql data: %w", err)
+		}
+	}
+	
+	return nil
 }

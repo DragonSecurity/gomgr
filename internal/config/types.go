@@ -8,9 +8,11 @@ type AppConfig struct {
 	DryWarnings struct {
 		WarnUnmanagedTeams        bool `yaml:"warn_unmanaged_teams"`
 		WarnMembersWithoutAnyTeam bool `yaml:"warn_members_without_any_team"`
+		WarnUnmanagedRepos        bool `yaml:"warn_unmanaged_repos"`
 	} `yaml:"dry_warnings"`
 	RemoveMembersWithoutTeam bool   `yaml:"remove_members_without_team"`
 	DeleteUnconfiguredTeams  bool   `yaml:"delete_unconfigured_teams"`
+	DeleteUnmanagedRepos     bool   `yaml:"delete_unmanaged_repos"`
 	CreateRepo               bool   `yaml:"create_repo"`
 	AddRenovateConfig        bool   `yaml:"add_renovate_config"`
 	RenovateConfig           string `yaml:"renovate_config"`
@@ -19,6 +21,12 @@ type AppConfig struct {
 
 type OrgConfig struct {
 	Owners []string `yaml:"owners"`
+}
+
+type RepoConfig struct {
+	Permission string   `yaml:"permission,omitempty"` // pull|triage|push|maintain|admin
+	Topics     []string `yaml:"topics,omitempty"`
+	Pinned     bool     `yaml:"pinned,omitempty"`
 }
 
 type TeamConfig struct {
@@ -31,8 +39,15 @@ type TeamConfig struct {
 	Maintainers []string `yaml:"maintainers,omitempty"`
 	Members     []string `yaml:"members,omitempty"`
 
-	// repo => permission (pull|triage|push|maintain|admin)
-	Repositories map[string]string `yaml:"repositories,omitempty"`
+	// repo => permission (pull|triage|push|maintain|admin) or RepoConfig for advanced settings
+	// For backward compatibility, supports both:
+	//   repositories:
+	//     infra: maintain               # simple string permission
+	//     api:                          # or advanced RepoConfig
+	//       permission: push
+	//       topics: [backend, api]
+	//       pinned: true
+	Repositories map[string]any `yaml:"repositories,omitempty"`
 }
 
 type Root struct {
