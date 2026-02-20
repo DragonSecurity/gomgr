@@ -16,11 +16,7 @@ var versionCmd = &cobra.Command{
 
 		if info.Revision != "" {
 			fmt.Printf("Revision: %s\n", info.Revision)
-			if info.Modified {
-				fmt.Println("DirtyBuild: true")
-			} else {
-				fmt.Println("DirtyBuild: false")
-			}
+			fmt.Printf("Modified: %v\n", info.Modified)
 		}
 
 		if info.CommitTime != "" {

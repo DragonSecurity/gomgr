@@ -127,7 +127,7 @@ func TestPrintSummary(t *testing.T) {
 			os.Stdout = old
 
 			var buf bytes.Buffer
-			io.Copy(&buf, r)
+			_, _ = io.Copy(&buf, r) // explicitly discard error
 			output := buf.String()
 
 			// Verify expected strings are in output
