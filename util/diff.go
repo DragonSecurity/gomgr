@@ -48,53 +48,10 @@ func PrintSummary(p Plan) {
 		fmt.Println("\nCurrent State vs Desired State:")
 		fmt.Println("--------------------------------")
 
-		if p.Stats.Teams.Current > 0 || p.Stats.Teams.Desired > 0 {
-			fmt.Printf("  Teams:              %d → %d", p.Stats.Teams.Current, p.Stats.Teams.Desired)
-			delta := p.Stats.Teams.Desired - p.Stats.Teams.Current
-			if delta > 0 {
-				fmt.Printf(" (+%d)\n", delta)
-			} else if delta < 0 {
-				fmt.Printf(" (%d)\n", delta)
-			} else {
-				fmt.Println(" (no change)")
-			}
-		}
-
-		if p.Stats.TeamMembers.Current > 0 || p.Stats.TeamMembers.Desired > 0 {
-			fmt.Printf("  Team Members:       %d → %d", p.Stats.TeamMembers.Current, p.Stats.TeamMembers.Desired)
-			delta := p.Stats.TeamMembers.Desired - p.Stats.TeamMembers.Current
-			if delta > 0 {
-				fmt.Printf(" (+%d)\n", delta)
-			} else if delta < 0 {
-				fmt.Printf(" (%d)\n", delta)
-			} else {
-				fmt.Println(" (no change)")
-			}
-		}
-
-		if p.Stats.Repositories.Current > 0 || p.Stats.Repositories.Desired > 0 {
-			fmt.Printf("  Repositories:       %d → %d", p.Stats.Repositories.Current, p.Stats.Repositories.Desired)
-			delta := p.Stats.Repositories.Desired - p.Stats.Repositories.Current
-			if delta > 0 {
-				fmt.Printf(" (+%d)\n", delta)
-			} else if delta < 0 {
-				fmt.Printf(" (%d)\n", delta)
-			} else {
-				fmt.Println(" (no change)")
-			}
-		}
-
-		if p.Stats.RepoPermissions.Current > 0 || p.Stats.RepoPermissions.Desired > 0 {
-			fmt.Printf("  Repo Permissions:   %d → %d", p.Stats.RepoPermissions.Current, p.Stats.RepoPermissions.Desired)
-			delta := p.Stats.RepoPermissions.Desired - p.Stats.RepoPermissions.Current
-			if delta > 0 {
-				fmt.Printf(" (+%d)\n", delta)
-			} else if delta < 0 {
-				fmt.Printf(" (%d)\n", delta)
-			} else {
-				fmt.Println(" (no change)")
-			}
-		}
+		printStatePair("Teams:", p.Stats.Teams)
+		printStatePair("Team Members:", p.Stats.TeamMembers)
+		printStatePair("Repositories:", p.Stats.Repositories)
+		printStatePair("Repo Permissions:", p.Stats.RepoPermissions)
 		fmt.Println()
 	}
 
@@ -148,4 +105,21 @@ func PrintSummary(p Plan) {
 	}
 
 	fmt.Println("\n" + "================================================================")
+}
+
+// printStatePair prints a single state comparison line with delta
+func printStatePair(label string, pair StatePair) {
+	if pair.Current == 0 && pair.Desired == 0 {
+		return
+	}
+
+	fmt.Printf("  %-20s %d → %d", label, pair.Current, pair.Desired)
+	delta := pair.Desired - pair.Current
+	if delta > 0 {
+		fmt.Printf(" (+%d)\n", delta)
+	} else if delta < 0 {
+		fmt.Printf(" (%d)\n", delta)
+	} else {
+		fmt.Println(" (no change)")
+	}
 }

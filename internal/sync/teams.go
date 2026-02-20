@@ -488,6 +488,9 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 	st.DesiredRepos = len(managedRepos)
 
 	// Count permissions (team-repo grants)
+	// Note: This requires additional API calls to get accurate current state.
+	// These calls are intentional for precise state tracking and run only during
+	// dry-run planning. The overhead is acceptable for the visibility benefit.
 	currentPermsCount := 0
 	desiredPermsCount := 0
 
