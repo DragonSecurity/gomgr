@@ -6,8 +6,8 @@ import (
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
+	"github.com/DragonSecurity/gomgr/internal/plan"
 	insync "github.com/DragonSecurity/gomgr/internal/sync"
-	"github.com/DragonSecurity/gomgr/util"
 	"github.com/spf13/cobra"
 )
 
@@ -17,7 +17,7 @@ var syncCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		if debug {
-			util.EnableDebug()
+			log.SetFlags(log.LstdFlags | log.Lshortfile)
 		}
 
 		cfg, err := config.Load(cfgDir)
@@ -34,18 +34,18 @@ var syncCmd = &cobra.Command{
 			log.Printf("auth: %s", appInfo)
 		}
 
-		plan, err := insync.BuildPlan(ctx, client, cfg)
+		p, err := insync.BuildPlan(ctx, client, cfg)
 		if err != nil {
 			return err
 		}
 
-		util.PrintPlan(plan)
+		plan.Print(p)
 
 		if dryRun {
 			log.Println("dry-run: no changes applied")
 			return nil
 		}
-		return insync.Apply(ctx, client, plan)
+		return insync.Apply(ctx, client, p)
 	},
 }
 

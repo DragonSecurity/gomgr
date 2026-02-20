@@ -10,7 +10,7 @@ import (
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
-	"github.com/DragonSecurity/gomgr/util"
+	"github.com/DragonSecurity/gomgr/internal/plan"
 	"github.com/google/go-github/v81/github"
 )
 
@@ -23,8 +23,8 @@ type teamMemberChange struct {
 
 // ---- planning ----
 
-func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) ([]util.Change, map[string]config.TeamConfig, error) {
-	var out []util.Change
+func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) ([]plan.Change, map[string]config.TeamConfig, error) {
+	var out []plan.Change
 	desired := map[string]config.TeamConfig{}
 
 	// build desired map
@@ -61,7 +61,7 @@ func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) (
 
 	for slug, want := range desired {
 		if _, ok := actualBySlug[slug]; !ok {
-			out = append(out, util.Change{
+			out = append(out, plan.Change{
 				Scope:  "team",
 				Target: slug,
 				Action: "create",
@@ -79,8 +79,8 @@ func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) (
 	return out, desired, nil
 }
 
-func planTeamMembership(ctx context.Context, c *gh.Client, cfg *config.Root, st *State, desiredBySlug map[string]config.TeamConfig) ([]util.Change, error) {
-	var out []util.Change
+func planTeamMembership(ctx context.Context, c *gh.Client, cfg *config.Root, st *State, desiredBySlug map[string]config.TeamConfig) ([]plan.Change, error) {
+	var out []plan.Change
 	org := st.Org
 
 	for slug, want := range desiredBySlug {
@@ -142,7 +142,7 @@ func planTeamMembership(ctx context.Context, c *gh.Client, cfg *config.Root, st 
 			if got[user] == role {
 				continue
 			}
-			out = append(out, util.Change{
+			out = append(out, plan.Change{
 				Scope:   "team-member",
 				Target:  slug,
 				Action:  "ensure",
@@ -154,8 +154,8 @@ func planTeamMembership(ctx context.Context, c *gh.Client, cfg *config.Root, st 
 	return out, nil
 }
 
-func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) ([]util.Change, error) {
-	var out []util.Change
+func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) ([]plan.Change, error) {
+	var out []plan.Change
 	org := st.Org
 
 	existing := map[string]bool{}
@@ -182,7 +182,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 		for repo, perm := range t.Repositories {
 			r := strings.ToLower(repo)
 			if !existing[r] && cfg.App.CreateRepo {
-				out = append(out, util.Change{
+				out = append(out, plan.Change{
 					Scope:  "repo",
 					Target: r,
 					Action: "ensure",
@@ -194,7 +194,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 				})
 				existing[r] = true
 			}
-			out = append(out, util.Change{
+			out = append(out, plan.Change{
 				Scope:  "team-repo",
 				Target: slug + "/" + r,
 				Action: "grant",
@@ -233,7 +233,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 						"```\n",
 					repo, org, repo, repo, org, repo, org, repo,
 				)
-				out = append(out, util.Change{
+				out = append(out, plan.Change{
 					Scope:  "repo-file",
 					Target: r + ":README.md",
 					Action: "ensure",
@@ -248,7 +248,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 				})
 			}
 			if cfg.App.AddRenovateConfig && cfg.App.RenovateConfig != "" {
-				out = append(out, util.Change{
+				out = append(out, plan.Change{
 					Scope:  "repo-file",
 					Target: r + ":.github/renovate.json",
 					Action: "ensure",
@@ -267,8 +267,8 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 	return out, nil
 }
 
-func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State, desired map[string]config.TeamConfig) ([]util.Change, error) {
-	var out []util.Change
+func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State, desired map[string]config.TeamConfig) ([]plan.Change, error) {
+	var out []plan.Change
 	org := st.Org
 	if cfg.App.DeleteUnconfiguredTeams {
 		var actual []*github.Team
@@ -286,7 +286,7 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 		}
 		for _, at := range actual {
 			if _, ok := desired[at.GetSlug()]; !ok {
-				out = append(out, util.Change{Scope: "team", Target: at.GetSlug(), Action: "delete", Details: map[string]any{"org": org, "slug": at.GetSlug()}})
+				out = append(out, plan.Change{Scope: "team", Target: at.GetSlug(), Action: "delete", Details: map[string]any{"org": org, "slug": at.GetSlug()}})
 			}
 		}
 	}
@@ -343,7 +343,7 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 		for _, u := range members {
 			login := strings.ToLower(u.GetLogin())
 			if !inAnyTeam[login] {
-				out = append(out, util.Change{Scope: "org-member", Target: login, Action: "remove", Details: map[string]any{"org": org, "user": login}})
+				out = append(out, plan.Change{Scope: "org-member", Target: login, Action: "remove", Details: map[string]any{"org": org, "user": login}})
 			}
 		}
 	}
@@ -352,7 +352,7 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 
 // ---- apply ----
 
-func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) error {
+func applyChanges(ctx context.Context, c *gh.Client, changes []plan.Change) error {
 	precedence := map[string]int{
 		"team:create":        10,
 		"repo:ensure":        10,
