@@ -93,8 +93,9 @@ add_renovate_config: true           # create .github/renovate.json in repos
 renovate_config: |
   {
     "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-    "extends": ["github>DragonSecurity/renovate-presets"]
+    "extends": ["github>{{.Org}}/renovate-presets"]
   }
+# Note: renovate_config supports Go text/template syntax with {{.Org}} and {{.Repo}} variables
 ```
 
 ### `org.yaml`
@@ -122,6 +123,29 @@ repositories:
 ```
 
 > Loader ignores non‑YAML files in `teams/` and skips empty/invalid entries.
+
+### Template Support
+
+The `renovate_config` field supports Go's `text/template` syntax, allowing dynamic configuration based on organization and repository context.
+
+**Available template variables:**
+- `{{.Org}}` - Organization name
+- `{{.Repo}}` - Repository name
+
+**Example:**
+```yaml
+renovate_config: |
+  {
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": ["github>{{.Org}}/renovate-presets"],
+    "packageRules": [{
+      "matchPackagePatterns": ["^{{.Org}}/"],
+      "groupName": "{{.Org}} packages"
+    }]
+  }
+```
+
+If the template contains invalid syntax or references undefined variables, the original string is used as-is (passthrough mode), ensuring backward compatibility with existing configurations.
 
 ---
 

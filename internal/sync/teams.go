@@ -11,6 +11,7 @@ import (
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
 	"github.com/DragonSecurity/gomgr/internal/plan"
+	"github.com/DragonSecurity/gomgr/internal/templates"
 	"github.com/google/go-github/v81/github"
 )
 
@@ -248,6 +249,13 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 				})
 			}
 			if cfg.App.AddRenovateConfig && cfg.App.RenovateConfig != "" {
+				// Render template with org and repo context
+				tmplData := templates.Data{
+					Org:  org,
+					Repo: repo,
+				}
+				renderedConfig := templates.RenderOrPassthrough(cfg.App.RenovateConfig, tmplData)
+				
 				out = append(out, plan.Change{
 					Scope:  "repo-file",
 					Target: r + ":.github/renovate.json",
@@ -256,7 +264,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 						"org":     org,
 						"repo":    repo,
 						"path":    ".github/renovate.json",
-						"content": cfg.App.RenovateConfig,
+						"content": renderedConfig,
 						"message": "chore: add Renovate config",
 						"branch":  "main",
 					},
