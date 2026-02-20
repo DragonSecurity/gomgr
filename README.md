@@ -21,7 +21,7 @@ A fast, idempotent **GitHub Organization Manager** written in Go. Define your or
 - ✅ Warnings & cleanups: unmanaged teams, members without team, unmanaged repos
 - ✅ **Optional** hard cleanups: delete unmanaged teams, remove members without team, delete unmanaged repos
 - ✅ Auth: GitHub App (recommended) or PAT
-- ✅ `--dry` plan with stable output; safe apply
+- ✅ `--dry` plan with **state comparison** showing current GitHub state vs desired config state
 - ✅ Cross‑platform binaries via GitHub Releases; `gomgr version` stamped at build
 
 ---
@@ -74,6 +74,7 @@ gomgr sync -c <config>         # Actually applies changes
 
 The dry run output includes:
 - Complete JSON plan with all change details
+- **Current vs Desired State comparison** - shows what exists in GitHub vs what's in your config
 - Summary showing counts by scope and action
 - List of any warnings
 
@@ -82,6 +83,13 @@ The dry run output includes:
 ================================================================
 Summary of Proposed Changes
 ================================================================
+
+Current State vs Desired State:
+--------------------------------
+  Teams:              5 → 6 (+1)
+  Team Members:       12 → 14 (+2)
+  Repositories:       15 → 18 (+3)
+  Repo Permissions:   22 → 28 (+6)
 
 Total changes: 7
 
