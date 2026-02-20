@@ -255,7 +255,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 					Repo: repo,
 				}
 				renderedConfig := templates.RenderOrPassthrough(cfg.App.RenovateConfig, tmplData)
-				
+
 				out = append(out, plan.Change{
 					Scope:  "repo-file",
 					Target: r + ":.github/renovate.json",
