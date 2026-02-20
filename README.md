@@ -14,10 +14,12 @@ A fast, idempotent **GitHub Organization Manager** written in Go. Define your or
 - ✅ YAML-driven org config (`app.yaml`, `org.yaml`, `teams/*.yaml`)
 - ✅ Teams, maintainers, members (idempotent add/update)
 - ✅ Repo permission grants (pull/triage/push/maintain/admin)
+- ✅ **Repository topics**: add topics/labels to repositories for organization
+- ✅ **Repository pinning**: pin important repositories to organization profile
 - ✅ **Optional**: create repos that don’t exist (`create_repo: true`)
 - ✅ **Optional**: inject `.github/renovate.json` into repos
-- ✅ Warnings & cleanups: unmanaged teams, members without team
-- ✅ **Optional** hard cleanups: delete unmanaged teams, remove members without team
+- ✅ Warnings & cleanups: unmanaged teams, members without team, unmanaged repos
+- ✅ **Optional** hard cleanups: delete unmanaged teams, remove members without team, delete unmanaged repos
 - ✅ Auth: GitHub App (recommended) or PAT
 - ✅ `--dry` plan with stable output; safe apply
 - ✅ Cross‑platform binaries via GitHub Releases; `gomgr version` stamped at build
@@ -84,10 +86,12 @@ private_key: ./app-private.pem  # file path or raw PEM; env GITHUB_APP_PRIVATE_K
 dry_warnings:
   warn_unmanaged_teams: true
   warn_members_without_any_team: true
+  warn_unmanaged_repos: true         # warn about repos not defined in any team
 
 # Optional enforcement / extras:
 remove_members_without_team: true   # remove org members not in any team
 delete_unconfigured_teams: true     # delete teams not defined in YAML
+delete_unmanaged_repos: false       # delete repos not defined in any team (DESTRUCTIVE!)
 create_repo: true                   # create repos if missing when referenced by teams
 add_renovate_config: true           # create .github/renovate.json in repos
 renovate_config: |
@@ -117,11 +121,77 @@ maintainers:
 members:
   - bob
 repositories:
+  # Simple permission string (backward compatible)
   infra: maintain              # pull|triage|push|maintain|admin
-  api: push
+  
+  # Advanced config with topics and pinning
+  api:
+    permission: push
+    topics:
+      - backend
+      - api
+      - project-platform
+  
+  # Repository with pinning (appears on org profile)
+  platform-index:
+    permission: admin
+    topics:
+      - project-platform
+      - documentation
+    pinned: true
 ```
 
 > Loader ignores non‑YAML files in `teams/` and skips empty/invalid entries.
+
+---
+
+## Project Organization Pattern
+
+gomgr supports organizing repositories by project with topics, pinning, and naming conventions:
+
+**Example: Multi-repo project setup**
+
+1. Define a project name (slug), e.g., `platform`
+2. Prefix all project repositories: `platform-api`, `platform-web`, `platform-infra`
+3. Tag all repos with topic: `project-platform`
+4. Create an index repository: `platform-index` with README linking to all project repos
+5. Pin the index repo to make it prominent on the org profile
+
+**Example configuration:**
+
+```yaml
+name: Platform Team
+repositories:
+  platform-index:
+    permission: admin
+    topics:
+      - project-platform
+      - documentation
+    pinned: true
+  
+  platform-api:
+    permission: push
+    topics:
+      - project-platform
+      - backend
+  
+  platform-web:
+    permission: push
+    topics:
+      - project-platform
+      - frontend
+  
+  platform-infra:
+    permission: maintain
+    topics:
+      - project-platform
+      - infrastructure
+```
+
+This pattern makes it easy to:
+- Discover all repositories belonging to a project using GitHub's topic search
+- Provide project documentation via the pinned index repository
+- Maintain consistent naming and organization across projects
 
 ---
 
@@ -157,7 +227,7 @@ Use a classic PAT with scopes:
   Prints version (stamped at build). If built with VCS info, also prints revision/dirty/commit time.
 
 **Order of operations** (apply):  
-create teams → set memberships → ensure repos → grant permissions → write renovate (optional) → cleanups (optional)
+create teams → set memberships → ensure repos → grant permissions → write renovate (optional) → set topics & pins → cleanups (optional)
 
 ---
 
@@ -239,6 +309,7 @@ jobs:
 
 - Compare & update team fields (description/privacy/parents)
 - Optionally remove extra team members / revoke extra repo perms
+- Optionally remove extra topics from repos (current behavior: union of all topics)
 - Custom default branch for file writes
 - Parallel apply with rate‑limit aware workers
 - More comprehensive plan diff output

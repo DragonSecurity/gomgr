@@ -26,6 +26,12 @@ The gomgr agent can:
   - Optionally create repositories if they don't exist
   - Inject Renovate configuration into repositories
 
+- **Repository Management**
+  - Add topics/labels to repositories for better organization
+  - Pin important repositories to organization profile
+  - Optionally delete unmanaged repositories
+  - Warn about repositories not defined in any team configuration
+
 - **Synchronization**
   - Idempotent apply: safe to run repeatedly
   - Dry-run mode for safe planning before applying changes
@@ -53,8 +59,10 @@ The agent performs operations in the following order:
 2. **Set Memberships** - Assigns maintainers and members to teams
 3. **Ensure Repos** - Creates repositories if configured to do so
 4. **Grant Permissions** - Applies repository access permissions to teams
-5. **Write Renovate Config** - Optionally injects `.github/renovate.json` into repos
-6. **Cleanups** - Optionally removes unmanaged resources
+5. **Write Files** - Optionally injects default README and `.github/renovate.json` into repos
+6. **Set Topics** - Applies topics/labels to repositories for organization
+7. **Pin Repos** - Pins specified repositories to organization profile (GraphQL)
+8. **Cleanups** - Optionally removes unmanaged resources (teams, members, repositories)
 
 ## CI/CD Automation
 
@@ -111,8 +119,8 @@ Agents are configured through YAML files in a config directory:
 Defines the target organization, authentication method, and behavioral flags:
 - Organization name
 - GitHub App credentials or PAT
-- Warning flags for dry-run mode
-- Optional enforcement features (remove members, delete teams, create repos)
+- Warning flags for dry-run mode (unmanaged teams, members without teams, unmanaged repos)
+- Optional enforcement features (remove members, delete teams, delete unmanaged repos, create repos)
 - Renovate configuration injection
 
 ### `org.yaml` - Organization Metadata
@@ -123,7 +131,15 @@ Each file defines a team with:
 - Name and slug
 - Description and privacy level
 - Maintainers and members
-- Repository access permissions
+- Repository access permissions with optional advanced configuration:
+  - Simple string permission (backward compatible): `repo: push`
+  - Advanced object with topics and pinning:
+    ```yaml
+    repo:
+      permission: push
+      topics: [backend, api, project-name]
+      pinned: true
+    ```
 
 ## Agent Safety Features
 
