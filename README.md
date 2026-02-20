@@ -15,13 +15,13 @@ A fast, idempotent **GitHub Organization Manager** written in Go. Define your or
 - ✅ Teams, maintainers, members (idempotent add/update)
 - ✅ Repo permission grants (pull/triage/push/maintain/admin)
 - ✅ **Repository topics**: add topics/labels to repositories for organization
-- ✅ **Repository pinning**: pin important repositories to organization profile
+- ✅ **Repository pinning**: pin important repositories to organization profile (⚠️ *GitHub API limitation: not currently supported for organizations - configuration accepted but manual pinning required via web UI*)
 - ✅ **Optional**: create repos that don’t exist (`create_repo: true`)
 - ✅ **Optional**: inject `.github/renovate.json` into repos
 - ✅ Warnings & cleanups: unmanaged teams, members without team, unmanaged repos
 - ✅ **Optional** hard cleanups: delete unmanaged teams, remove members without team, delete unmanaged repos
 - ✅ Auth: GitHub App (recommended) or PAT
-- ✅ `--dry` plan with stable output; safe apply
+- ✅ `--dry` plan with **state comparison** showing current GitHub state vs desired config state
 - ✅ Cross‑platform binaries via GitHub Releases; `gomgr version` stamped at build
 
 ---
@@ -68,8 +68,45 @@ go build -trimpath -buildvcs=true -ldflags "-s -w -X github.com/DragonSecurity/g
 
 3. **Run a dry run, then apply**
 ```bash
-gomgr sync -c <config> --dry
-gomgr sync -c <config>
+gomgr sync -c <config> --dry  # Shows JSON plan + summary of changes
+gomgr sync -c <config>         # Actually applies changes
+```
+
+The dry run output includes:
+- Complete JSON plan with all change details
+- **Current vs Desired State comparison** - shows what exists in GitHub vs what's in your config
+- Summary showing counts by scope and action
+- List of any warnings
+
+**Example summary output:**
+```
+================================================================
+Summary of Proposed Changes
+================================================================
+
+Current State vs Desired State:
+--------------------------------
+  Teams:              5 → 6 (+1)
+  Team Members:       12 → 14 (+2)
+  Repositories:       15 → 18 (+3)
+  Repo Permissions:   22 → 28 (+6)
+
+Total changes: 7
+
+Changes by scope:
+  repo-file:           3
+  repo-pin:            1
+  repo-topics:         1
+  team-repo:           3
+
+Changes by action:
+  ensure:              5
+  grant:               3
+
+Warnings: 1
+  - Skipping pin for KaMuses/platform-index: GitHub API does not support pinning to organization profiles
+
+================================================================
 ```
 
 ---
@@ -132,13 +169,13 @@ repositories:
       - api
       - project-platform
   
-  # Repository with pinning (appears on org profile)
+  # Repository with pinning (note: pinning is not supported by GitHub API for organizations)
   platform-index:
     permission: admin
     topics:
       - project-platform
       - documentation
-    pinned: true
+    pinned: true  # Will be shown in plan but skipped with a warning - pin manually via GitHub web UI
 ```
 
 > Loader ignores non‑YAML files in `teams/` and skips empty/invalid entries.
@@ -149,13 +186,15 @@ repositories:
 
 gomgr supports organizing repositories by project with topics, pinning, and naming conventions:
 
+> **Note**: Repository pinning is not currently supported by the GitHub API for organization profiles. The `pinned` field is accepted in configuration but the actual pinning operation will be skipped with a warning. You can manually pin repositories through the GitHub web interface.
+
 **Example: Multi-repo project setup**
 
 1. Define a project name (slug), e.g., `platform`
 2. Prefix all project repositories: `platform-api`, `platform-web`, `platform-infra`
 3. Tag all repos with topic: `project-platform`
 4. Create an index repository: `platform-index` with README linking to all project repos
-5. Pin the index repo to make it prominent on the org profile
+5. Pin the index repo to make it prominent on the org profile (must be done manually via GitHub web UI due to API limitations)
 
 **Example configuration:**
 
@@ -190,7 +229,7 @@ repositories:
 
 This pattern makes it easy to:
 - Discover all repositories belonging to a project using GitHub's topic search
-- Provide project documentation via the pinned index repository
+- Provide project documentation via the index repository (can be manually pinned via GitHub web UI)
 - Maintain consistent naming and organization across projects
 
 ---
@@ -218,7 +257,7 @@ Use a classic PAT with scopes:
 ## CLI
 
 - `gomgr sync -c <config> [--dry] [--debug]`  
-  Plans and applies org state.
+  Plans and applies org state. With `--dry`, shows a JSON plan followed by a human-readable summary of proposed changes without applying them.
 
 - `gomgr setup-team -n "Team Name" -c <config> [-f out/path.yaml]`  
   Bootstraps a team YAML.
@@ -371,6 +410,7 @@ The repository includes GitHub Actions workflows:
 - **404 on `/teams//members`**: empty/invalid team YAML or calling membership on a team that doesn’t exist yet. Loader ignores non‑YAML files and planner guards empty slugs; team creation happens before membership.
 - **`gomgr version` shows `dev`**: build without `-ldflags -X` or not from a tag. Use the release workflow or pass a version when building.
 - **Renovate config not created**: ensure `add_renovate_config: true` and `renovate_config` is non‑empty; repo must exist or `create_repo: true`.
+- **Repository pinning warnings**: The GitHub API does not support pinning repositories to organization profiles programmatically. The `pinned: true` configuration is accepted but the operation is skipped with a warning. You must manually pin repositories through the GitHub web interface.
 
 ---
 

@@ -149,6 +149,10 @@ func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) (
 		actualBySlug[t.GetSlug()] = t
 	}
 
+	// Track state
+	st.CurrentTeams = len(actual)
+	st.DesiredTeams = len(desired)
+
 	for slug, want := range desired {
 		if _, ok := actualBySlug[slug]; !ok {
 			out = append(out, util.Change{
@@ -172,6 +176,9 @@ func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) (
 func planTeamMembership(ctx context.Context, c *gh.Client, cfg *config.Root, st *State, desiredBySlug map[string]config.TeamConfig) ([]util.Change, error) {
 	var out []util.Change
 	org := st.Org
+
+	totalCurrentMembers := 0
+	totalDesiredMembers := 0
 
 	for slug, want := range desiredBySlug {
 		// actual role map
@@ -228,6 +235,10 @@ func planTeamMembership(ctx context.Context, c *gh.Client, cfg *config.Root, st 
 			}
 		}
 
+		// Track member counts
+		totalCurrentMembers += len(got)
+		totalDesiredMembers += len(wantRole)
+
 		for user, role := range wantRole {
 			if got[user] == role {
 				continue
@@ -241,6 +252,11 @@ func planTeamMembership(ctx context.Context, c *gh.Client, cfg *config.Root, st 
 		}
 		// (optional) removals left for later
 	}
+
+	// Update state
+	st.CurrentTeamMembers = totalCurrentMembers
+	st.DesiredTeamMembers = totalDesiredMembers
+
 	return out, nil
 }
 
@@ -466,6 +482,52 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 
 	// Store managed repos in state for cleanup phase
 	st.ManagedRepos = managedRepos
+
+	// Track repository counts
+	st.CurrentRepos = len(existing)
+	st.DesiredRepos = len(managedRepos)
+
+	// Count permissions (team-repo grants)
+	// Note: This requires additional API calls to get accurate current state.
+	// These calls are intentional for precise state tracking and run only during
+	// dry-run planning. The overhead is acceptable for the visibility benefit.
+	currentPermsCount := 0
+	desiredPermsCount := 0
+
+	// Count current permissions from GitHub
+	for _, t := range cfg.Team {
+		teamSlug := t.Slug
+		if teamSlug == "" {
+			teamSlug = strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
+		}
+		// List team repos to count current permissions
+		repoOpts := &github.ListOptions{PerPage: 100}
+		for {
+			teamRepos, resp, err := c.REST.Teams.ListTeamReposBySlug(ctx, org, teamSlug, repoOpts)
+			if err != nil {
+				// If team doesn't exist yet, skip counting
+				var ghErr *github.ErrorResponse
+				if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusNotFound {
+					break
+				}
+				// Ignore other errors for counting purposes
+				break
+			}
+			currentPermsCount += len(teamRepos)
+			if resp.NextPage == 0 {
+				break
+			}
+			repoOpts.Page = resp.NextPage
+		}
+	}
+
+	// Count desired permissions
+	for _, t := range cfg.Team {
+		desiredPermsCount += len(t.Repositories)
+	}
+
+	st.CurrentRepoPerms = currentPermsCount
+	st.DesiredRepoPerms = desiredPermsCount
 
 	return out, nil
 }
@@ -748,28 +810,11 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 			org := fmt.Sprint(d["org"])
 			repo := fmt.Sprint(d["repo"])
 
-			// Get the repository to get its node ID (repositoryId)
-			ghRepo, _, err := c.REST.Repositories.Get(ctx, org, repo)
-			if err != nil {
-				return fmt.Errorf("get repo %s/%s for pinning: %w", org, repo, err)
-			}
-
-			// Pin the repository using GraphQL mutation
-			mutation := `
-				mutation($repositoryId: ID!) {
-					pinRepository(input: {repositoryId: $repositoryId}) {
-						clientMutationId
-					}
-				}
-			`
-			variables := map[string]any{
-				"repositoryId": ghRepo.GetNodeID(),
-			}
-
-			var result map[string]any
-			if err := c.DoGraphQL(ctx, mutation, variables, &result); err != nil {
-				return fmt.Errorf("pin repo %s/%s: %w", org, repo, err)
-			}
+			// Note: GitHub's GraphQL API does not support pinning repositories to organization profiles.
+			// The pinRepository mutation only works for user profiles, not organizations.
+			// This is a known limitation of the GitHub API.
+			// See: https://github.com/orgs/community/discussions/184845
+			util.Warnf("Skipping pin for %s/%s: GitHub API does not support pinning to organization profiles", org, repo)
 
 		case "repo:delete":
 			d, _ := ch.Details.(map[string]any)
