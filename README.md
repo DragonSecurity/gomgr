@@ -564,7 +564,7 @@ jobs:
           OS=linux ARCH=amd64
           ASSET="gomgr_${VERSION}_${OS}_${ARCH}.tar.gz"
           mkdir -p .gomgr
-          gh release download "$VERSION" --repo DragonSecurity/github-org-manager-go --pattern "$ASSET" --dir .gomgr
+          gh release download "$VERSION" --repo DragonSecurity/gomgr --pattern "$ASSET" --dir .gomgr
           tar -xzf ".gomgr/$ASSET" -C .gomgr
           sudo mv $(find .gomgr -type f -name gomgr) /usr/local/bin/gomgr
           sudo chmod +x /usr/local/bin/gomgr
