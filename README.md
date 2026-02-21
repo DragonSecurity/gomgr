@@ -311,6 +311,7 @@ gomgr supports marking repositories as templates and referencing them from other
 - Mark a repository as a template with `template: true`
 - Template repositories can define permission and topics that other repos inherit
 - Reference templates using `from: template-repo-name` or `from: org/repo-name`
+- New repositories with `from:` are created using GitHub's template repository feature
 - Topics are automatically merged (template topics + repo-specific topics)
 - Permissions can be inherited or overridden
 - Templates are marked using the GitHub API's template repository flag
@@ -318,9 +319,10 @@ gomgr supports marking repositories as templates and referencing them from other
 **How it works:**
 1. Define a template repository with `template: true`
 2. Other repositories reference it with `from: template-name`
-3. The referencing repo inherits permission (if not specified) and topics from the template
-4. Add repo-specific topics to extend the template's topics
-5. Override permission if needed for specific use cases
+3. When creating a new repo with `from:`, GitHub's CreateFromTemplate API is used
+4. The referencing repo inherits permission (if not specified) and topics from the template
+5. Add repo-specific topics to extend the template's topics
+6. Override permission if needed for specific use cases
 
 **Benefits:**
 - Consistency across similar repositories (e.g., all microservices)
