@@ -15,7 +15,6 @@ A fast, idempotent **GitHub Organization Manager** written in Go. Define your or
 - ✅ Teams, maintainers, members (idempotent add/update)
 - ✅ Repo permission grants (pull/triage/push/maintain/admin)
 - ✅ **Custom repository roles**: support for GitHub Enterprise Cloud custom roles (fine-grained permissions for Actions, runners, secrets)
-- ✅ **Custom repository roles**: support for GitHub Enterprise Cloud custom roles (fine-grained permissions for Actions, runners, secrets)
 - ✅ **Repository topics**: add topics/labels to repositories for organization
 - ✅ **Repository pinning**: pin important repositories to organization profile (⚠️ *GitHub API limitation: not currently supported for organizations - configuration accepted but manual pinning required via web UI*)
 - ✅ **Optional**: create repos that don’t exist (`create_repo: true`)
