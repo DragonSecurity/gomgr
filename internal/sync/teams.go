@@ -967,7 +967,7 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 					isRaceCondition := errors.As(err, &ghErr) && 
 						ghErr.Response != nil && 
 						ghErr.Response.StatusCode == 422 &&
-						strings.Contains(ghErr.Message, "sha")
+						strings.Contains(ghErr.Message, "sha wasn't supplied")
 					
 					if !isRaceCondition {
 						return fmt.Errorf("create file %s in %s/%s: %w", path, org, repo, err)
