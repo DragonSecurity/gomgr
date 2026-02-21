@@ -174,13 +174,13 @@ func resolveTemplate(repoName string, settings repoSettings, allRepos map[string
 	// Clear existing topics first since we'll rebuild the list
 	result.topics = nil
 	topicSet := make(map[string]bool)
-	
+
 	// Add template topics first
 	for _, topic := range templateSettings.topics {
 		topicSet[topic] = true
 		result.topics = append(result.topics, topic)
 	}
-	
+
 	// Add repo-specific topics that aren't already in the set
 	for _, topic := range settings.topics {
 		if !topicSet[topic] {
@@ -788,16 +788,16 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 
 func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) error {
 	precedence := map[string]int{
-		"team:create":           10,
-		"repo:ensure":           10,
-		"team-repo:grant":       20,
-		"team-member:ensure":    30,
-		"repo-file:ensure":      40,
-		"repo-topics:ensure":    45,
-		"repo-template:ensure":  46,
-		"repo-pin:ensure":       47,
-		"team:delete":           90,
-		"repo:delete":           90,
+		"team:create":          10,
+		"repo:ensure":          10,
+		"team-repo:grant":      20,
+		"team-member:ensure":   30,
+		"repo-file:ensure":     40,
+		"repo-topics:ensure":   45,
+		"repo-template:ensure": 46,
+		"repo-pin:ensure":      47,
+		"team:delete":          90,
+		"repo:delete":          90,
 	}
 
 	sort.Slice(changes, func(i, j int) bool {

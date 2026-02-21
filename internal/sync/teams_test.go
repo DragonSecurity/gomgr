@@ -264,14 +264,14 @@ func TestParseRepoConfigWithTemplate(t *testing.T) {
 
 func TestResolveTemplate(t *testing.T) {
 	tests := []struct {
-		name        string
-		repoName    string
-		settings    repoSettings
-		allRepos    map[string]repoSettings
-		defaultOrg  string
-		wantPerm    string
-		wantTopics  []string
-		wantError   bool
+		name          string
+		repoName      string
+		settings      repoSettings
+		allRepos      map[string]repoSettings
+		defaultOrg    string
+		wantPerm      string
+		wantTopics    []string
+		wantError     bool
 		errorContains string
 	}{
 		{
@@ -281,7 +281,7 @@ func TestResolveTemplate(t *testing.T) {
 				permission: "push",
 				topics:     []string{"backend"},
 			},
-			allRepos: map[string]repoSettings{},
+			allRepos:   map[string]repoSettings{},
 			defaultOrg: "myorg",
 			wantPerm:   "push",
 			wantTopics: []string{"backend"},
@@ -358,9 +358,9 @@ func TestResolveTemplate(t *testing.T) {
 			settings: repoSettings{
 				from: "other-org/template-repo",
 			},
-			allRepos: map[string]repoSettings{},
-			defaultOrg: "myorg",
-			wantError:  true,
+			allRepos:      map[string]repoSettings{},
+			defaultOrg:    "myorg",
+			wantError:     true,
 			errorContains: "cross-organization template references not yet supported",
 		},
 		{
