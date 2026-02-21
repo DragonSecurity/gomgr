@@ -987,6 +987,9 @@ func normalizePermission(p string) string {
 	case "admin":
 		return "admin"
 	default:
-		return "pull"
+		// For custom repository roles (GitHub Enterprise Cloud), pass through the role name as-is
+		// Custom roles must be created in the GitHub organization before use
+		// Examples: "actions-manager", "release-manager", "runner-admin"
+		return p
 	}
 }

@@ -480,3 +480,147 @@ func TestValidateTopic(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizePermission(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		// Standard permissions
+		{
+			name:  "pull permission",
+			input: "pull",
+			want:  "pull",
+		},
+		{
+			name:  "read permission (normalized to pull)",
+			input: "read",
+			want:  "pull",
+		},
+		{
+			name:  "triage permission",
+			input: "triage",
+			want:  "triage",
+		},
+		{
+			name:  "push permission",
+			input: "push",
+			want:  "push",
+		},
+		{
+			name:  "write permission (normalized to push)",
+			input: "write",
+			want:  "push",
+		},
+		{
+			name:  "maintain permission",
+			input: "maintain",
+			want:  "maintain",
+		},
+		{
+			name:  "admin permission",
+			input: "admin",
+			want:  "admin",
+		},
+		// Case insensitive
+		{
+			name:  "uppercase PUSH",
+			input: "PUSH",
+			want:  "push",
+		},
+		{
+			name:  "mixed case Admin",
+			input: "Admin",
+			want:  "admin",
+		},
+		// Custom repository roles (GitHub Enterprise Cloud)
+		{
+			name:  "custom role: actions-manager",
+			input: "actions-manager",
+			want:  "actions-manager",
+		},
+		{
+			name:  "custom role: release-manager",
+			input: "release-manager",
+			want:  "release-manager",
+		},
+		{
+			name:  "custom role: runner-admin",
+			input: "runner-admin",
+			want:  "runner-admin",
+		},
+		{
+			name:  "custom role: security-scanner",
+			input: "security-scanner",
+			want:  "security-scanner",
+		},
+		{
+			name:  "custom role with mixed case (preserved)",
+			input: "Custom-Role-Name",
+			want:  "Custom-Role-Name",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizePermission(tt.input)
+			if got != tt.want {
+				t.Errorf("normalizePermission(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseRepoConfigWithCustomRoles(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     any
+		wantPerm  string
+		wantError bool
+	}{
+		{
+			name:      "custom role as simple string",
+			input:     "actions-manager",
+			wantPerm:  "actions-manager",
+			wantError: false,
+		},
+		{
+			name: "custom role in advanced config",
+			input: map[string]any{
+				"permission": "release-manager",
+				"topics":     []any{"cicd", "releases"},
+			},
+			wantPerm:  "release-manager",
+			wantError: false,
+		},
+		{
+			name: "custom role with hyphens",
+			input: map[string]any{
+				"permission": "github-actions-admin",
+				"topics":     []any{"cicd"},
+			},
+			wantPerm:  "github-actions-admin",
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings, err := parseRepoConfig(tt.input)
+
+			if (err != nil) != tt.wantError {
+				t.Errorf("parseRepoConfig() error = %v, wantError %v", err, tt.wantError)
+				return
+			}
+
+			if err != nil {
+				return
+			}
+
+			if settings.permission != tt.wantPerm {
+				t.Errorf("permission = %q, want %q", settings.permission, tt.wantPerm)
+			}
+		})
+	}
+}
