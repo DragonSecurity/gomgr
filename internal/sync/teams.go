@@ -792,6 +792,40 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 	return out, warnings, nil
 }
 
+// containsErrorMessage checks if a GitHub ErrorResponse contains a specific error message
+// in either the main Message field or in any of the individual Error messages in the Errors array.
+func containsErrorMessage(ghErr *github.ErrorResponse, searchTerms ...string) bool {
+	// Check main message (only if not empty)
+	if ghErr.Message != "" {
+		allFound := true
+		for _, term := range searchTerms {
+			if !strings.Contains(ghErr.Message, term) {
+				allFound = false
+				break
+			}
+		}
+		if allFound {
+			return true
+		}
+	}
+
+	// Check individual errors in the Errors array
+	for _, e := range ghErr.Errors {
+		allFound := true
+		for _, term := range searchTerms {
+			if !strings.Contains(e.Message, term) {
+				allFound = false
+				break
+			}
+		}
+		if allFound {
+			return true
+		}
+	}
+
+	return false
+}
+
 // ---- apply ----
 
 func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) error {
@@ -965,15 +999,18 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 					// GitHub returns 422 with "sha wasn't supplied" or 409 with "reference already exists"
 					// when trying to create a file that already exists.
 					var ghErr *github.ErrorResponse
-					isRaceCondition := errors.As(err, &ghErr) &&
-						ghErr.Response != nil &&
-						((ghErr.Response.StatusCode == 422 && strings.Contains(ghErr.Message, "sha wasn't supplied")) ||
-							(ghErr.Response.StatusCode == 409 && strings.Contains(ghErr.Message, "reference already exists")))
+					if errors.As(err, &ghErr) && ghErr.Response != nil {
+						// Check if this is a race condition error
+						isRaceCondition := (ghErr.Response.StatusCode == 422 && containsErrorMessage(ghErr, "sha", "wasn't supplied")) ||
+							(ghErr.Response.StatusCode == 409 && containsErrorMessage(ghErr, "reference already exists"))
 
-					if !isRaceCondition {
+						if !isRaceCondition {
+							return fmt.Errorf("create file %s in %s/%s: %w", path, org, repo, err)
+						}
+						// File already exists (likely from template), which is what we want - skip error
+					} else {
 						return fmt.Errorf("create file %s in %s/%s: %w", path, org, repo, err)
 					}
-					// File already exists (likely from template), which is what we want - continue
 				}
 			} else {
 				// optional: update if differs (skipped for now)
