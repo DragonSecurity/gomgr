@@ -27,6 +27,8 @@ type repoSettings struct {
 	permission string
 	topics     []string
 	pinned     bool
+	template   bool
+	from       string
 }
 
 // validateTopic checks if a topic name meets GitHub requirements:
@@ -86,6 +88,12 @@ func parseRepoConfig(val any) (repoSettings, error) {
 		if pinned, ok := v["pinned"].(bool); ok {
 			settings.pinned = pinned
 		}
+		if template, ok := v["template"].(bool); ok {
+			settings.template = template
+		}
+		if from, ok := v["from"].(string); ok {
+			settings.from = from
+		}
 	case map[any]any:
 		// YAML might unmarshal as map[any]any
 		if perm, ok := v["permission"].(string); ok {
@@ -107,9 +115,85 @@ func parseRepoConfig(val any) (repoSettings, error) {
 		if pinned, ok := v["pinned"].(bool); ok {
 			settings.pinned = pinned
 		}
+		if template, ok := v["template"].(bool); ok {
+			settings.template = template
+		}
+		if from, ok := v["from"].(string); ok {
+			settings.from = from
+		}
 	}
 
 	return settings, nil
+}
+
+// resolveTemplate resolves template inheritance for a repository configuration.
+// If the repo has a "from" field, it looks up the template repository and merges settings.
+// Topics are combined (union), template flag is not inherited, and permission can be overridden.
+func resolveTemplate(repoName string, settings repoSettings, allRepos map[string]repoSettings, defaultOrg string) (repoSettings, error) {
+	if settings.from == "" {
+		return settings, nil
+	}
+
+	// Parse template reference (supports "repo-name" or "org/repo-name")
+	templateOrg := defaultOrg
+	templateRepo := settings.from
+	if strings.Contains(settings.from, "/") {
+		parts := strings.SplitN(settings.from, "/", 2)
+		if len(parts) != 2 {
+			return settings, fmt.Errorf("invalid template reference format: %q (expected 'repo' or 'org/repo')", settings.from)
+		}
+		templateOrg = parts[0]
+		templateRepo = parts[1]
+	}
+
+	// Only support same-org templates for now
+	if templateOrg != defaultOrg {
+		return settings, fmt.Errorf("cross-organization template references not yet supported: %q", settings.from)
+	}
+
+	// Look up template repository in the current configuration
+	templateKey := strings.ToLower(templateRepo)
+	templateSettings, exists := allRepos[templateKey]
+	if !exists {
+		return settings, fmt.Errorf("template repository %q not found in configuration", templateRepo)
+	}
+
+	if !templateSettings.template {
+		return settings, fmt.Errorf("repository %q is referenced as template but not marked with template: true", templateRepo)
+	}
+
+	// Merge settings: inherit from template, override with repo-specific
+	result := settings
+
+	// Inherit permission if not specified
+	if result.permission == "" && templateSettings.permission != "" {
+		result.permission = templateSettings.permission
+	}
+
+	// Merge topics (union): template topics + repo-specific topics
+	// Clear existing topics first since we'll rebuild the list
+	result.topics = nil
+	topicSet := make(map[string]bool)
+
+	// Add template topics first
+	for _, topic := range templateSettings.topics {
+		topicSet[topic] = true
+		result.topics = append(result.topics, topic)
+	}
+
+	// Add repo-specific topics that aren't already in the set
+	for _, topic := range settings.topics {
+		if !topicSet[topic] {
+			topicSet[topic] = true
+			result.topics = append(result.topics, topic)
+		}
+	}
+
+	// Don't inherit template or pinned flags
+	// result.template is already false (or explicitly set)
+	// result.pinned is already set from repo config
+
+	return result, nil
 }
 
 // ---- planning ----
@@ -290,6 +374,11 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 	// Map to track desired topics and pinned state per repo
 	desiredTopics := map[string][]string{}
 	desiredPinned := map[string]bool{}
+	desiredTemplates := map[string]bool{}
+
+	// First pass: collect all repository settings
+	allRepoSettings := map[string]repoSettings{}
+	repoToTeams := map[string][]string{} // track which teams reference each repo
 
 	for _, t := range cfg.Team {
 		slug := t.Slug
@@ -305,6 +394,32 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 				return nil, fmt.Errorf("invalid config for repo %s in team %s: %w", repo, slug, err)
 			}
 
+			// Store settings for later template resolution
+			allRepoSettings[r] = settings
+			repoToTeams[r] = append(repoToTeams[r], slug)
+		}
+	}
+
+	// Second pass: resolve templates
+	resolvedSettings := make(map[string]repoSettings)
+	for repo, settings := range allRepoSettings {
+		resolved, err := resolveTemplate(repo, settings, allRepoSettings, org)
+		if err != nil {
+			return nil, fmt.Errorf("error resolving template for repo %s: %w", repo, err)
+		}
+		resolvedSettings[repo] = resolved
+	}
+
+	// Third pass: process repositories with resolved settings
+	for _, t := range cfg.Team {
+		slug := t.Slug
+		if slug == "" {
+			slug = strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
+		}
+		for repo := range t.Repositories {
+			r := strings.ToLower(repo)
+			settings := resolvedSettings[r]
+
 			if !existing[r] && cfg.App.CreateRepo {
 				out = append(out, util.Change{
 					Scope:  "repo",
@@ -318,6 +433,12 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 				})
 				existing[r] = true
 			}
+
+			// Mark repository as template if configured
+			if settings.template {
+				desiredTemplates[r] = true
+			}
+
 			out = append(out, util.Change{
 				Scope:  "team-repo",
 				Target: slug + "/" + r,
@@ -455,6 +576,35 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 					"pinned": true,
 				},
 			})
+		}
+	}
+
+	// Plan template marking changes
+	for repo, shouldBeTemplate := range desiredTemplates {
+		if shouldBeTemplate {
+			// Check if repo needs to be marked as template
+			needsUpdate := false
+			if existingRepo, ok := existingRepos[repo]; ok {
+				if !existingRepo.GetIsTemplate() {
+					needsUpdate = true
+				}
+			} else {
+				// Repo will be created, needs template marking
+				needsUpdate = true
+			}
+
+			if needsUpdate {
+				out = append(out, util.Change{
+					Scope:  "repo-template",
+					Target: repo,
+					Action: "ensure",
+					Details: map[string]any{
+						"org":      org,
+						"repo":     repo,
+						"template": true,
+					},
+				})
+			}
 		}
 	}
 
@@ -638,15 +788,16 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 
 func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) error {
 	precedence := map[string]int{
-		"team:create":        10,
-		"repo:ensure":        10,
-		"team-repo:grant":    20,
-		"team-member:ensure": 30,
-		"repo-file:ensure":   40,
-		"repo-topics:ensure": 45,
-		"repo-pin:ensure":    45,
-		"team:delete":        90,
-		"repo:delete":        90,
+		"team:create":          10,
+		"repo:ensure":          10,
+		"team-repo:grant":      20,
+		"team-member:ensure":   30,
+		"repo-file:ensure":     40,
+		"repo-topics:ensure":   45,
+		"repo-template:ensure": 46,
+		"repo-pin:ensure":      47,
+		"team:delete":          90,
+		"repo:delete":          90,
 	}
 
 	sort.Slice(changes, func(i, j int) bool {
@@ -781,6 +932,19 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 			_, _, err := c.REST.Repositories.ReplaceAllTopics(ctx, org, repo, topicsRaw)
 			if err != nil {
 				return fmt.Errorf("set topics on %s/%s: %w", org, repo, err)
+			}
+
+		case "repo-template:ensure":
+			d, _ := ch.Details.(map[string]any)
+			org := fmt.Sprint(d["org"])
+			repo := fmt.Sprint(d["repo"])
+
+			// Mark repository as a template
+			_, _, err := c.REST.Repositories.Edit(ctx, org, repo, &github.Repository{
+				IsTemplate: github.Ptr(true),
+			})
+			if err != nil {
+				return fmt.Errorf("mark repo %s/%s as template: %w", org, repo, err)
 			}
 
 		case "repo-pin:ensure":

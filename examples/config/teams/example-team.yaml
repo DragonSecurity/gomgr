@@ -6,12 +6,37 @@ maintainers:
   - allanice001
 repositories:
   infra: maintain
+  
+  # Template repository - can be used by other repos
+  template-go-api:
+    permission: push
+    template: true
+    topics:
+      - backend
+      - api
+      - go-template
+  
+  # Repository using simple config with topics
   api: 
     permission: push
     topics:
       - backend
       - api
       - project-platform
+  
+  # Repository using template (inherits topics and permission)
+  my-api:
+    from: template-go-api
+    topics:
+      - my-project
+      # Will inherit: backend, api, go-template from template
+  
+  # Repository using template with permission override
+  admin-api:
+    from: template-go-api
+    permission: admin
+    topics:
+      - admin-service
 
   platform-index:
     permission: admin

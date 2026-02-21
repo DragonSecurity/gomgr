@@ -169,6 +169,29 @@ repositories:
       - api
       - project-platform
   
+  # Template repository - can be reused by other repos
+  template-go-api:
+    permission: push
+    template: true
+    topics:
+      - backend
+      - api
+      - go-template
+  
+  # Repository using template (inherits permission and topics)
+  my-api:
+    from: template-go-api      # Reference to template repo (supports "repo" or "org/repo")
+    topics:
+      - my-project             # Additional topics (merged with template topics)
+    # Will inherit: permission: push, and topics: backend, api, go-template
+  
+  # Repository using template with override
+  admin-api:
+    from: template-go-api
+    permission: admin          # Override template permission
+    topics:
+      - admin-service
+  
   # Repository with pinning (note: pinning is not supported by GitHub API for organizations)
   platform-index:
     permission: admin
@@ -179,6 +202,33 @@ repositories:
 ```
 
 > Loader ignores non‑YAML files in `teams/` and skips empty/invalid entries.
+
+---
+
+## Template Repository Pattern
+
+gomgr supports marking repositories as templates and referencing them from other repositories. This enables consistent configuration across multiple repositories:
+
+**Template Repository Features:**
+- Mark a repository as a template with `template: true`
+- Template repositories can define permission and topics that other repos inherit
+- Reference templates using `from: template-repo-name` or `from: org/repo-name`
+- Topics are automatically merged (template topics + repo-specific topics)
+- Permissions can be inherited or overridden
+- Templates are marked using the GitHub API's template repository flag
+
+**How it works:**
+1. Define a template repository with `template: true`
+2. Other repositories reference it with `from: template-name`
+3. The referencing repo inherits permission (if not specified) and topics from the template
+4. Add repo-specific topics to extend the template's topics
+5. Override permission if needed for specific use cases
+
+**Benefits:**
+- Consistency across similar repositories (e.g., all microservices)
+- DRY principle - define common configuration once
+- Easy to update multiple repos by changing the template
+- Clear relationships between repos in your configuration
 
 ---
 
