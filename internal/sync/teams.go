@@ -788,6 +788,8 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 
 func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) error {
 	precedence := map[string]int{
+		"custom-role:create":   5, // Create custom roles first, before teams/repos
+		"custom-role:update":   5,
 		"team:create":          10,
 		"repo:ensure":          10,
 		"team-repo:grant":      20,
@@ -798,6 +800,7 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 		"repo-pin:ensure":      47,
 		"team:delete":          90,
 		"repo:delete":          90,
+		"custom-role:delete":   95, // Delete custom roles last
 	}
 
 	sort.Slice(changes, func(i, j int) bool {
@@ -806,7 +809,17 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 		return precedence[ai] < precedence[aj]
 	})
 
+	// Apply custom role changes first
+	if err := applyCustomRoleChanges(ctx, c, changes); err != nil {
+		return err
+	}
+
 	for _, ch := range changes {
+		// Skip custom role changes - already handled above
+		if strings.HasPrefix(ch.Scope, "custom-role") {
+			continue
+		}
+
 		switch ch.Scope + ":" + ch.Action {
 		case "team:create":
 			d, _ := ch.Details.(map[string]any)

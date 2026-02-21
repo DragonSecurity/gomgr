@@ -9,10 +9,12 @@ type AppConfig struct {
 		WarnUnmanagedTeams        bool `yaml:"warn_unmanaged_teams"`
 		WarnMembersWithoutAnyTeam bool `yaml:"warn_members_without_any_team"`
 		WarnUnmanagedRepos        bool `yaml:"warn_unmanaged_repos"`
+		WarnUnmanagedCustomRoles  bool `yaml:"warn_unmanaged_custom_roles"`
 	} `yaml:"dry_warnings"`
 	RemoveMembersWithoutTeam bool   `yaml:"remove_members_without_team"`
 	DeleteUnconfiguredTeams  bool   `yaml:"delete_unconfigured_teams"`
 	DeleteUnmanagedRepos     bool   `yaml:"delete_unmanaged_repos"`
+	DeleteUnmanagedCustomRoles bool `yaml:"delete_unmanaged_custom_roles"`
 	CreateRepo               bool   `yaml:"create_repo"`
 	AddRenovateConfig        bool   `yaml:"add_renovate_config"`
 	RenovateConfig           string `yaml:"renovate_config"`
@@ -20,7 +22,17 @@ type AppConfig struct {
 }
 
 type OrgConfig struct {
-	Owners []string `yaml:"owners"`
+	Owners      []string           `yaml:"owners"`
+	CustomRoles []CustomRoleConfig `yaml:"custom_roles,omitempty"`
+}
+
+// CustomRoleConfig defines a custom repository role for the organization
+// Requires GitHub Enterprise Cloud
+type CustomRoleConfig struct {
+	Name        string   `yaml:"name"`
+	Description string   `yaml:"description,omitempty"`
+	BaseRole    string   `yaml:"base_role"` // read, triage, write, maintain, admin
+	Permissions []string `yaml:"permissions,omitempty"`
 }
 
 type RepoConfig struct {
