@@ -965,15 +965,50 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 					// GitHub returns 422 with "sha wasn't supplied" or 409 with "reference already exists"
 					// when trying to create a file that already exists.
 					var ghErr *github.ErrorResponse
-					isRaceCondition := errors.As(err, &ghErr) &&
-						ghErr.Response != nil &&
-						((ghErr.Response.StatusCode == 422 && strings.Contains(ghErr.Message, "sha wasn't supplied")) ||
-							(ghErr.Response.StatusCode == 409 && strings.Contains(ghErr.Message, "reference already exists")))
-
-					if !isRaceCondition {
+					if errors.As(err, &ghErr) && ghErr.Response != nil {
+						// Check if this is a race condition error
+						isRaceCondition := false
+						
+						// Check for 422 with "sha" error (can be in Message or Errors array)
+						if ghErr.Response.StatusCode == 422 {
+							// Check main message
+							if strings.Contains(ghErr.Message, "sha") && strings.Contains(ghErr.Message, "wasn't supplied") {
+								isRaceCondition = true
+							}
+							// Check individual errors in the Errors array
+							if !isRaceCondition {
+								for _, e := range ghErr.Errors {
+									if strings.Contains(e.Message, "sha") && strings.Contains(e.Message, "wasn't supplied") {
+										isRaceCondition = true
+										break
+									}
+								}
+							}
+						}
+						
+						// Check for 409 with "reference already exists"
+						if ghErr.Response.StatusCode == 409 {
+							if strings.Contains(ghErr.Message, "reference already exists") {
+								isRaceCondition = true
+							}
+							// Check individual errors in the Errors array
+							if !isRaceCondition {
+								for _, e := range ghErr.Errors {
+									if strings.Contains(e.Message, "reference already exists") {
+										isRaceCondition = true
+										break
+									}
+								}
+							}
+						}
+						
+						if !isRaceCondition {
+							return fmt.Errorf("create file %s in %s/%s: %w", path, org, repo, err)
+						}
+						// File already exists (likely from template), which is what we want - skip error
+					} else {
 						return fmt.Errorf("create file %s in %s/%s: %w", path, org, repo, err)
 					}
-					// File already exists (likely from template), which is what we want - continue
 				}
 			} else {
 				// optional: update if differs (skipped for now)
