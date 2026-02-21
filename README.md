@@ -134,6 +134,7 @@ delete_unmanaged_repos: false       # delete repos not defined in any team (DEST
 delete_unmanaged_custom_roles: false # delete custom roles not in org.yaml (DESTRUCTIVE!)
 create_repo: true                   # create repos if missing when referenced by teams
 add_renovate_config: true           # create .github/renovate.json in repos
+add_default_readme: false           # create default README.md in repos (optional)
 renovate_config: |
   {
     "$schema": "https://docs.renovatebot.com/renovate-schema.json",
@@ -213,16 +214,18 @@ repositories:
   
   # Custom repository roles (requires GitHub Enterprise Cloud)
   # Custom roles allow fine-grained permissions like managing GitHub Actions
-  # without full repository admin access. Custom roles must be created in your
-  # GitHub organization before using them here.
+  # without full repository admin access. Custom roles must be defined in org.yaml
+  # and gomgr will create/update them automatically.
   # See: https://docs.github.com/en/enterprise-cloud@latest/organizations/managing-user-access-to-your-organizations-repositories/managing-repository-roles/managing-custom-repository-roles-for-an-organization
   ci-workflows:
-    permission: actions-manager  # Custom role name (e.g., manage Actions without code access)
+    permission: actions-manager  # Custom role name (must be defined in org.yaml)
     topics:
       - cicd
       - github-actions
   
   # Template repository - can be reused by other repos
+  # Mark a repository as a template with `template: true`
+  # Templates are marked in GitHub and can be inherited by other repos in config
   template-go-api:
     permission: push
     template: true
@@ -233,7 +236,7 @@ repositories:
   
   # Repository using template (inherits permission and topics)
   my-api:
-    from: template-go-api      # Reference to template repo (supports "repo" or "org/repo")
+    from: template-go-api      # Reference to template repo (currently only same-org supported)
     topics:
       - my-project             # Additional topics (merged with template topics)
     # Will inherit: permission: push, and topics: backend, api, go-template
@@ -244,6 +247,7 @@ repositories:
     permission: admin          # Override template permission
     topics:
       - admin-service
+    # Will inherit topics: backend, api, go-template from template
   
   # Repository with pinning (note: pinning is not supported by GitHub API for organizations)
   platform-index:
@@ -310,7 +314,7 @@ gomgr supports marking repositories as templates and referencing them from other
 **Template Repository Features:**
 - Mark a repository as a template with `template: true`
 - Template repositories can define permission and topics that other repos inherit
-- Reference templates using `from: template-repo-name` or `from: org/repo-name`
+- Reference templates using `from: template-repo-name` (same-org only - cross-org not yet supported)
 - Topics are automatically merged (template topics + repo-specific topics)
 - Permissions can be inherited or overridden
 - Templates are marked using the GitHub API's template repository flag
@@ -327,6 +331,10 @@ gomgr supports marking repositories as templates and referencing them from other
 - DRY principle - define common configuration once
 - Easy to update multiple repos by changing the template
 - Clear relationships between repos in your configuration
+
+**Limitations:**
+- Currently only supports same-organization templates
+- Cross-organization template references are not yet supported
 
 ---
 
@@ -500,7 +508,7 @@ Use a classic PAT with scopes:
   Prints version (stamped at build). If built with VCS info, also prints revision/dirty/commit time.
 
 **Order of operations** (apply):  
-create custom roles → create teams → set memberships → ensure repos → grant permissions → write renovate (optional) → set topics & pins → cleanups (optional) → delete custom roles (optional)
+create custom roles → create teams → set memberships → ensure repos → mark templates → grant permissions → write files (renovate/readme) → set topics → pin repos → cleanups (optional) → delete custom roles (optional)
 
 ---
 
@@ -645,6 +653,8 @@ The repository includes GitHub Actions workflows:
 - **`gomgr version` shows `dev`**: build without `-ldflags -X` or not from a tag. Use the release workflow or pass a version when building.
 - **Renovate config not created**: ensure `add_renovate_config: true` and `renovate_config` is non‑empty; repo must exist or `create_repo: true`.
 - **Repository pinning warnings**: The GitHub API does not support pinning repositories to organization profiles programmatically. The `pinned: true` configuration is accepted but the operation is skipped with a warning. You must manually pin repositories through the GitHub web interface.
+- **Template reference not found**: ensure the template repository is defined in the same team configuration or another team file with `template: true` set. Cross-organization templates are not yet supported.
+- **Custom role not found**: ensure custom roles are defined in `org.yaml` before using them in team repository permissions. Custom roles require GitHub Enterprise Cloud.
 
 ---
 

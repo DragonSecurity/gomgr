@@ -4,7 +4,7 @@ description: Team managing CI/CD workflows with custom repository roles for GitH
 privacy: closed
 
 # Note: This example demonstrates GitHub's custom repository roles feature
-# Custom roles must be created in your GitHub organization first before using them here
+# Custom roles must be defined in org.yaml and gomgr will create/update them automatically
 # See: https://docs.github.com/en/enterprise-cloud@latest/organizations/managing-user-access-to-your-organizations-repositories/managing-repository-roles/managing-custom-repository-roles-for-an-organization
 
 maintainers:
@@ -32,7 +32,8 @@ repositories:
       - frontend
   
   # Custom repository role examples
-  # These require GitHub Enterprise Cloud and must be defined in your organization
+  # These require GitHub Enterprise Cloud and must be defined in org.yaml
+  # gomgr will create/update these roles automatically
   # Custom roles allow fine-grained permissions like:
   # - Managing GitHub Actions without full repository admin access
   # - Managing environments and secrets
