@@ -14,13 +14,13 @@ A fast, idempotent **GitHub Organization Manager** written in Go. Define your or
 - ✅ YAML-driven org config (`app.yaml`, `org.yaml`, `teams/*.yaml`)
 - ✅ Teams, maintainers, members (idempotent add/update)
 - ✅ Repo permission grants (pull/triage/push/maintain/admin)
-- ✅ **Custom repository roles**: support for GitHub Enterprise Cloud custom roles (fine-grained permissions for Actions, runners, secrets)
+- ✅ **Custom repository roles**: fully managed - define in YAML, gomgr creates/updates them (GitHub Enterprise Cloud)
 - ✅ **Repository topics**: add topics/labels to repositories for organization
 - ✅ **Repository pinning**: pin important repositories to organization profile (⚠️ *GitHub API limitation: not currently supported for organizations - configuration accepted but manual pinning required via web UI*)
 - ✅ **Optional**: create repos that don’t exist (`create_repo: true`)
 - ✅ **Optional**: inject `.github/renovate.json` into repos
-- ✅ Warnings & cleanups: unmanaged teams, members without team, unmanaged repos
-- ✅ **Optional** hard cleanups: delete unmanaged teams, remove members without team, delete unmanaged repos
+- ✅ Warnings & cleanups: unmanaged teams, members without team, unmanaged repos, unmanaged custom roles
+- ✅ **Optional** hard cleanups: delete unmanaged teams, remove members without team, delete unmanaged repos, delete unmanaged custom roles
 - ✅ Auth: GitHub App (recommended) or PAT
 - ✅ `--dry` plan with **state comparison** showing current GitHub state vs desired config state
 - ✅ Cross‑platform binaries via GitHub Releases; `gomgr version` stamped at build
@@ -125,11 +125,13 @@ dry_warnings:
   warn_unmanaged_teams: true
   warn_members_without_any_team: true
   warn_unmanaged_repos: true         # warn about repos not defined in any team
+  warn_unmanaged_custom_roles: true  # warn about custom roles not in org.yaml
 
 # Optional enforcement / extras:
 remove_members_without_team: true   # remove org members not in any team
 delete_unconfigured_teams: true     # delete teams not defined in YAML
 delete_unmanaged_repos: false       # delete repos not defined in any team (DESTRUCTIVE!)
+delete_unmanaged_custom_roles: false # delete custom roles not in org.yaml (DESTRUCTIVE!)
 create_repo: true                   # create repos if missing when referenced by teams
 add_renovate_config: true           # create .github/renovate.json in repos
 renovate_config: |
@@ -140,12 +142,40 @@ renovate_config: |
 ```
 
 ### `org.yaml`
-Currently used for owners (extension point):
+Define organization owners and custom repository roles:
 ```yaml
 owners:
   - alice
   - bob
+
+# Custom repository roles (requires GitHub Enterprise Cloud)
+# gomgr will create/update these roles automatically
+custom_roles:
+  - name: actions-manager
+    description: Manage GitHub Actions workflows and runners
+    base_role: read  # read, triage, write, maintain, admin
+    permissions:
+      - write_actions
+      - read_actions_variables
+      - write_actions_variables
+      
+  - name: release-manager
+    description: Create and manage releases
+    base_role: write
+    permissions:
+      - create_releases
+      - edit_releases
+      - manage_environments
 ```
+
+**Available Permissions** (partial list - see [GitHub Docs](https://docs.github.com/en/enterprise-cloud@latest/rest/orgs/custom-roles#list-repository-fine-grained-permissions-for-an-organization) for full list):
+- Actions: `write_actions`, `read_actions_variables`, `write_actions_variables`
+- Releases: `create_releases`, `edit_releases`, `delete_releases`
+- Environments: `manage_environments`, `read_deployment_environments`, `write_deployment_environments`
+- Runners: `admin_self_hosted_runners`, `read_self_hosted_runners`
+- Security: `read_code_scanning_alerts`, `write_code_scanning_alerts`, `read_secret_scanning_alerts`, `write_secret_scanning_alerts`
+- And many more...
+
 
 ### `teams/*.yaml`
 ```yaml
@@ -300,40 +330,47 @@ gomgr supports marking repositories as templates and referencing them from other
 
 ---
 
-## Custom Repository Roles
+## Custom Repository Roles Management
 
 **Requires GitHub Enterprise Cloud**
 
-gomgr supports GitHub's custom repository roles, which allow fine-grained permissions beyond the standard roles (pull, triage, push, maintain, admin). Custom roles enable you to grant specific capabilities like managing GitHub Actions, runners, or secrets without providing full repository admin access.
+gomgr now fully manages GitHub's custom repository roles, automatically creating and updating them based on your configuration. Custom roles allow fine-grained permissions beyond the standard roles (pull, triage, push, maintain, admin).
 
 **Key Features:**
+- **Automated Role Management**: Define roles in `org.yaml` and gomgr creates/updates them automatically
 - **Fine-grained permissions**: Grant access to specific capabilities (Actions, runners, secrets, environments)
 - **Separation of concerns**: Allow CI/CD management without code modification access
-- **Security best practices**: Follow principle of least privilege
-- **Flexible role management**: Create organization-wide custom roles for consistent access patterns
+- **Idempotent updates**: Roles are kept in sync with your configuration
+- **Optional cleanup**: Warn about or delete unmanaged custom roles
 
-**How it works:**
-1. **Create custom roles** in your GitHub organization (must be done via GitHub UI or API first)
-   - Define role name (e.g., `actions-manager`, `release-manager`)
-   - Select base role and add/remove specific permissions
-   - Common custom permissions include:
-     - Manage GitHub Actions settings
-     - Manage self-hosted and GitHub-hosted runners
-     - Manage Actions secrets and variables
-     - Manage deployment environments
-     - Configure code scanning and secret scanning
+**Configuration Workflow:**
 
-2. **Use custom role names** in your team configuration:
+1. **Define roles in `org.yaml`**:
    ```yaml
-   repositories:
-     ci-workflows:
-       permission: actions-manager  # Custom role name
-       topics:
-         - cicd
-         - github-actions
+   custom_roles:
+     - name: actions-manager
+       description: Manage CI/CD workflows
+       base_role: read
+       permissions:
+         - write_actions
+         - read_actions_variables
+         - write_actions_variables
    ```
 
-3. **Apply configuration** - gomgr will use the custom role name just like built-in roles
+2. **Use role names in team configurations**:
+   ```yaml
+   # teams/cicd-team.yaml
+   repositories:
+     ci-workflows:
+       permission: actions-manager  # Custom role
+       topics: [cicd, github-actions]
+   ```
+
+3. **Apply configuration** - gomgr will:
+   - Create custom roles if they don't exist
+   - Update roles if configuration changed
+   - Warn about unmanaged roles (if configured)
+   - Optionally delete unmanaged roles (if configured)
 
 **Example Use Cases:**
 
@@ -342,15 +379,24 @@ gomgr supports GitHub's custom repository roles, which allow fine-grained permis
 - **Security Scanner**: Configure security scanning without repository admin access
 - **Runner Admin**: Manage self-hosted runners for CI/CD infrastructure
 
+**Order of Operations:**
+1. Custom roles are created/updated first (before teams/repositories)
+2. Teams can then use the custom roles in repository permissions
+3. Custom roles are deleted last (if cleanup is enabled)
+
+**Configuration Options (app.yaml):**
+```yaml
+dry_warnings:
+  warn_unmanaged_custom_roles: true  # Warn about roles not in config
+
+delete_unmanaged_custom_roles: false  # Delete roles not in config (DESTRUCTIVE!)
+```
+
 **Important Notes:**
-- Custom roles must be created in your GitHub organization before referencing them in gomgr
-- Custom roles are available only on GitHub Enterprise Cloud
-- The role name in your configuration must exactly match the role name in GitHub
-- See: [GitHub Docs - Custom Repository Roles](https://docs.github.com/en/enterprise-cloud@latest/organizations/managing-user-access-to-your-organizations-repositories/managing-repository-roles/managing-custom-repository-roles-for-an-organization)
-
-**Example Team with Custom Roles:**
-
-See `examples/config/teams/github-actions-team.yaml` for a complete example of using custom repository roles for CI/CD management.
+- Custom roles require GitHub Enterprise Cloud
+- Role creation requires "Custom repository roles" (write) or "Administration" (write) permission
+- Once created, roles can be assigned to teams just like built-in roles
+- See `examples/config/org.yaml` for complete examples
 
 ---
 
@@ -411,18 +457,34 @@ This pattern makes it easy to:
 ### GitHub App (recommended)
 Set `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY` (or `app_id`/`private_key` in `app.yaml`). The app must be installed on the org.
 
-**Typical minimum permissions** (tighten to least privilege for your use-case):
+**Required Organization Permissions:**
 
-- **Organization**: Members (Read/Write), Teams (Read/Write)
-- **Repository**: Administration (Read/Write) to grant team access & create repos; Contents (Read/Write) to create files like Renovate config; Metadata (Read)
+Core features:
+- **Members**: Read/Write - manage org members
+- **Administration**: Read/Write - manage teams and repositories
+  - Or minimum: **Teams**: Read/Write + **Repository**: Administration (Read/Write)
+- **Metadata**: Read - read org metadata
 
-> Exact permissions depend on which features you enable (e.g., if you don’t create repos or write files, you can drop those).
+Custom Repository Roles (if using this feature):
+- **Custom repository roles**: Read/Write - create and manage custom roles
+  - Alternative: **Administration**: Read/Write (includes custom roles)
+
+**Required Repository Permissions:**
+- **Administration**: Read/Write - grant team access, create repos, mark templates
+- **Contents**: Read/Write - create files (if using Renovate config injection or default README)
+- **Metadata**: Read - read repository metadata
+
+> **Note**: If you don't use certain features (e.g., creating repos, custom roles, file injection), you can reduce permissions accordingly.
 
 ### Personal Access Token (PAT)
 Use a classic PAT with scopes:
-- `admin:org` (manage teams/members)
-- `repo` (set team repo access and create repos)
-- `read:org` (read org metadata)
+- `admin:org` - manage teams, members, and custom repository roles
+- `repo` - set team repo access, create repos, and manage repository settings
+- `read:org` - read org metadata
+
+**Fine-grained PAT** (alternative):
+- Organization permissions: Administration (Read/Write), Custom repository roles (Read/Write)
+- Repository permissions: Administration (Read/Write), Contents (Read/Write)
 
 ---
 
@@ -438,7 +500,7 @@ Use a classic PAT with scopes:
   Prints version (stamped at build). If built with VCS info, also prints revision/dirty/commit time.
 
 **Order of operations** (apply):  
-create teams → set memberships → ensure repos → grant permissions → write renovate (optional) → set topics & pins → cleanups (optional)
+create custom roles → create teams → set memberships → ensure repos → grant permissions → write renovate (optional) → set topics & pins → cleanups (optional) → delete custom roles (optional)
 
 ---
 

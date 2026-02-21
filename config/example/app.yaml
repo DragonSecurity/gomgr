@@ -7,9 +7,11 @@ dry_warnings:
   warn_unmanaged_teams: true
   warn_members_without_any_team: true
   warn_unmanaged_repos: true
+  warn_unmanaged_custom_roles: true
 remove_members_without_team: true
 delete_unconfigured_teams: true
 delete_unmanaged_repos: false  # Set to true to delete repos not defined in any team
+delete_unmanaged_custom_roles: false  # Set to true to delete custom roles not in org.yaml
 create_repo: true
 add_default_readme: true
 add_renovate_config: true

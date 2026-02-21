@@ -7,10 +7,12 @@ dry_warnings:
   warn_unmanaged_teams: true
   warn_members_without_any_team: true
   warn_unmanaged_repos: true
+  warn_unmanaged_custom_roles: true  # warn about custom roles not defined in org.yaml
 
 remove_members_without_team: true   # remove org members not in any team
 delete_unconfigured_teams: true     # delete teams not defined in YAML
 delete_unmanaged_repos: true        # delete repos not defined in any team (DESTRUCTIVE!)
+delete_unmanaged_custom_roles: false # delete custom roles not defined in org.yaml
 create_repo: true                   # create repos if missing when referenced by teams
 add_renovate_config: true           # create .github/renovate.json in repos
 
