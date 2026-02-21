@@ -1,0 +1,90 @@
+name: GitHub Actions Team
+slug: github-actions-team
+description: Team managing CI/CD workflows with custom repository roles for GitHub Actions
+privacy: closed
+
+# Note: This example demonstrates GitHub's custom repository roles feature
+# Custom roles must be created in your GitHub organization first before using them here
+# See: https://docs.github.com/en/enterprise-cloud@latest/organizations/managing-user-access-to-your-organizations-repositories/managing-repository-roles/managing-custom-repository-roles-for-an-organization
+
+maintainers:
+  - derek-cicd-lead
+  - emily-actions-expert
+
+members:
+  - frank-workflow-engineer
+  - gina-automation-dev
+  - hans-release-manager
+
+repositories:
+  # Standard permission levels (built-in roles)
+  # These work for all GitHub plans
+  backend-api:
+    permission: pull
+    topics:
+      - cicd
+      - backend
+  
+  web-app:
+    permission: pull
+    topics:
+      - cicd
+      - frontend
+  
+  # Custom repository role examples
+  # These require GitHub Enterprise Cloud and must be defined in your organization
+  # Custom roles allow fine-grained permissions like:
+  # - Managing GitHub Actions without full repository admin access
+  # - Managing environments and secrets
+  # - Managing runners
+  # - Configuring Actions settings
+  
+  # Example 1: Custom role for managing workflows without code access
+  # This role might have permissions to:
+  # - Edit workflow files
+  # - Manage Actions secrets and variables
+  # - Manage self-hosted runners
+  # - Cancel and re-run workflow runs
+  ci-workflows:
+    permission: actions-manager  # Custom role name (must be created in GitHub org)
+    topics:
+      - cicd
+      - github-actions
+      - workflows
+  
+  # Example 2: Custom role for release management
+  # This role might have permissions to:
+  # - Create and edit releases
+  # - Manage deployment environments
+  # - Manage environment secrets
+  # - Trigger deployments
+  release-automation:
+    permission: release-manager  # Custom role name (must be created in GitHub org)
+    topics:
+      - cicd
+      - releases
+      - deployments
+  
+  # Example 3: Custom role for runner management
+  # This role might have permissions to:
+  # - Manage self-hosted runners
+  # - View workflow runs
+  # - Access runner logs
+  runner-infrastructure:
+    permission: runner-admin  # Custom role name (must be created in GitHub org)
+    topics:
+      - cicd
+      - runners
+      - infrastructure
+  
+  # Example 4: Custom role for security scanning
+  # This role might have permissions to:
+  # - Manage code scanning alerts
+  # - Configure secret scanning
+  # - Manage Dependabot settings
+  security-scanning:
+    permission: security-scanner  # Custom role name (must be created in GitHub org)
+    topics:
+      - security
+      - scanning
+      - cicd

@@ -1,2 +1,40 @@
 owners:
   - allanice001
+
+# Custom repository roles (requires GitHub Enterprise Cloud)
+# These roles will be created/updated automatically by gomgr
+custom_roles:
+  - name: actions-manager
+    description: Manage GitHub Actions workflows, runners, and secrets without code access
+    base_role: read
+    permissions:
+      - write_actions
+      - read_actions_variables
+      - write_actions_variables
+      - read_organization_secrets
+      - write_organization_secrets
+
+  - name: release-manager
+    description: Create and manage releases and deployment environments
+    base_role: write
+    permissions:
+      - create_releases
+      - edit_releases
+      - delete_releases
+      - manage_environments
+
+  - name: runner-admin
+    description: Manage self-hosted runners for CI/CD infrastructure
+    base_role: read
+    permissions:
+      - admin_self_hosted_runners
+      - read_self_hosted_runners
+
+  - name: security-scanner
+    description: Configure security scanning without repository admin access
+    base_role: read
+    permissions:
+      - read_code_scanning_alerts
+      - write_code_scanning_alerts
+      - read_secret_scanning_alerts
+      - write_secret_scanning_alerts

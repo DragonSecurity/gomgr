@@ -1,0 +1,67 @@
+name: DevOps Team
+slug: devops-team
+description: DevOps engineers responsible for CI/CD, infrastructure, and deployments
+privacy: closed
+
+# DevOps team leads
+maintainers:
+  - rachel-devops-lead
+  - sam-sre-manager
+
+# DevOps engineers and specialists
+members:
+  - tom-k8s-specialist
+  - uma-cicd-engineer
+  - victor-security-ops
+  - wendy-cloud-architect
+  - xavier-monitoring-expert
+
+repositories:
+  # Infrastructure as code repositories
+  terraform-infra:
+    permission: admin
+    topics:
+      - infrastructure
+      - terraform
+      - aws
+      - project-platform
+  
+  kubernetes-config:
+    permission: admin
+    topics:
+      - infrastructure
+      - kubernetes
+      - k8s
+      - project-platform
+  
+  # CI/CD pipelines
+  github-workflows:
+    permission: maintain
+    topics:
+      - cicd
+      - github-actions
+      - automation
+  
+  # Monitoring and observability
+  monitoring-config:
+    permission: push
+    topics:
+      - monitoring
+      - prometheus
+      - grafana
+  
+  # Security and compliance
+  security-policies:
+    permission: push
+    topics:
+      - security
+      - compliance
+      - policies
+  
+  # Scripts and automation
+  automation-scripts:
+    permission: push
+    topics:
+      - automation
+      - scripts
+      - tooling

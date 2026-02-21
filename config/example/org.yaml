@@ -1,2 +1,21 @@
 owners:
   - octocat
+
+# Custom repository roles (requires GitHub Enterprise Cloud)
+# Define fine-grained permissions for specialized access patterns
+custom_roles:
+  - name: actions-manager
+    description: Manage CI/CD workflows and runners
+    base_role: read
+    permissions:
+      - write_actions
+      - read_actions_variables
+      - write_actions_variables
+
+  - name: release-manager
+    description: Manage releases and deployments
+    base_role: write
+    permissions:
+      - create_releases
+      - edit_releases
+      - manage_environments

@@ -1,0 +1,66 @@
+name: Backend Team
+slug: backend-team
+description: Backend developers responsible for APIs and services
+privacy: closed
+
+# Multiple maintainers - team leads and senior engineers
+maintainers:
+  - alice-backend-lead
+  - bob-senior-engineer
+  - charlie-tech-lead
+
+# Multiple members - regular team members
+members:
+  - david-developer
+  - emma-engineer
+  - frank-junior-dev
+  - grace-contractor
+  - henry-intern
+
+repositories:
+  # Core backend services with admin access
+  backend-api:
+    permission: admin
+    topics:
+      - backend
+      - api
+      - core-service
+      - project-platform
+  
+  # Microservices with push access
+  user-service:
+    permission: push
+    topics:
+      - backend
+      - microservice
+      - users
+  
+  auth-service:
+    permission: push
+    topics:
+      - backend
+      - microservice
+      - authentication
+  
+  # Shared libraries with maintain access
+  backend-common:
+    permission: maintain
+    topics:
+      - backend
+      - library
+      - shared
+  
+  # Documentation with pull access
+  backend-docs:
+    permission: pull
+    topics:
+      - backend
+      - documentation
+  
+  # Infrastructure code with triage access (can manage issues but not code)
+  backend-infra:
+    permission: triage
+    topics:
+      - backend
+      - infrastructure
+      - terraform

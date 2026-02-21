@@ -135,3 +135,58 @@ create_repo: true
 		t.Error("Expected CreateRepo to be true")
 	}
 }
+
+func TestOrgConfigParsingWithCustomRoles(t *testing.T) {
+	yamlData := `
+owners:
+  - alice
+  - bob
+custom_roles:
+  - name: actions-manager
+    description: Manage GitHub Actions without code access
+    base_role: read
+    permissions:
+      - manage_actions
+      - manage_runners
+  - name: release-manager
+    description: Manage releases and deployments
+    base_role: write
+    permissions:
+      - create_releases
+      - manage_environments
+`
+
+	var org OrgConfig
+	if err := yaml.Unmarshal([]byte(yamlData), &org); err != nil {
+		t.Fatalf("Failed to unmarshal: %v", err)
+	}
+
+	if len(org.Owners) != 2 {
+		t.Errorf("Expected 2 owners, got %d", len(org.Owners))
+	}
+
+	if len(org.CustomRoles) != 2 {
+		t.Fatalf("Expected 2 custom roles, got %d", len(org.CustomRoles))
+	}
+
+	// Check first role
+	role1 := org.CustomRoles[0]
+	if role1.Name != "actions-manager" {
+		t.Errorf("Expected name 'actions-manager', got %q", role1.Name)
+	}
+	if role1.BaseRole != "read" {
+		t.Errorf("Expected base_role 'read', got %q", role1.BaseRole)
+	}
+	if len(role1.Permissions) != 2 {
+		t.Errorf("Expected 2 permissions, got %d", len(role1.Permissions))
+	}
+
+	// Check second role
+	role2 := org.CustomRoles[1]
+	if role2.Name != "release-manager" {
+		t.Errorf("Expected name 'release-manager', got %q", role2.Name)
+	}
+	if role2.BaseRole != "write" {
+		t.Errorf("Expected base_role 'write', got %q", role2.BaseRole)
+	}
+}

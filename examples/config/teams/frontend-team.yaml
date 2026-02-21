@@ -1,0 +1,61 @@
+name: Frontend Team
+slug: frontend-team
+description: Frontend developers responsible for web and mobile interfaces
+privacy: closed
+
+# Multiple maintainers
+maintainers:
+  - isabella-frontend-lead
+  - jack-ui-architect
+
+# Multiple members with diverse roles
+members:
+  - karen-react-dev
+  - liam-vue-specialist
+  - maya-ux-engineer
+  - noah-accessibility-expert
+  - olivia-junior-dev
+  - peter-design-engineer
+  - quinn-mobile-dev
+
+repositories:
+  # Main frontend applications
+  web-app:
+    permission: admin
+    topics:
+      - frontend
+      - react
+      - web
+      - project-platform
+  
+  mobile-app:
+    permission: admin
+    topics:
+      - frontend
+      - react-native
+      - mobile
+      - project-platform
+  
+  # Shared UI components library
+  component-library:
+    permission: maintain
+    topics:
+      - frontend
+      - react
+      - components
+      - library
+  
+  # Design system
+  design-system:
+    permission: push
+    topics:
+      - frontend
+      - design
+      - storybook
+  
+  # Documentation
+  frontend-docs:
+    permission: push
+    topics:
+      - frontend
+      - documentation
