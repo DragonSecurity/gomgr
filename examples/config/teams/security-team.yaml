@@ -1,0 +1,51 @@
+name: Security Team
+slug: security-team
+description: Security engineers responsible for application security and compliance
+privacy: secret
+
+# Security team is typically secret for sensitive access
+maintainers:
+  - yara-security-lead
+  - zack-appsec-manager
+
+# Security team members
+members:
+  - anna-pentester
+  - ben-security-analyst
+  - clara-compliance-officer
+
+repositories:
+  # Security has read access to most repos for auditing
+  backend-api:
+    permission: pull
+    topics:
+      - security-audit
+  
+  web-app:
+    permission: pull
+    topics:
+      - security-audit
+  
+  # Maintain access to security-specific repos
+  security-scanning:
+    permission: maintain
+    topics:
+      - security
+      - scanning
+      - sast
+      - dast
+  
+  vulnerability-reports:
+    permission: admin
+    topics:
+      - security
+      - vulnerabilities
+      - private
+  
+  # Admin access to security policies
+  security-policies:
+    permission: admin
+    topics:
+      - security
+      - compliance
+      - policies

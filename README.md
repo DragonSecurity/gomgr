@@ -14,6 +14,8 @@ A fast, idempotent **GitHub Organization Manager** written in Go. Define your or
 - ✅ YAML-driven org config (`app.yaml`, `org.yaml`, `teams/*.yaml`)
 - ✅ Teams, maintainers, members (idempotent add/update)
 - ✅ Repo permission grants (pull/triage/push/maintain/admin)
+- ✅ **Custom repository roles**: support for GitHub Enterprise Cloud custom roles (fine-grained permissions for Actions, runners, secrets)
+- ✅ **Custom repository roles**: support for GitHub Enterprise Cloud custom roles (fine-grained permissions for Actions, runners, secrets)
 - ✅ **Repository topics**: add topics/labels to repositories for organization
 - ✅ **Repository pinning**: pin important repositories to organization profile (⚠️ *GitHub API limitation: not currently supported for organizations - configuration accepted but manual pinning required via web UI*)
 - ✅ **Optional**: create repos that don’t exist (`create_repo: true`)
@@ -153,13 +155,24 @@ slug: platform-team            # optional; default = kebab(name)
 description: Core platform engineers
 privacy: closed                # closed | secret
 parents: []                    # (future enhancement)
+
+# Multiple maintainers (team leads, senior engineers)
 maintainers:
-  - alice
+  - alice-backend-lead
+  - bob-senior-engineer
+  - charlie-tech-lead
+
+# Multiple members (regular team members)
 members:
-  - bob
+  - david-developer
+  - emma-engineer
+  - frank-junior-dev
+  - grace-contractor
+
 repositories:
   # Simple permission string (backward compatible)
-  infra: maintain              # pull|triage|push|maintain|admin
+  # Built-in roles: pull|triage|push|maintain|admin
+  infra: maintain
   
   # Advanced config with topics and pinning
   api:
@@ -168,6 +181,17 @@ repositories:
       - backend
       - api
       - project-platform
+  
+  # Custom repository roles (requires GitHub Enterprise Cloud)
+  # Custom roles allow fine-grained permissions like managing GitHub Actions
+  # without full repository admin access. Custom roles must be created in your
+  # GitHub organization before using them here.
+  # See: https://docs.github.com/en/enterprise-cloud@latest/organizations/managing-user-access-to-your-organizations-repositories/managing-repository-roles/managing-custom-repository-roles-for-an-organization
+  ci-workflows:
+    permission: actions-manager  # Custom role name (e.g., manage Actions without code access)
+    topics:
+      - cicd
+      - github-actions
   
   # Template repository - can be reused by other repos
   template-go-api:
@@ -205,6 +229,51 @@ repositories:
 
 ---
 
+## Extended Team Examples
+
+The `examples/config/teams/` directory includes comprehensive team definition examples demonstrating various organizational patterns:
+
+### Example Teams
+
+**Backend Team** (`backend-team.yaml`)
+- Multiple maintainers (team leads, senior engineers)
+- Multiple members (developers, contractors, interns)
+- Demonstrates different permission levels (admin, push, maintain, triage, pull)
+- Shows diverse repository types (APIs, microservices, libraries, documentation)
+
+**Frontend Team** (`frontend-team.yaml`)
+- Cross-functional team with specialized roles (React, Vue, UX, accessibility)
+- Web and mobile application management
+- Shared component libraries and design systems
+
+**DevOps Team** (`devops-team.yaml`)
+- Infrastructure and CI/CD management
+- Terraform, Kubernetes, and cloud configurations
+- Monitoring, security, and automation repositories
+
+**Security Team** (`security-team.yaml`)
+- Uses `privacy: secret` for sensitive access
+- Read access to multiple repos for security audits
+- Admin access to security-specific repositories
+- Compliance and vulnerability management
+
+**GitHub Actions Team** (`github-actions-team.yaml`)
+- **Demonstrates custom repository roles** (requires GitHub Enterprise Cloud)
+- Shows how to use fine-grained permissions for CI/CD management
+- Examples of custom roles: `actions-manager`, `release-manager`, `runner-admin`, `security-scanner`
+
+### Best Practices Demonstrated
+
+1. **Multiple Maintainers**: Include multiple team leads to avoid single points of failure
+2. **Diverse Membership**: Mix senior engineers, regular developers, contractors, and interns
+3. **Descriptive Privacy**: Use `closed` for most teams, `secret` for sensitive security teams
+4. **Clear Descriptions**: Write meaningful team descriptions for easy discovery
+5. **Permission Hierarchy**: Use appropriate permission levels based on responsibility
+6. **Topic Organization**: Tag repositories with relevant topics for discoverability
+7. **Custom Roles**: Leverage fine-grained permissions for specialized access patterns
+
+---
+
 ## Template Repository Pattern
 
 gomgr supports marking repositories as templates and referencing them from other repositories. This enables consistent configuration across multiple repositories:
@@ -229,6 +298,60 @@ gomgr supports marking repositories as templates and referencing them from other
 - DRY principle - define common configuration once
 - Easy to update multiple repos by changing the template
 - Clear relationships between repos in your configuration
+
+---
+
+## Custom Repository Roles
+
+**Requires GitHub Enterprise Cloud**
+
+gomgr supports GitHub's custom repository roles, which allow fine-grained permissions beyond the standard roles (pull, triage, push, maintain, admin). Custom roles enable you to grant specific capabilities like managing GitHub Actions, runners, or secrets without providing full repository admin access.
+
+**Key Features:**
+- **Fine-grained permissions**: Grant access to specific capabilities (Actions, runners, secrets, environments)
+- **Separation of concerns**: Allow CI/CD management without code modification access
+- **Security best practices**: Follow principle of least privilege
+- **Flexible role management**: Create organization-wide custom roles for consistent access patterns
+
+**How it works:**
+1. **Create custom roles** in your GitHub organization (must be done via GitHub UI or API first)
+   - Define role name (e.g., `actions-manager`, `release-manager`)
+   - Select base role and add/remove specific permissions
+   - Common custom permissions include:
+     - Manage GitHub Actions settings
+     - Manage self-hosted and GitHub-hosted runners
+     - Manage Actions secrets and variables
+     - Manage deployment environments
+     - Configure code scanning and secret scanning
+
+2. **Use custom role names** in your team configuration:
+   ```yaml
+   repositories:
+     ci-workflows:
+       permission: actions-manager  # Custom role name
+       topics:
+         - cicd
+         - github-actions
+   ```
+
+3. **Apply configuration** - gomgr will use the custom role name just like built-in roles
+
+**Example Use Cases:**
+
+- **Actions Manager**: Manage workflows, runners, and secrets without code access
+- **Release Manager**: Create releases and manage deployment environments
+- **Security Scanner**: Configure security scanning without repository admin access
+- **Runner Admin**: Manage self-hosted runners for CI/CD infrastructure
+
+**Important Notes:**
+- Custom roles must be created in your GitHub organization before referencing them in gomgr
+- Custom roles are available only on GitHub Enterprise Cloud
+- The role name in your configuration must exactly match the role name in GitHub
+- See: [GitHub Docs - Custom Repository Roles](https://docs.github.com/en/enterprise-cloud@latest/organizations/managing-user-access-to-your-organizations-repositories/managing-repository-roles/managing-custom-repository-roles-for-an-organization)
+
+**Example Team with Custom Roles:**
+
+See `examples/config/teams/github-actions-team.yaml` for a complete example of using custom repository roles for CI/CD management.
 
 ---
 
