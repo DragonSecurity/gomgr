@@ -416,7 +416,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 		if slug == "" {
 			slug = strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
 		}
-		for repo, _ := range t.Repositories {
+		for repo := range t.Repositories {
 			r := strings.ToLower(repo)
 			settings := resolvedSettings[r]
 

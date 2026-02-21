@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -394,7 +395,7 @@ func TestResolveTemplate(t *testing.T) {
 			}
 
 			if err != nil {
-				if tt.errorContains != "" && !contains(err.Error(), tt.errorContains) {
+				if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
 					t.Errorf("error = %q, want it to contain %q", err.Error(), tt.errorContains)
 				}
 				return
@@ -415,19 +416,6 @@ func TestResolveTemplate(t *testing.T) {
 			}
 		})
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || someContains(s, substr)))
-}
-
-func someContains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 func TestValidateTopic(t *testing.T) {
