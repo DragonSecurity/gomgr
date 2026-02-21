@@ -975,6 +975,7 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 }
 
 func normalizePermission(p string) string {
+	// Use lowercase comparison to match built-in roles case-insensitively
 	switch strings.ToLower(p) {
 	case "read", "pull":
 		return "pull"
@@ -988,6 +989,7 @@ func normalizePermission(p string) string {
 		return "admin"
 	default:
 		// For custom repository roles (GitHub Enterprise Cloud), pass through the role name as-is
+		// preserving the original case since custom role names may be case-sensitive
 		// Custom roles must be created in the GitHub organization before use
 		// Examples: "actions-manager", "release-manager", "runner-admin"
 		return p
