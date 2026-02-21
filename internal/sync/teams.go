@@ -808,7 +808,7 @@ func containsErrorMessage(ghErr *github.ErrorResponse, searchTerms ...string) bo
 			return true
 		}
 	}
-	
+
 	// Check individual errors in the Errors array
 	for _, e := range ghErr.Errors {
 		allFound := true
@@ -822,7 +822,7 @@ func containsErrorMessage(ghErr *github.ErrorResponse, searchTerms ...string) bo
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -1003,7 +1003,7 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 						// Check if this is a race condition error
 						isRaceCondition := (ghErr.Response.StatusCode == 422 && containsErrorMessage(ghErr, "sha", "wasn't supplied")) ||
 							(ghErr.Response.StatusCode == 409 && containsErrorMessage(ghErr, "reference already exists"))
-						
+
 						if !isRaceCondition {
 							return fmt.Errorf("create file %s in %s/%s: %w", path, org, repo, err)
 						}
