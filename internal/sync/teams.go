@@ -964,11 +964,11 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 					// This can happen due to timing - template files are copied asynchronously.
 					// GitHub returns 422 with "sha wasn't supplied" when trying to create a file that exists.
 					var ghErr *github.ErrorResponse
-					isRaceCondition := errors.As(err, &ghErr) && 
-						ghErr.Response != nil && 
+					isRaceCondition := errors.As(err, &ghErr) &&
+						ghErr.Response != nil &&
 						ghErr.Response.StatusCode == 422 &&
 						strings.Contains(ghErr.Message, "sha wasn't supplied")
-					
+
 					if !isRaceCondition {
 						return fmt.Errorf("create file %s in %s/%s: %w", path, org, repo, err)
 					}
