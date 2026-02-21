@@ -15,6 +15,7 @@ delete_unmanaged_repos: true        # delete repos not defined in any team (DEST
 delete_unmanaged_custom_roles: false # delete custom roles not defined in org.yaml
 create_repo: true                   # create repos if missing when referenced by teams
 add_renovate_config: true           # create .github/renovate.json in repos
+add_default_readme: false           # create default README.md in repos (optional)
 
 renovate_config: | 
   { 

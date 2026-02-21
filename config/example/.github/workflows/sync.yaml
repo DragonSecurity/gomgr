@@ -38,10 +38,10 @@ jobs:
           ASSET_ZIP="gomgr_${VERSION}_${OS}_${ARCH}.zip"
 
           mkdir -p .gomgr
-          gh release download "$VERSION" --repo DragonSecurity/github-org-manager-go --pattern "$ASSET_TGZ"                 --dir .gomgr || true
+          gh release download "$VERSION" --repo DragonSecurity/gomgr --pattern "$ASSET_TGZ"                 --dir .gomgr || true
 
           if [ ! -f ".gomgr/$ASSET_TGZ" ]; then
-            gh release download "$VERSION" --repo DragonSecurity/github-org-manager-go --pattern "$ASSET_ZIP"                   --dir .gomgr
+            gh release download "$VERSION" --repo DragonSecurity/gomgr --pattern "$ASSET_ZIP"                   --dir .gomgr
           fi
 
           if [ -f ".gomgr/$ASSET_TGZ" ]; then
