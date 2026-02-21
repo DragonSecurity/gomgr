@@ -190,4 +190,3 @@ custom_roles:
 		t.Errorf("Expected base_role 'write', got %q", role2.BaseRole)
 	}
 }
-

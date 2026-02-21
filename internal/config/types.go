@@ -11,14 +11,14 @@ type AppConfig struct {
 		WarnUnmanagedRepos        bool `yaml:"warn_unmanaged_repos"`
 		WarnUnmanagedCustomRoles  bool `yaml:"warn_unmanaged_custom_roles"`
 	} `yaml:"dry_warnings"`
-	RemoveMembersWithoutTeam bool   `yaml:"remove_members_without_team"`
-	DeleteUnconfiguredTeams  bool   `yaml:"delete_unconfigured_teams"`
-	DeleteUnmanagedRepos     bool   `yaml:"delete_unmanaged_repos"`
-	DeleteUnmanagedCustomRoles bool `yaml:"delete_unmanaged_custom_roles"`
-	CreateRepo               bool   `yaml:"create_repo"`
-	AddRenovateConfig        bool   `yaml:"add_renovate_config"`
-	RenovateConfig           string `yaml:"renovate_config"`
-	AddDefaultReadme         bool   `yaml:"add_default_readme"`
+	RemoveMembersWithoutTeam   bool   `yaml:"remove_members_without_team"`
+	DeleteUnconfiguredTeams    bool   `yaml:"delete_unconfigured_teams"`
+	DeleteUnmanagedRepos       bool   `yaml:"delete_unmanaged_repos"`
+	DeleteUnmanagedCustomRoles bool   `yaml:"delete_unmanaged_custom_roles"`
+	CreateRepo                 bool   `yaml:"create_repo"`
+	AddRenovateConfig          bool   `yaml:"add_renovate_config"`
+	RenovateConfig             string `yaml:"renovate_config"`
+	AddDefaultReadme           bool   `yaml:"add_default_readme"`
 }
 
 type OrgConfig struct {

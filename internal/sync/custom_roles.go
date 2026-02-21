@@ -75,7 +75,7 @@ func planCustomRoles(ctx context.Context, c *gh.Client, cfg *config.Root, st *St
 		} else {
 			// Check if update is needed
 			needsUpdate := false
-			
+
 			// Check description changes
 			existingDesc := ""
 			if existingRole.Description != nil {
@@ -84,12 +84,12 @@ func planCustomRoles(ctx context.Context, c *gh.Client, cfg *config.Root, st *St
 			if existingDesc != desiredRole.Description {
 				needsUpdate = true
 			}
-			
+
 			// Check base role changes
 			if existingRole.BaseRole != nil && *existingRole.BaseRole != desiredRole.BaseRole {
 				needsUpdate = true
 			}
-			
+
 			// Check permission changes
 			if !permissionsEqual(existingRole.Permissions, desiredRole.Permissions) {
 				needsUpdate = true
