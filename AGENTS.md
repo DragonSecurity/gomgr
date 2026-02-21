@@ -23,19 +23,30 @@ The gomgr agent can:
 
 - **Repository Permissions**
   - Grant team-level repository access (pull/triage/push/maintain/admin)
+  - Support custom repository roles (GitHub Enterprise Cloud)
   - Optionally create repositories if they don't exist
   - Inject Renovate configuration into repositories
+  - Optionally inject default README into repositories
 
 - **Repository Management**
   - Add topics/labels to repositories for better organization
-  - Pin important repositories to organization profile
+  - Mark repositories as templates for reuse
+  - Support template inheritance (permission and topics)
+  - Pin important repositories to organization profile (API limitation: must be done manually via web UI)
   - Optionally delete unmanaged repositories
   - Warn about repositories not defined in any team configuration
+
+- **Custom Repository Roles**
+  - Create and update custom repository roles (GitHub Enterprise Cloud)
+  - Delete unmanaged custom roles (optional)
+  - Warn about unmanaged custom roles
+  - Support fine-grained permissions for specialized access patterns
 
 - **Synchronization**
   - Idempotent apply: safe to run repeatedly
   - Dry-run mode for safe planning before applying changes
   - Stable output for predictable CI/CD integration
+  - State comparison showing current vs desired state
 
 ### Agent Authentication
 
@@ -55,14 +66,17 @@ The agent supports two authentication methods:
 
 The agent performs operations in the following order:
 
-1. **Create Teams** - Ensures all teams defined in YAML exist
-2. **Set Memberships** - Assigns maintainers and members to teams
-3. **Ensure Repos** - Creates repositories if configured to do so
-4. **Grant Permissions** - Applies repository access permissions to teams
-5. **Write Files** - Optionally injects default README and `.github/renovate.json` into repos
-6. **Set Topics** - Applies topics/labels to repositories for organization
-7. **Pin Repos** - Pins specified repositories to organization profile (GraphQL)
-8. **Cleanups** - Optionally removes unmanaged resources (teams, members, repositories)
+1. **Create Custom Roles** - Creates/updates custom repository roles (GitHub Enterprise Cloud)
+2. **Create Teams** - Ensures all teams defined in YAML exist
+3. **Set Memberships** - Assigns maintainers and members to teams
+4. **Ensure Repos** - Creates repositories if configured to do so
+5. **Mark Templates** - Marks repositories as templates if configured
+6. **Grant Permissions** - Applies repository access permissions to teams (including custom roles)
+7. **Write Files** - Optionally injects default README and `.github/renovate.json` into repos
+8. **Set Topics** - Applies topics/labels to repositories for organization
+9. **Pin Repos** - Attempts to pin repositories (warning issued due to API limitation)
+10. **Cleanups** - Optionally removes unmanaged resources (teams, members, repositories)
+11. **Delete Custom Roles** - Optionally removes unmanaged custom roles (if configured)
 
 ## CI/CD Automation
 
@@ -119,12 +133,15 @@ Agents are configured through YAML files in a config directory:
 Defines the target organization, authentication method, and behavioral flags:
 - Organization name
 - GitHub App credentials or PAT
-- Warning flags for dry-run mode (unmanaged teams, members without teams, unmanaged repos)
-- Optional enforcement features (remove members, delete teams, delete unmanaged repos, create repos)
+- Warning flags for dry-run mode (unmanaged teams, members without teams, unmanaged repos, unmanaged custom roles)
+- Optional enforcement features (remove members, delete teams, delete unmanaged repos, delete custom roles, create repos)
 - Renovate configuration injection
+- Default README injection (optional)
 
 ### `org.yaml` - Organization Metadata
-Currently used for defining organization owners (extension point for future features).
+Defines organization owners and custom repository roles (GitHub Enterprise Cloud):
+- List of organization owners
+- Custom repository role definitions with base roles and permissions
 
 ### `teams/*.yaml` - Team Definitions
 Each file defines a team with:
@@ -133,12 +150,14 @@ Each file defines a team with:
 - Maintainers and members
 - Repository access permissions with optional advanced configuration:
   - Simple string permission (backward compatible): `repo: push`
-  - Advanced object with topics and pinning:
+  - Advanced object with topics, pinning, and templates:
     ```yaml
     repo:
       permission: push
       topics: [backend, api, project-name]
       pinned: true
+      template: true
+      from: template-repo  # inherit from template
     ```
 
 ## Agent Safety Features
