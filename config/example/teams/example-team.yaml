@@ -8,6 +8,15 @@ repositories:
   # Simple permission string (backward compatible)
   infra: maintain
   
+  # Template repository - can be reused by other repos
+  template-go-api:
+    permission: push
+    template: true
+    topics:
+      - backend
+      - api
+      - go-template
+  
   # Advanced config with topics and pinning
   api:
     permission: push
@@ -15,6 +24,13 @@ repositories:
       - backend
       - api
       - project-platform
+  
+  # Repository using template (inherits permission and topics)
+  my-api:
+    from: template-go-api
+    topics:
+      - my-project
+      # Will inherit: backend, api, go-template from template
   
   # Repository with pinning
   platform-index:
