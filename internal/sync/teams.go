@@ -421,15 +421,23 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 			settings := resolvedSettings[r]
 
 			if !existing[r] && cfg.App.CreateRepo {
+				details := map[string]any{
+					"org":     org,
+					"name":    repo,
+					"private": true,
+				}
+				// Include template information if present
+				if settings.from != "" {
+					details["from"] = settings.from
+				}
+				if settings.template {
+					details["template"] = true
+				}
 				out = append(out, util.Change{
-					Scope:  "repo",
-					Target: r,
-					Action: "ensure",
-					Details: map[string]any{
-						"org":     org,
-						"name":    repo,
-						"private": true,
-					},
+					Scope:   "repo",
+					Target:  r,
+					Action:  "ensure",
+					Details: details,
 				})
 				existing[r] = true
 			}
@@ -867,20 +875,57 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 			if v, ok := d["private"]; ok {
 				private = fmt.Sprint(v) != "false"
 			}
-			_, _, err := c.REST.Repositories.Create(ctx, org, &github.Repository{
-				Name:                github.Ptr(name),
-				Private:             github.Ptr(private),
-				AllowAutoMerge:      github.Ptr(true),
-				AllowMergeCommit:    github.Ptr(false),
-				DeleteBranchOnMerge: github.Ptr(true),
-				HasIssues:           github.Ptr(true),
-			})
-			if err != nil {
-				var ghErr *github.ErrorResponse
-				if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == 422 {
-					// already exists race
-				} else {
-					return fmt.Errorf("create repo %s/%s: %w", org, name, err)
+			isTemplate := false
+			if v, ok := d["template"]; ok {
+				isTemplate = fmt.Sprint(v) == "true"
+			}
+
+			// Check if this repo should be created from a template
+			if fromTemplate, ok := d["from"]; ok && fromTemplate != "" {
+				templateRef := fmt.Sprint(fromTemplate)
+				// Parse template reference (supports "repo-name" or "org/repo-name")
+				templateOrg := org
+				templateRepo := templateRef
+				if strings.Contains(templateRef, "/") {
+					parts := strings.SplitN(templateRef, "/", 2)
+					if len(parts) == 2 {
+						templateOrg = parts[0]
+						templateRepo = parts[1]
+					}
+				}
+
+				// Create repository from template
+				_, _, err := c.REST.Repositories.CreateFromTemplate(ctx, templateOrg, templateRepo, &github.TemplateRepoRequest{
+					Name:    github.Ptr(name),
+					Owner:   github.Ptr(org),
+					Private: github.Ptr(private),
+				})
+				if err != nil {
+					var ghErr *github.ErrorResponse
+					if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == 422 {
+						// already exists race
+					} else {
+						return fmt.Errorf("create repo %s/%s from template %s/%s: %w", org, name, templateOrg, templateRepo, err)
+					}
+				}
+			} else {
+				// Create regular repository
+				_, _, err := c.REST.Repositories.Create(ctx, org, &github.Repository{
+					Name:                github.Ptr(name),
+					Private:             github.Ptr(private),
+					IsTemplate:          github.Ptr(isTemplate),
+					AllowAutoMerge:      github.Ptr(true),
+					AllowMergeCommit:    github.Ptr(false),
+					DeleteBranchOnMerge: github.Ptr(true),
+					HasIssues:           github.Ptr(true),
+				})
+				if err != nil {
+					var ghErr *github.ErrorResponse
+					if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == 422 {
+						// already exists race
+					} else {
+						return fmt.Errorf("create repo %s/%s: %w", org, name, err)
+					}
 				}
 			}
 
