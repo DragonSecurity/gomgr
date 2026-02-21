@@ -34,8 +34,8 @@ func planCustomRoles(ctx context.Context, c *gh.Client, cfg *config.Root, st *St
 	// Fetch existing custom roles from GitHub
 	existingRolesResp, _, err := c.REST.Organizations.ListCustomRepoRoles(ctx, org)
 	if err != nil {
-		// If the org doesn't have custom roles enabled (not Enterprise Cloud), we'll get an error
-		// Return a warning instead of failing
+		// If the org doesn't have custom roles enabled (not Enterprise Cloud),
+		// return an error with helpful context
 		return out, fmt.Errorf("list custom repo roles: %w (note: custom roles require GitHub Enterprise Cloud)", err)
 	}
 
@@ -75,12 +75,22 @@ func planCustomRoles(ctx context.Context, c *gh.Client, cfg *config.Root, st *St
 		} else {
 			// Check if update is needed
 			needsUpdate := false
-			if existingRole.Description != nil && *existingRole.Description != desiredRole.Description {
+			
+			// Check description changes
+			existingDesc := ""
+			if existingRole.Description != nil {
+				existingDesc = *existingRole.Description
+			}
+			if existingDesc != desiredRole.Description {
 				needsUpdate = true
 			}
+			
+			// Check base role changes
 			if existingRole.BaseRole != nil && *existingRole.BaseRole != desiredRole.BaseRole {
 				needsUpdate = true
 			}
+			
+			// Check permission changes
 			if !permissionsEqual(existingRole.Permissions, desiredRole.Permissions) {
 				needsUpdate = true
 			}
