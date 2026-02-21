@@ -962,12 +962,13 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 					// Handle race condition: If repository was created from template,
 					// files may exist even though GetContents returned nil.
 					// This can happen due to timing - template files are copied asynchronously.
-					// GitHub returns 422 with "sha wasn't supplied" when trying to create a file that exists.
+					// GitHub returns 422 with "sha wasn't supplied" or 409 with "reference already exists"
+					// when trying to create a file that already exists.
 					var ghErr *github.ErrorResponse
 					isRaceCondition := errors.As(err, &ghErr) &&
 						ghErr.Response != nil &&
-						ghErr.Response.StatusCode == 422 &&
-						strings.Contains(ghErr.Message, "sha wasn't supplied")
+						((ghErr.Response.StatusCode == 422 && strings.Contains(ghErr.Message, "sha wasn't supplied")) ||
+							(ghErr.Response.StatusCode == 409 && strings.Contains(ghErr.Message, "reference already exists")))
 
 					if !isRaceCondition {
 						return fmt.Errorf("create file %s in %s/%s: %w", path, org, repo, err)
