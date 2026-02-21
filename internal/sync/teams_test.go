@@ -3,6 +3,8 @@ package sync
 import (
 	"strings"
 	"testing"
+
+	"github.com/google/go-github/v83/github"
 )
 
 func TestParseRepoConfig(t *testing.T) {
@@ -620,6 +622,112 @@ func TestParseRepoConfigWithCustomRoles(t *testing.T) {
 
 			if settings.permission != tt.wantPerm {
 				t.Errorf("permission = %q, want %q", settings.permission, tt.wantPerm)
+			}
+		})
+	}
+}
+
+func TestContainsErrorMessage(t *testing.T) {
+	tests := []struct {
+		name        string
+		errResp     *github.ErrorResponse
+		searchTerms []string
+		want        bool
+	}{
+		{
+			name: "message in main Message field",
+			errResp: &github.ErrorResponse{
+				Message: `"sha" wasn't supplied`,
+			},
+			searchTerms: []string{"sha", "wasn't supplied"},
+			want:        true,
+		},
+		{
+			name: "message in main Message field without quotes",
+			errResp: &github.ErrorResponse{
+				Message: `sha wasn't supplied`,
+			},
+			searchTerms: []string{"sha", "wasn't supplied"},
+			want:        true,
+		},
+		{
+			name: "message in Errors array",
+			errResp: &github.ErrorResponse{
+				Message: "",
+				Errors: []github.Error{
+					{Message: `"sha" wasn't supplied`},
+				},
+			},
+			searchTerms: []string{"sha", "wasn't supplied"},
+			want:        true,
+		},
+		{
+			name: "message in Errors array among multiple errors",
+			errResp: &github.ErrorResponse{
+				Message: "",
+				Errors: []github.Error{
+					{Message: "some other error"},
+					{Message: `"sha" wasn't supplied`},
+					{Message: "yet another error"},
+				},
+			},
+			searchTerms: []string{"sha", "wasn't supplied"},
+			want:        true,
+		},
+		{
+			name: "reference already exists in main Message",
+			errResp: &github.ErrorResponse{
+				Message: "reference already exists",
+			},
+			searchTerms: []string{"reference already exists"},
+			want:        true,
+		},
+		{
+			name: "reference already exists in Errors array",
+			errResp: &github.ErrorResponse{
+				Message: "",
+				Errors: []github.Error{
+					{Message: "reference already exists"},
+				},
+			},
+			searchTerms: []string{"reference already exists"},
+			want:        true,
+		},
+		{
+			name: "partial match should fail",
+			errResp: &github.ErrorResponse{
+				Message: "sha is required",
+			},
+			searchTerms: []string{"sha", "wasn't supplied"},
+			want:        false,
+		},
+		{
+			name: "no match in Message or Errors",
+			errResp: &github.ErrorResponse{
+				Message: "some other error",
+				Errors: []github.Error{
+					{Message: "different error"},
+				},
+			},
+			searchTerms: []string{"sha", "wasn't supplied"},
+			want:        false,
+		},
+		{
+			name: "empty ErrorResponse",
+			errResp: &github.ErrorResponse{
+				Message: "",
+				Errors:  nil,
+			},
+			searchTerms: []string{"sha", "wasn't supplied"},
+			want:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := containsErrorMessage(tt.errResp, tt.searchTerms...)
+			if got != tt.want {
+				t.Errorf("containsErrorMessage() = %v, want %v", got, tt.want)
 			}
 		})
 	}

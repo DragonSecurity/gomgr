@@ -792,6 +792,40 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 	return out, warnings, nil
 }
 
+// containsErrorMessage checks if a GitHub ErrorResponse contains a specific error message
+// in either the main Message field or in any of the individual Error messages in the Errors array.
+func containsErrorMessage(ghErr *github.ErrorResponse, searchTerms ...string) bool {
+	// Check main message (only if not empty)
+	if ghErr.Message != "" {
+		allFound := true
+		for _, term := range searchTerms {
+			if !strings.Contains(ghErr.Message, term) {
+				allFound = false
+				break
+			}
+		}
+		if allFound {
+			return true
+		}
+	}
+	
+	// Check individual errors in the Errors array
+	for _, e := range ghErr.Errors {
+		allFound := true
+		for _, term := range searchTerms {
+			if !strings.Contains(e.Message, term) {
+				allFound = false
+				break
+			}
+		}
+		if allFound {
+			return true
+		}
+	}
+	
+	return false
+}
+
 // ---- apply ----
 
 func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) error {
@@ -967,40 +1001,8 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 					var ghErr *github.ErrorResponse
 					if errors.As(err, &ghErr) && ghErr.Response != nil {
 						// Check if this is a race condition error
-						isRaceCondition := false
-						
-						// Check for 422 with "sha" error (can be in Message or Errors array)
-						if ghErr.Response.StatusCode == 422 {
-							// Check main message
-							if strings.Contains(ghErr.Message, "sha") && strings.Contains(ghErr.Message, "wasn't supplied") {
-								isRaceCondition = true
-							}
-							// Check individual errors in the Errors array
-							if !isRaceCondition {
-								for _, e := range ghErr.Errors {
-									if strings.Contains(e.Message, "sha") && strings.Contains(e.Message, "wasn't supplied") {
-										isRaceCondition = true
-										break
-									}
-								}
-							}
-						}
-						
-						// Check for 409 with "reference already exists"
-						if ghErr.Response.StatusCode == 409 {
-							if strings.Contains(ghErr.Message, "reference already exists") {
-								isRaceCondition = true
-							}
-							// Check individual errors in the Errors array
-							if !isRaceCondition {
-								for _, e := range ghErr.Errors {
-									if strings.Contains(e.Message, "reference already exists") {
-										isRaceCondition = true
-										break
-									}
-								}
-							}
-						}
+						isRaceCondition := (ghErr.Response.StatusCode == 422 && containsErrorMessage(ghErr, "sha", "wasn't supplied")) ||
+							(ghErr.Response.StatusCode == 409 && containsErrorMessage(ghErr, "reference already exists"))
 						
 						if !isRaceCondition {
 							return fmt.Errorf("create file %s in %s/%s: %w", path, org, repo, err)
