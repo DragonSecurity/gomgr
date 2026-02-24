@@ -98,7 +98,7 @@ func (s *State) GetAll() []*Grant {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var all []*Grant
+	all := make([]*Grant, 0, len(s.grants))
 	for _, g := range s.grants {
 		all = append(all, g)
 	}
@@ -126,7 +126,7 @@ func (s *State) load() error {
 
 // save writes state to disk
 func (s *State) save() error {
-	var grants []*Grant
+	grants := make([]*Grant, 0, len(s.grants))
 	for _, g := range s.grants {
 		grants = append(grants, g)
 	}

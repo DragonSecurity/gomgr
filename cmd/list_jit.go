@@ -38,7 +38,7 @@ Example:
 		// Get all grants
 		grants := state.GetAll()
 		if len(grants) == 0 {
-			log.Println("no active JIT grants")
+			log.Println("No active JIT grants")
 			return nil
 		}
 
