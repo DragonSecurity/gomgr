@@ -14,6 +14,7 @@ A fast, idempotent **GitHub Organization Manager** written in Go. Define your or
 - ✅ YAML-driven org config (`app.yaml`, `org.yaml`, `teams/*.yaml`)
 - ✅ Teams, maintainers, members (idempotent add/update)
 - ✅ Repo permission grants (pull/triage/push/maintain/admin)
+- ✅ **Just-In-Time (JIT) access**: temporary team/repo access with automatic cleanup
 - ✅ **Custom repository roles**: fully managed - define in YAML, gomgr creates/updates them (GitHub Enterprise Cloud)
 - ✅ **Repository topics**: add topics/labels to repositories for organization
 - ✅ **Repository pinning**: pin important repositories to organization profile (⚠️ *GitHub API limitation: not currently supported for organizations - configuration accepted but manual pinning required via web UI*)
@@ -511,6 +512,98 @@ Use a classic PAT with scopes:
 
 **Order of operations** (apply):  
 create custom roles → create teams → set memberships → ensure repos → mark templates → grant permissions → write files (renovate/readme) → set topics → pin repos → cleanups (optional) → delete custom roles (optional)
+
+---
+
+## Just-In-Time (JIT) Access
+
+gomgr supports Just-In-Time (JIT) access for temporary team and repository access. This is useful for granting short-term access without modifying your YAML configuration.
+
+### Commands
+
+**`gomgr access`** - Grant temporary access (default: 1 hour)
+```bash
+# Grant team access for 1 hour
+gomgr access developer allanice001 --org myorg
+gomgr access developer allanice001 maintainer --org myorg
+
+# Grant repository access for 1 hour
+gomgr access myrepo allanice001 push --org myorg
+
+# Grant access for custom duration
+gomgr access myrepo allanice001 push --org myorg --duration 2h
+gomgr access developer allanice001 --org myorg --duration 30m
+```
+
+**`gomgr grant`** - Grant permanent access (without YAML config)
+```bash
+# Grant permanent team membership
+gomgr grant developer allanice001 --org myorg
+gomgr grant developer allanice001 maintainer --org myorg
+
+# Grant permanent repository access
+gomgr grant myrepo allanice001 push --org myorg
+gomgr grant myrepo allanice001 admin --org myorg
+```
+
+**`gomgr list-jit`** - List active JIT grants
+```bash
+gomgr list-jit
+```
+
+**`gomgr cleanup-jit`** - Manually revoke expired access
+```bash
+gomgr cleanup-jit --org myorg
+```
+
+### How JIT Access Works
+
+1. **Grant Access**: Use `gomgr access` to grant temporary access to a team or repository
+2. **Track State**: JIT grants are tracked in `~/.gomgr/jit-state.json`
+3. **Auto Cleanup**: Run `gomgr cleanup-jit` periodically to revoke expired access
+4. **Manual Cleanup**: Use `gomgr list-jit` to view active grants and `gomgr cleanup-jit` to clean up
+
+### Automation
+
+For automatic cleanup, run `gomgr cleanup-jit` in a cron job or scheduled workflow:
+
+```yaml
+# .github/workflows/cleanup-jit.yml
+name: Cleanup JIT Access
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Every 15 minutes
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cleanup expired JIT grants
+        run: |
+          gomgr cleanup-jit --org myorg
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+```
+
+### Slack Bot Integration
+
+Example Slack bot handler for JIT access commands:
+
+```go
+// Handle: /gomgr access developer allanice001
+func handleSlackCommand(command string) {
+    parts := strings.Fields(command)
+    if len(parts) < 4 || parts[1] != "access" {
+        return
+    }
+    
+    team := parts[2]
+    user := parts[3]
+    
+    exec.Command("gomgr", "access", team, user, "--org", "myorg").Run()
+}
+```
 
 ---
 
