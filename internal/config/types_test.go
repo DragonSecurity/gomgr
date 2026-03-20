@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -188,5 +189,165 @@ custom_roles:
 	}
 	if role2.BaseRole != "write" {
 		t.Errorf("Expected base_role 'write', got %q", role2.BaseRole)
+	}
+}
+
+func TestValidate(t *testing.T) {
+	tests := []struct {
+		name      string
+		root      Root
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name: "valid config",
+			root: Root{
+				App: AppConfig{Org: "myorg"},
+				Team: []TeamConfig{
+					{Name: "backend", Privacy: "closed"},
+					{Name: "frontend", Privacy: "secret"},
+					{Name: "ops"},
+				},
+				Org: OrgConfig{
+					CustomRoles: []CustomRoleConfig{
+						{Name: "deployer", BaseRole: "write"},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid team privacy",
+			root: Root{
+				App:  AppConfig{Org: "myorg"},
+				Team: []TeamConfig{{Name: "backend", Privacy: "public"}},
+			},
+			wantErr:   true,
+			errSubstr: "invalid privacy",
+		},
+		{
+			name: "invalid custom role base_role",
+			root: Root{
+				App: AppConfig{Org: "myorg"},
+				Org: OrgConfig{
+					CustomRoles: []CustomRoleConfig{
+						{Name: "deployer", BaseRole: "superadmin"},
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "invalid base_role",
+		},
+		{
+			name: "empty team name",
+			root: Root{
+				App:  AppConfig{Org: "myorg"},
+				Team: []TeamConfig{{Name: ""}},
+			},
+			wantErr:   true,
+			errSubstr: "team name must not be empty",
+		},
+		{
+			name: "empty custom role name",
+			root: Root{
+				App: AppConfig{Org: "myorg"},
+				Org: OrgConfig{
+					CustomRoles: []CustomRoleConfig{
+						{Name: "", BaseRole: "read"},
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "custom role name must not be empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.root.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err != nil && tt.errSubstr != "" && !strings.Contains(err.Error(), tt.errSubstr) {
+				t.Errorf("Validate() error = %q, want substring %q", err.Error(), tt.errSubstr)
+			}
+		})
+	}
+}
+
+func TestValidateRepoName(t *testing.T) {
+	tests := []struct {
+		name      string
+		repoName  string
+		wantErr   bool
+		errSubstr string
+	}{
+		{name: "valid simple", repoName: "my-repo", wantErr: false},
+		{name: "valid with dots", repoName: "repo.name", wantErr: false},
+		{name: "valid with underscore", repoName: "repo_name", wantErr: false},
+		{name: "valid single char", repoName: "a", wantErr: false},
+		{name: "invalid space", repoName: "repo name", wantErr: true, errSubstr: "invalid characters"},
+		{name: "invalid at sign", repoName: "repo@name", wantErr: true, errSubstr: "invalid characters"},
+		{name: "invalid dot dot", repoName: "..", wantErr: true, errSubstr: "cannot be"},
+		{name: "invalid single dot", repoName: ".", wantErr: true, errSubstr: "cannot be"},
+		{name: "invalid too long", repoName: strings.Repeat("a", 101), wantErr: true, errSubstr: "1-100 characters"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := Root{
+				App: AppConfig{Org: "myorg"},
+				Team: []TeamConfig{
+					{Name: "test", Repositories: map[string]any{tt.repoName: "push"}},
+				},
+			}
+			err := r.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err != nil && tt.errSubstr != "" && !strings.Contains(err.Error(), tt.errSubstr) {
+				t.Errorf("Validate() error = %q, want substring %q", err.Error(), tt.errSubstr)
+			}
+		})
+	}
+}
+
+func TestValidateUsername(t *testing.T) {
+	tests := []struct {
+		name      string
+		username  string
+		wantErr   bool
+		errSubstr string
+	}{
+		{name: "valid simple", username: "alice", wantErr: false},
+		{name: "valid with hyphen", username: "bob-smith", wantErr: false},
+		{name: "valid alphanumeric", username: "a1", wantErr: false},
+		{name: "valid single char", username: "a", wantErr: false},
+		{name: "invalid consecutive hyphens", username: "a--b", wantErr: true, errSubstr: "consecutive hyphens"},
+		{name: "invalid starts with hyphen", username: "-bob", wantErr: true, errSubstr: "invalid characters"},
+		{name: "invalid ends with hyphen", username: "bob-", wantErr: true, errSubstr: "invalid characters"},
+		{name: "invalid special chars", username: "alice@bob", wantErr: true, errSubstr: "invalid characters"},
+		{name: "invalid too long", username: strings.Repeat("a", 40), wantErr: true, errSubstr: "1-39 characters"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := Root{
+				App: AppConfig{Org: "myorg"},
+				Team: []TeamConfig{
+					{Name: "test", Members: []string{tt.username}},
+				},
+			}
+			err := r.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err != nil && tt.errSubstr != "" && !strings.Contains(err.Error(), tt.errSubstr) {
+				t.Errorf("Validate() error = %q, want substring %q", err.Error(), tt.errSubstr)
+			}
+		})
 	}
 }

@@ -41,7 +41,7 @@ test: ## Run tests
 test-coverage: ## Run tests with coverage
 	@echo "Running tests with coverage..."
 	@mkdir -p $(COVERAGE_DIR)
-	$(GOTEST) -v -covermode=atomic -coverprofile=$(COVERAGE_DIR)/coverage.out ./internal/config ./internal/sync
+	$(GOTEST) -v -covermode=atomic -coverprofile=$(COVERAGE_DIR)/coverage.out ./internal/config ./internal/sync ./internal/util ./internal/gh
 	$(GOCMD) tool cover -html=$(COVERAGE_DIR)/coverage.out -o $(COVERAGE_DIR)/coverage.html
 	@echo "Coverage report: $(COVERAGE_DIR)/coverage.html"
 	@$(GOCMD) tool cover -func=$(COVERAGE_DIR)/coverage.out | tail -1

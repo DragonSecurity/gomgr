@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
@@ -14,14 +15,23 @@ import (
 var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Synchronize org state to match YAML configuration",
+	Example: `  gomgr sync -c ./config
+  gomgr sync -c ./config --dry
+  gomgr sync -c ./config --timeout 5m --audit-log`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
+		if cfgDir == "" {
+			return fmt.Errorf("--config/-c flag is required")
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
 		if debug {
 			util.EnableDebug()
 		}
+		util.AuditLog = auditLog
 
 		cfg, err := config.Load(cfgDir)
-
 		if err != nil {
 			return err
 		}
@@ -39,7 +49,9 @@ var syncCmd = &cobra.Command{
 			return err
 		}
 
-		util.PrintPlan(plan)
+		if err := util.PrintPlan(plan); err != nil {
+			return fmt.Errorf("print plan: %w", err)
+		}
 
 		if dryRun {
 			util.PrintSummary(plan)
@@ -51,7 +63,5 @@ var syncCmd = &cobra.Command{
 }
 
 func init() {
-	syncCmd.PersistentFlags().StringVarP(&cfgDir, "config", "c", "", "Path to config directory (required)")
-	_ = syncCmd.MarkPersistentFlagRequired("config")
 	rootCmd.AddCommand(syncCmd)
 }

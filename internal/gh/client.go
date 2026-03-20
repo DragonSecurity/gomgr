@@ -3,7 +3,6 @@ package gh
 import (
 	"bytes"
 	"context"
-	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -73,9 +72,6 @@ func maybeReadPEM(s string) ([]byte, error) {
 	block, _ := pem.Decode(b)
 	if block == nil {
 		return nil, fmt.Errorf("invalid PEM at %s", s)
-	}
-	if _, err := x509.ParsePKCS1PrivateKey(block.Bytes); err != nil {
-		_, _ = x509.ParsePKCS8PrivateKey(block.Bytes)
 	}
 	return b, nil
 }
@@ -148,8 +144,11 @@ func (c *Client) DoGraphQL(ctx context.Context, query string, variables map[stri
 
 	// Check for GraphQL errors
 	if len(gqlResp.Errors) > 0 {
-		errMsg := gqlResp.Errors[0].Message
-		return fmt.Errorf("graphql error: %s", errMsg)
+		msgs := make([]string, len(gqlResp.Errors))
+		for i, e := range gqlResp.Errors {
+			msgs[i] = e.Message
+		}
+		return fmt.Errorf("graphql error: %s", strings.Join(msgs, "; "))
 	}
 
 	if result != nil && len(gqlResp.Data) > 0 {

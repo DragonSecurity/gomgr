@@ -32,9 +32,13 @@ type Plan struct {
 	Stats    *StateStats `json:"stats,omitempty"`
 }
 
-func PrintPlan(p Plan) {
-	b, _ := json.MarshalIndent(p, "", "  ")
+func PrintPlan(p Plan) error {
+	b, err := json.MarshalIndent(p, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal plan: %w", err)
+	}
 	fmt.Println(string(b))
+	return nil
 }
 
 // PrintSummary prints a human-readable summary of the plan

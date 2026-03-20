@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
@@ -38,32 +39,32 @@ func BuildPlan(ctx context.Context, c *gh.Client, cfg *config.Root) (util.Plan, 
 	// Custom roles must be created before teams/repos use them
 	customRoleChanges, err := planCustomRoles(ctx, c, cfg, st)
 	if err != nil {
-		return plan, err
+		return plan, fmt.Errorf("plan custom roles: %w", err)
 	}
 
 	teamChanges, desiredBySlug, err := planTeams(ctx, c, cfg, st)
 	if err != nil {
-		return plan, err
+		return plan, fmt.Errorf("plan teams: %w", err)
 	}
 
-	memChanges, err := planTeamMembership(ctx, c, cfg, st, desiredBySlug)
+	memChanges, err := planTeamMembership(ctx, c, st, desiredBySlug)
 	if err != nil {
-		return plan, err
+		return plan, fmt.Errorf("plan team membership: %w", err)
 	}
 
 	repoChanges, err := planRepoPerms(ctx, c, cfg, st)
 	if err != nil {
-		return plan, err
+		return plan, fmt.Errorf("plan repo permissions: %w", err)
 	}
 
 	cleanupChanges, warnings, err := planCleanups(ctx, c, cfg, st, desiredBySlug)
 	if err != nil {
-		return plan, err
+		return plan, fmt.Errorf("plan cleanups: %w", err)
 	}
 
 	customRoleCleanups, roleWarnings, err := planCustomRoleCleanups(ctx, c, cfg, st)
 	if err != nil {
-		return plan, err
+		return plan, fmt.Errorf("plan custom role cleanups: %w", err)
 	}
 
 	plan.Changes = append(plan.Changes, customRoleChanges...)

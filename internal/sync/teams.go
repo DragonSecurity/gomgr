@@ -16,6 +16,39 @@ import (
 	"github.com/google/go-github/v83/github"
 )
 
+const defaultPerPage = 100
+
+var validTopicRe = regexp.MustCompile(`^[a-z0-9-]+$`)
+
+const (
+	roleMaintainer = "maintainer"
+	roleMember     = "member"
+)
+
+const (
+	precedenceCustomRoleCreate   = 5
+	precedenceCustomRoleUpdate   = 5
+	precedenceTeamCreate         = 10
+	precedenceTeamUpdate         = 15
+	precedenceRepoEnsure         = 10
+	precedenceTeamRepoGrant      = 20
+	precedenceTeamMemberEnsure   = 30
+	precedenceRepoFileEnsure     = 40
+	precedenceRepoTopicsEnsure   = 45
+	precedenceRepoTemplateEnsure = 46
+	precedenceRepoPinEnsure      = 47
+	precedenceOrgMemberRemove    = 85
+	precedenceTeamDelete         = 90
+	precedenceRepoDelete         = 90
+	precedenceCustomRoleDelete   = 95
+)
+
+const (
+	errTermSHA            = "sha"
+	errTermSHANotSupplied = "wasn't supplied"
+	errTermRefExists      = "reference already exists"
+)
+
 type teamMemberChange struct {
 	Org  string
 	Slug string
@@ -46,11 +79,26 @@ func validateTopic(topic string) error {
 		return fmt.Errorf("topic cannot start with hyphen: %q", topic)
 	}
 	// Match lowercase alphanumeric and hyphens only
-	validTopic := regexp.MustCompile(`^[a-z0-9-]+$`)
-	if !validTopic.MatchString(topic) {
+	if !validTopicRe.MatchString(topic) {
 		return fmt.Errorf("topic contains invalid characters (must be lowercase alphanumeric with hyphens): %q", topic)
 	}
 	return nil
+}
+
+// normalizeYAMLMap converts both map[string]any and map[any]any (from YAML) to map[string]any.
+func normalizeYAMLMap(v any) (map[string]any, bool) {
+	switch m := v.(type) {
+	case map[string]any:
+		return m, true
+	case map[any]any:
+		result := make(map[string]any, len(m))
+		for k, val := range m {
+			result[fmt.Sprint(k)] = val
+		}
+		return result, true
+	default:
+		return nil, false
+	}
 }
 
 // parseRepoConfig parses a repository value which can be either:
@@ -66,64 +114,50 @@ func parseRepoConfig(val any) (repoSettings, error) {
 			return settings, fmt.Errorf("permission cannot be empty string")
 		}
 		settings.permission = v
-	case map[string]any:
-		// Advanced case: RepoConfig structure
-		if perm, ok := v["permission"].(string); ok {
+	default:
+		m, ok := normalizeYAMLMap(val)
+		if !ok {
+			return settings, nil
+		}
+		if perm, ok := m["permission"].(string); ok {
 			if perm == "" {
 				return settings, fmt.Errorf("permission cannot be empty string")
 			}
 			settings.permission = perm
-		} else if _, hasPermission := v["permission"]; hasPermission {
-			return settings, fmt.Errorf("permission must be a string, got %T", v["permission"])
+		} else if _, hasPermission := m["permission"]; hasPermission {
+			return settings, fmt.Errorf("permission must be a string, got %T", m["permission"])
 		}
 		// Permission is optional if using advanced config for topics/pinning only
 
-		if topics, ok := v["topics"].([]any); ok {
+		if topics, ok := m["topics"].([]any); ok {
 			for _, t := range topics {
 				if tStr, ok := t.(string); ok {
 					settings.topics = append(settings.topics, tStr)
 				}
 			}
 		}
-		if pinned, ok := v["pinned"].(bool); ok {
+		if pinned, ok := m["pinned"].(bool); ok {
 			settings.pinned = pinned
 		}
-		if template, ok := v["template"].(bool); ok {
+		if template, ok := m["template"].(bool); ok {
 			settings.template = template
 		}
-		if from, ok := v["from"].(string); ok {
-			settings.from = from
-		}
-	case map[any]any:
-		// YAML might unmarshal as map[any]any
-		if perm, ok := v["permission"].(string); ok {
-			if perm == "" {
-				return settings, fmt.Errorf("permission cannot be empty string")
-			}
-			settings.permission = perm
-		} else if _, hasPermission := v["permission"]; hasPermission {
-			return settings, fmt.Errorf("permission must be a string, got %T", v["permission"])
-		}
-
-		if topics, ok := v["topics"].([]any); ok {
-			for _, t := range topics {
-				if tStr, ok := t.(string); ok {
-					settings.topics = append(settings.topics, tStr)
-				}
-			}
-		}
-		if pinned, ok := v["pinned"].(bool); ok {
-			settings.pinned = pinned
-		}
-		if template, ok := v["template"].(bool); ok {
-			settings.template = template
-		}
-		if from, ok := v["from"].(string); ok {
+		if from, ok := m["from"].(string); ok {
 			settings.from = from
 		}
 	}
 
 	return settings, nil
+}
+
+// parseTemplateRef splits a template reference into org and repo parts.
+// Supports "repo-name" (uses defaultOrg) or "org/repo-name".
+func parseTemplateRef(ref, defaultOrg string) (org, repo string) {
+	if strings.Contains(ref, "/") {
+		parts := strings.SplitN(ref, "/", 2)
+		return parts[0], parts[1]
+	}
+	return defaultOrg, ref
 }
 
 // resolveTemplate resolves template inheritance for a repository configuration.
@@ -135,16 +169,7 @@ func resolveTemplate(repoName string, settings repoSettings, allRepos map[string
 	}
 
 	// Parse template reference (supports "repo-name" or "org/repo-name")
-	templateOrg := defaultOrg
-	templateRepo := settings.from
-	if strings.Contains(settings.from, "/") {
-		parts := strings.SplitN(settings.from, "/", 2)
-		if len(parts) != 2 {
-			return settings, fmt.Errorf("invalid template reference format: %q (expected 'repo' or 'org/repo')", settings.from)
-		}
-		templateOrg = parts[0]
-		templateRepo = parts[1]
-	}
+	templateOrg, templateRepo := parseTemplateRef(settings.from, defaultOrg)
 
 	// Only support same-org templates for now
 	if templateOrg != defaultOrg {
@@ -196,6 +221,22 @@ func resolveTemplate(repoName string, settings repoSettings, allRepos map[string
 	return result, nil
 }
 
+// paginate calls fn repeatedly, advancing through pages until there are no more.
+func paginate(fn func(opts *github.ListOptions) (*github.Response, error)) error {
+	opts := &github.ListOptions{PerPage: defaultPerPage}
+	for {
+		resp, err := fn(opts)
+		if err != nil {
+			return err
+		}
+		if resp == nil || resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	return nil
+}
+
 // ---- planning ----
 
 func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) ([]util.Change, map[string]config.TeamConfig, error) {
@@ -204,10 +245,7 @@ func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) (
 
 	// build desired map
 	for _, t := range cfg.Team {
-		slug := t.Slug
-		if slug == "" && t.Name != "" {
-			slug = strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
-		}
+		slug := t.ResolvedSlug()
 		if slug == "" {
 			continue
 		}
@@ -217,17 +255,15 @@ func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) (
 
 	// list actual teams
 	var actual []*github.Team
-	opt := &github.ListOptions{PerPage: 100}
-	for {
-		ts, resp, err := c.REST.Teams.ListTeams(ctx, st.Org, opt)
+	if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+		ts, resp, err := c.REST.Teams.ListTeams(ctx, st.Org, opts)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		actual = append(actual, ts...)
-		if resp.NextPage == 0 {
-			break
-		}
-		opt.Page = resp.NextPage
+		return resp, nil
+	}); err != nil {
+		return nil, nil, err
 	}
 	actualBySlug := map[string]*github.Team{}
 	for _, t := range actual {
@@ -253,71 +289,111 @@ func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) (
 			})
 			continue
 		}
-		// TODO: compare & update description/privacy/parents as needed
+		// Compare & update description/privacy
+		existing := actualBySlug[slug]
+		needsUpdate := false
+		updateDetails := map[string]any{
+			"org":  st.Org,
+			"slug": slug,
+			"name": want.Name,
+		}
+		if want.Description != existing.GetDescription() {
+			needsUpdate = true
+			updateDetails["description"] = want.Description
+		}
+		if want.Privacy != "" && want.Privacy != existing.GetPrivacy() {
+			needsUpdate = true
+			updateDetails["privacy"] = want.Privacy
+		}
+		if needsUpdate {
+			out = append(out, util.Change{
+				Scope:   "team",
+				Target:  slug,
+				Action:  "update",
+				Details: updateDetails,
+			})
+		}
 	}
 	return out, desired, nil
 }
 
-func planTeamMembership(ctx context.Context, c *gh.Client, cfg *config.Root, st *State, desiredBySlug map[string]config.TeamConfig) ([]util.Change, error) {
+func planTeamMembership(ctx context.Context, c *gh.Client, st *State, desiredBySlug map[string]config.TeamConfig) ([]util.Change, error) {
 	var out []util.Change
 	org := st.Org
 
 	totalCurrentMembers := 0
 	totalDesiredMembers := 0
 
+	validatedUsers := map[string]bool{}
+
 	for slug, want := range desiredBySlug {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		// actual role map
 		got := map[string]string{}
 		// maintainers
-		mopts := &github.TeamListTeamMembersOptions{Role: "maintainer", ListOptions: github.ListOptions{PerPage: 100}}
-		for {
+		mopts := &github.TeamListTeamMembersOptions{Role: roleMaintainer, ListOptions: github.ListOptions{PerPage: defaultPerPage}}
+		if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+			mopts.ListOptions = *opts
 			users, resp, err := c.REST.Teams.ListTeamMembersBySlug(ctx, org, slug, mopts)
 			if err != nil {
 				var ghErr *github.ErrorResponse
 				if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusNotFound {
-					break
+					return &github.Response{}, nil
 				}
 				return nil, err
 			}
 			for _, u := range users {
-				got[strings.ToLower(u.GetLogin())] = "maintainer"
+				got[strings.ToLower(u.GetLogin())] = roleMaintainer
 			}
-			if resp.NextPage == 0 {
-				break
-			}
-			mopts.Page = resp.NextPage
+			return resp, nil
+		}); err != nil {
+			return nil, err
 		}
 		// members
-		opts := &github.TeamListTeamMembersOptions{Role: "member", ListOptions: github.ListOptions{PerPage: 100}}
-		for {
-			users, resp, err := c.REST.Teams.ListTeamMembersBySlug(ctx, org, slug, opts)
+		memOpts := &github.TeamListTeamMembersOptions{Role: roleMember, ListOptions: github.ListOptions{PerPage: defaultPerPage}}
+		if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+			memOpts.ListOptions = *opts
+			users, resp, err := c.REST.Teams.ListTeamMembersBySlug(ctx, org, slug, memOpts)
 			if err != nil {
 				var ghErr *github.ErrorResponse
 				if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusNotFound {
-					break
+					return &github.Response{}, nil
 				}
 				return nil, err
 			}
 			for _, u := range users {
 				if _, ok := got[strings.ToLower(u.GetLogin())]; !ok {
-					got[strings.ToLower(u.GetLogin())] = "member"
+					got[strings.ToLower(u.GetLogin())] = roleMember
 				}
 			}
-			if resp.NextPage == 0 {
-				break
-			}
-			opts.Page = resp.NextPage
+			return resp, nil
+		}); err != nil {
+			return nil, err
 		}
 
 		// desired role map
 		wantRole := map[string]string{}
 		for _, u := range want.Maintainers {
-			wantRole[strings.ToLower(u)] = "maintainer"
+			wantRole[strings.ToLower(u)] = roleMaintainer
 		}
 		for _, u := range want.Members {
 			if _, ok := wantRole[strings.ToLower(u)]; !ok {
-				wantRole[strings.ToLower(u)] = "member"
+				wantRole[strings.ToLower(u)] = roleMember
 			}
+		}
+
+		// Validate that all desired users exist on GitHub
+		for user := range wantRole {
+			if validatedUsers[user] {
+				continue
+			}
+			_, _, err := c.REST.Users.Get(ctx, user)
+			if err != nil {
+				return nil, fmt.Errorf("user %q in team %q not found on GitHub: %w", user, slug, err)
+			}
+			validatedUsers[user] = true
 		}
 
 		// Track member counts
@@ -345,15 +421,76 @@ func planTeamMembership(ctx context.Context, c *gh.Client, cfg *config.Root, st 
 	return out, nil
 }
 
+// collectRepoSettings gathers and validates all repository settings from config.
+func collectRepoSettings(cfg *config.Root, org string) (allSettings map[string]repoSettings, managedRepos map[string]bool, err error) {
+	allSettings = map[string]repoSettings{}
+	managedRepos = map[string]bool{}
+
+	for _, t := range cfg.Team {
+		slug := t.ResolvedSlug()
+		for repo, val := range t.Repositories {
+			r := strings.ToLower(repo)
+			managedRepos[r] = true
+
+			settings, err := parseRepoConfig(val)
+			if err != nil {
+				return nil, nil, fmt.Errorf("invalid config for repo %s in team %s: %w", repo, slug, err)
+			}
+			allSettings[r] = settings
+		}
+	}
+	return allSettings, managedRepos, nil
+}
+
+// resolveAllTemplates resolves template inheritance for all repository settings.
+func resolveAllTemplates(allSettings map[string]repoSettings, org string) (map[string]repoSettings, error) {
+	resolved := make(map[string]repoSettings, len(allSettings))
+	for repo, settings := range allSettings {
+		r, err := resolveTemplate(repo, settings, allSettings, org)
+		if err != nil {
+			return nil, fmt.Errorf("error resolving template for repo %s: %w", repo, err)
+		}
+		resolved[repo] = r
+	}
+	return resolved, nil
+}
+
+// countCurrentPermissions counts the current team-repo permission grants from GitHub.
+func countCurrentPermissions(ctx context.Context, c *gh.Client, cfg *config.Root, org string) (int, error) {
+	count := 0
+	for _, t := range cfg.Team {
+		if ctx.Err() != nil {
+			return 0, ctx.Err()
+		}
+		teamSlug := t.ResolvedSlug()
+		if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+			teamRepos, resp, err := c.REST.Teams.ListTeamReposBySlug(ctx, org, teamSlug, opts)
+			if err != nil {
+				var ghErr *github.ErrorResponse
+				if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusNotFound {
+					return &github.Response{}, nil
+				}
+				return nil, err
+			}
+			count += len(teamRepos)
+			return resp, nil
+		}); err != nil {
+			return 0, fmt.Errorf("count permissions for team %s: %w", teamSlug, err)
+		}
+	}
+	return count, nil
+}
+
 func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) ([]util.Change, error) {
 	var out []util.Change
 	org := st.Org
 
 	existing := map[string]bool{}
 	existingRepos := map[string]*github.Repository{}
-	opt := &github.RepositoryListByOrgOptions{ListOptions: github.ListOptions{PerPage: 100}, Type: "all"}
-	for {
-		repos, resp, err := c.REST.Repositories.ListByOrg(ctx, org, opt)
+	repoListOpt := &github.RepositoryListByOrgOptions{ListOptions: github.ListOptions{PerPage: defaultPerPage}, Type: "all"}
+	if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+		repoListOpt.ListOptions = *opts
+		repos, resp, err := c.REST.Repositories.ListByOrg(ctx, org, repoListOpt)
 		if err != nil {
 			return nil, err
 		}
@@ -362,60 +499,30 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 			existing[repoName] = true
 			existingRepos[repoName] = r
 		}
-		if resp.NextPage == 0 {
-			break
-		}
-		opt.Page = resp.NextPage
+		return resp, nil
+	}); err != nil {
+		return nil, err
 	}
 
-	// Track which repos are managed
-	managedRepos := map[string]bool{}
+	allRepoSettings, managedRepos, err := collectRepoSettings(cfg, org)
+	if err != nil {
+		return nil, err
+	}
 
-	// Map to track desired topics and pinned state per repo
+	resolvedSettings, err := resolveAllTemplates(allRepoSettings, org)
+	if err != nil {
+		return nil, err
+	}
+
 	desiredTopics := map[string][]string{}
 	desiredPinned := map[string]bool{}
 	desiredTemplates := map[string]bool{}
 
-	// First pass: collect all repository settings
-	allRepoSettings := map[string]repoSettings{}
-	repoToTeams := map[string][]string{} // track which teams reference each repo
-
 	for _, t := range cfg.Team {
-		slug := t.Slug
-		if slug == "" {
-			slug = strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
-		for repo, val := range t.Repositories {
-			r := strings.ToLower(repo)
-			managedRepos[r] = true
-
-			settings, err := parseRepoConfig(val)
-			if err != nil {
-				return nil, fmt.Errorf("invalid config for repo %s in team %s: %w", repo, slug, err)
-			}
-
-			// Store settings for later template resolution
-			allRepoSettings[r] = settings
-			repoToTeams[r] = append(repoToTeams[r], slug)
-		}
-	}
-
-	// Second pass: resolve templates
-	resolvedSettings := make(map[string]repoSettings)
-	for repo, settings := range allRepoSettings {
-		resolved, err := resolveTemplate(repo, settings, allRepoSettings, org)
-		if err != nil {
-			return nil, fmt.Errorf("error resolving template for repo %s: %w", repo, err)
-		}
-		resolvedSettings[repo] = resolved
-	}
-
-	// Third pass: process repositories with resolved settings
-	for _, t := range cfg.Team {
-		slug := t.Slug
-		if slug == "" {
-			slug = strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
-		}
+		slug := t.ResolvedSlug()
 		for repo := range t.Repositories {
 			r := strings.ToLower(repo)
 			settings := resolvedSettings[r]
@@ -426,7 +533,6 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 					"name":    repo,
 					"private": true,
 				}
-				// Include template information if present
 				if settings.from != "" {
 					details["from"] = settings.from
 				}
@@ -442,7 +548,6 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 				existing[r] = true
 			}
 
-			// Mark repository as template if configured
 			if settings.template {
 				desiredTemplates[r] = true
 			}
@@ -459,7 +564,6 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 				},
 			})
 
-			// Aggregate topics from all teams (union)
 			if len(settings.topics) > 0 {
 				existingTopics := desiredTopics[r]
 				topicSet := map[string]bool{}
@@ -467,7 +571,6 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 					topicSet[topic] = true
 				}
 				for _, topic := range settings.topics {
-					// Validate topic before adding
 					if err := validateTopic(topic); err != nil {
 						return nil, fmt.Errorf("invalid topic for repo %s: %w", repo, err)
 					}
@@ -479,7 +582,6 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 				desiredTopics[r] = existingTopics
 			}
 
-			// Pinned state: if any team wants it pinned, pin it
 			if settings.pinned {
 				desiredPinned[r] = true
 			}
@@ -521,57 +623,46 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 		}
 	}
 
-	// Plan topic updates for managed repos - only if different from current state
+	// Plan topic updates
 	for repo, topics := range desiredTopics {
-		if len(topics) > 0 {
-			// GitHub allows max 20 topics per repo
-			if len(topics) > 20 {
-				return nil, fmt.Errorf("repo %s has %d topics (max 20 allowed)", repo, len(topics))
-			}
-
-			// Check if topics differ from current state
-			needsUpdate := false
-			if existingRepo, ok := existingRepos[repo]; ok {
-				currentTopics := existingRepo.Topics
-				if len(currentTopics) != len(topics) {
-					needsUpdate = true
-				} else {
-					// Compare topics (order-independent)
-					currentSet := make(map[string]bool)
-					for _, t := range currentTopics {
-						currentSet[t] = true
-					}
-					for _, t := range topics {
-						if !currentSet[t] {
-							needsUpdate = true
-							break
-						}
+		if len(topics) > 20 {
+			return nil, fmt.Errorf("repo %s has %d topics (max 20 allowed)", repo, len(topics))
+		}
+		needsUpdate := false
+		if existingRepo, ok := existingRepos[repo]; ok {
+			currentTopics := existingRepo.Topics
+			if len(currentTopics) != len(topics) {
+				needsUpdate = true
+			} else {
+				currentSet := make(map[string]bool)
+				for _, t := range currentTopics {
+					currentSet[t] = true
+				}
+				for _, t := range topics {
+					if !currentSet[t] {
+						needsUpdate = true
+						break
 					}
 				}
-			} else {
-				// Repo doesn't exist yet, will be created
-				needsUpdate = true
 			}
-
-			if needsUpdate {
-				out = append(out, util.Change{
-					Scope:  "repo-topics",
-					Target: repo,
-					Action: "ensure",
-					Details: map[string]any{
-						"org":    org,
-						"repo":   repo,
-						"topics": topics,
-					},
-				})
-			}
+		} else {
+			needsUpdate = true
+		}
+		if needsUpdate {
+			out = append(out, util.Change{
+				Scope:  "repo-topics",
+				Target: repo,
+				Action: "ensure",
+				Details: map[string]any{
+					"org":    org,
+					"repo":   repo,
+					"topics": topics,
+				},
+			})
 		}
 	}
 
-	// Plan pinning changes - check current pinning state
-	// Note: GitHub REST API doesn't provide pinning status directly
-	// We'll generate changes for all repos marked as pinned
-	// A future enhancement could use GraphQL to query current pinning state
+	// Plan pinning changes
 	for repo, shouldPin := range desiredPinned {
 		if shouldPin {
 			out = append(out, util.Change{
@@ -590,17 +681,14 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 	// Plan template marking changes
 	for repo, shouldBeTemplate := range desiredTemplates {
 		if shouldBeTemplate {
-			// Check if repo needs to be marked as template
 			needsUpdate := false
 			if existingRepo, ok := existingRepos[repo]; ok {
 				if !existingRepo.GetIsTemplate() {
 					needsUpdate = true
 				}
 			} else {
-				// Repo will be created, needs template marking
 				needsUpdate = true
 			}
-
 			if needsUpdate {
 				out = append(out, util.Change{
 					Scope:  "repo-template",
@@ -616,177 +704,181 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 		}
 	}
 
-	// Store managed repos in state for cleanup phase
 	st.ManagedRepos = managedRepos
-
-	// Track repository counts
 	st.CurrentRepos = len(existing)
 	st.DesiredRepos = len(managedRepos)
 
-	// Count permissions (team-repo grants)
-	// Note: This requires additional API calls to get accurate current state.
-	// These calls are intentional for precise state tracking and run only during
-	// dry-run planning. The overhead is acceptable for the visibility benefit.
-	currentPermsCount := 0
-	desiredPermsCount := 0
-
-	// Count current permissions from GitHub
-	for _, t := range cfg.Team {
-		teamSlug := t.Slug
-		if teamSlug == "" {
-			teamSlug = strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
-		}
-		// List team repos to count current permissions
-		repoOpts := &github.ListOptions{PerPage: 100}
-		for {
-			teamRepos, resp, err := c.REST.Teams.ListTeamReposBySlug(ctx, org, teamSlug, repoOpts)
-			if err != nil {
-				// If team doesn't exist yet, skip counting
-				var ghErr *github.ErrorResponse
-				if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusNotFound {
-					break
-				}
-				// Ignore other errors for counting purposes
-				break
-			}
-			currentPermsCount += len(teamRepos)
-			if resp.NextPage == 0 {
-				break
-			}
-			repoOpts.Page = resp.NextPage
-		}
+	currentPerms, err := countCurrentPermissions(ctx, c, cfg, org)
+	if err != nil {
+		return nil, fmt.Errorf("count current permissions: %w", err)
 	}
-
-	// Count desired permissions
+	st.CurrentRepoPerms = currentPerms
+	desiredPermsCount := 0
 	for _, t := range cfg.Team {
 		desiredPermsCount += len(t.Repositories)
 	}
-
-	st.CurrentRepoPerms = currentPermsCount
 	st.DesiredRepoPerms = desiredPermsCount
 
 	return out, nil
+}
+
+// planTeamCleanups generates delete changes for teams not in the desired set.
+func planTeamCleanups(ctx context.Context, c *gh.Client, org string, desired map[string]config.TeamConfig) ([]util.Change, error) {
+	var out []util.Change
+	var actual []*github.Team
+	if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+		ts, resp, err := c.REST.Teams.ListTeams(ctx, org, opts)
+		if err != nil {
+			return nil, err
+		}
+		actual = append(actual, ts...)
+		return resp, nil
+	}); err != nil {
+		return nil, err
+	}
+	for _, at := range actual {
+		if _, ok := desired[at.GetSlug()]; !ok {
+			out = append(out, util.Change{Scope: "team", Target: at.GetSlug(), Action: "delete", Details: map[string]any{"org": org, "slug": at.GetSlug()}})
+		}
+	}
+	return out, nil
+}
+
+// planMemberCleanups generates remove changes for org members not in any team.
+func planMemberCleanups(ctx context.Context, c *gh.Client, org string) ([]util.Change, error) {
+	var out []util.Change
+	memOpt := &github.ListMembersOptions{
+		Role:        roleMember,
+		ListOptions: github.ListOptions{PerPage: defaultPerPage},
+	}
+	var members []*github.User
+	if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+		memOpt.ListOptions = *opts
+		us, resp, err := c.REST.Organizations.ListMembers(ctx, org, memOpt)
+		if err != nil {
+			return nil, err
+		}
+		members = append(members, us...)
+		return resp, nil
+	}); err != nil {
+		return nil, err
+	}
+	inAnyTeam := map[string]bool{}
+	var allTeams []*github.Team
+	if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+		ts, resp, err := c.REST.Teams.ListTeams(ctx, org, opts)
+		if err != nil {
+			return nil, err
+		}
+		allTeams = append(allTeams, ts...)
+		return resp, nil
+	}); err != nil {
+		return nil, err
+	}
+	for _, t := range allTeams {
+		tmOpt := &github.TeamListTeamMembersOptions{Role: "all", ListOptions: github.ListOptions{PerPage: defaultPerPage}}
+		if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+			tmOpt.ListOptions = *opts
+			us, resp, err := c.REST.Teams.ListTeamMembersBySlug(ctx, org, t.GetSlug(), tmOpt)
+			if err != nil {
+				return nil, err
+			}
+			for _, u := range us {
+				inAnyTeam[strings.ToLower(u.GetLogin())] = true
+			}
+			return resp, nil
+		}); err != nil {
+			return nil, err
+		}
+	}
+	for _, u := range members {
+		login := strings.ToLower(u.GetLogin())
+		if !inAnyTeam[login] {
+			out = append(out, util.Change{Scope: "org-member", Target: login, Action: "remove", Details: map[string]any{"org": org, "user": login}})
+		}
+	}
+	return out, nil
+}
+
+// planRepoCleanups generates delete/warning changes for unmanaged repositories.
+func planRepoCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) ([]util.Change, []string, error) {
+	var out []util.Change
+	var warnings []string
+	org := st.Org
+	var actualRepos []*github.Repository
+	repoOpt := &github.RepositoryListByOrgOptions{ListOptions: github.ListOptions{PerPage: defaultPerPage}, Type: "all"}
+	if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+		repoOpt.ListOptions = *opts
+		repos, resp, err := c.REST.Repositories.ListByOrg(ctx, org, repoOpt)
+		if err != nil {
+			return nil, err
+		}
+		actualRepos = append(actualRepos, repos...)
+		return resp, nil
+	}); err != nil {
+		return nil, nil, err
+	}
+	var unmanagedRepos []string
+	for _, repo := range actualRepos {
+		repoName := strings.ToLower(repo.GetName())
+		if !st.ManagedRepos[repoName] {
+			unmanagedRepos = append(unmanagedRepos, repo.GetName())
+			if cfg.App.DeleteUnmanagedRepos {
+				out = append(out, util.Change{
+					Scope:  "repo",
+					Target: repoName,
+					Action: "delete",
+					Details: map[string]any{
+						"org":  org,
+						"repo": repo.GetName(),
+					},
+				})
+			}
+		}
+	}
+	if cfg.App.DryWarnings.WarnUnmanagedRepos && len(unmanagedRepos) > 0 {
+		warnings = append(warnings, fmt.Sprintf("Found %d unmanaged repositories: %v", len(unmanagedRepos), unmanagedRepos))
+	}
+	return out, warnings, nil
 }
 
 func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State, desired map[string]config.TeamConfig) ([]util.Change, []string, error) {
 	var out []util.Change
 	var warnings []string
 	org := st.Org
+
 	if cfg.App.DeleteUnconfiguredTeams {
-		var actual []*github.Team
-		opt := &github.ListOptions{PerPage: 100}
-		for {
-			ts, resp, err := c.REST.Teams.ListTeams(ctx, org, opt)
-			if err != nil {
-				return nil, nil, err
-			}
-			actual = append(actual, ts...)
-			if resp.NextPage == 0 {
-				break
-			}
-			opt.Page = resp.NextPage
+		if ctx.Err() != nil {
+			return nil, nil, ctx.Err()
 		}
-		for _, at := range actual {
-			if _, ok := desired[at.GetSlug()]; !ok {
-				out = append(out, util.Change{Scope: "team", Target: at.GetSlug(), Action: "delete", Details: map[string]any{"org": org, "slug": at.GetSlug()}})
-			}
+		changes, err := planTeamCleanups(ctx, c, org, desired)
+		if err != nil {
+			return nil, nil, err
 		}
+		out = append(out, changes...)
 	}
 
 	if cfg.App.RemoveMembersWithoutTeam {
-		// list all org members
-		memOpt := &github.ListMembersOptions{
-			Role: "member",
-			ListOptions: github.ListOptions{
-				PerPage: 100,
-			},
+		if ctx.Err() != nil {
+			return nil, nil, ctx.Err()
 		}
-		var members []*github.User
-		for {
-			us, resp, err := c.REST.Organizations.ListMembers(ctx, org, memOpt)
-			if err != nil {
-				return nil, nil, err
-			}
-			members = append(members, us...)
-			if resp.NextPage == 0 {
-				break
-			}
-			memOpt.Page = resp.NextPage
+		changes, err := planMemberCleanups(ctx, c, org)
+		if err != nil {
+			return nil, nil, err
 		}
-		// compute members who are in any team
-		inAnyTeam := map[string]bool{}
-		teamOpt := &github.ListOptions{PerPage: 100}
-		for {
-			ts, resp, err := c.REST.Teams.ListTeams(ctx, org, teamOpt)
-			if err != nil {
-				return nil, nil, err
-			}
-			for _, t := range ts {
-				page := &github.TeamListTeamMembersOptions{Role: "all", ListOptions: github.ListOptions{PerPage: 100}}
-				for {
-					us, r2, err := c.REST.Teams.ListTeamMembersBySlug(ctx, org, t.GetSlug(), page)
-					if err != nil {
-						return nil, nil, err
-					}
-					for _, u := range us {
-						inAnyTeam[strings.ToLower(u.GetLogin())] = true
-					}
-					if r2.NextPage == 0 {
-						break
-					}
-					page.Page = r2.NextPage
-				}
-			}
-			if resp.NextPage == 0 {
-				break
-			}
-			teamOpt.Page = resp.NextPage
-		}
-		for _, u := range members {
-			login := strings.ToLower(u.GetLogin())
-			if !inAnyTeam[login] {
-				out = append(out, util.Change{Scope: "org-member", Target: login, Action: "remove", Details: map[string]any{"org": org, "user": login}})
-			}
-		}
+		out = append(out, changes...)
 	}
 
-	// Warn about or delete unmanaged repositories
 	if cfg.App.DeleteUnmanagedRepos || cfg.App.DryWarnings.WarnUnmanagedRepos {
-		var actualRepos []*github.Repository
-		repoOpt := &github.RepositoryListByOrgOptions{ListOptions: github.ListOptions{PerPage: 100}, Type: "all"}
-		for {
-			repos, resp, err := c.REST.Repositories.ListByOrg(ctx, org, repoOpt)
-			if err != nil {
-				return nil, nil, err
-			}
-			actualRepos = append(actualRepos, repos...)
-			if resp.NextPage == 0 {
-				break
-			}
-			repoOpt.Page = resp.NextPage
+		if ctx.Err() != nil {
+			return nil, nil, ctx.Err()
 		}
-		var unmanagedRepos []string
-		for _, repo := range actualRepos {
-			repoName := strings.ToLower(repo.GetName())
-			if !st.ManagedRepos[repoName] {
-				unmanagedRepos = append(unmanagedRepos, repo.GetName())
-				if cfg.App.DeleteUnmanagedRepos {
-					out = append(out, util.Change{
-						Scope:  "repo",
-						Target: repoName,
-						Action: "delete",
-						Details: map[string]any{
-							"org":  org,
-							"repo": repo.GetName(),
-						},
-					})
-				}
-			}
+		changes, w, err := planRepoCleanups(ctx, c, cfg, st)
+		if err != nil {
+			return nil, nil, err
 		}
-		// Add warning if configured and there are unmanaged repos
-		if cfg.App.DryWarnings.WarnUnmanagedRepos && len(unmanagedRepos) > 0 {
-			warnings = append(warnings, fmt.Sprintf("Found %d unmanaged repositories: %v", len(unmanagedRepos), unmanagedRepos))
-		}
+		out = append(out, changes...)
+		warnings = append(warnings, w...)
 	}
 
 	return out, warnings, nil
@@ -828,21 +920,39 @@ func containsErrorMessage(ghErr *github.ErrorResponse, searchTerms ...string) bo
 
 // ---- apply ----
 
+// applyHandlers maps change keys (scope:action) to handler functions.
+var applyHandlers = map[string]func(context.Context, *gh.Client, util.Change) error{
+	"team:create":          applyTeamCreate,
+	"team:update":          applyTeamUpdate,
+	"team:delete":          applyTeamDelete,
+	"team-member:ensure":   applyTeamMemberEnsure,
+	"repo:ensure":          applyRepoEnsure,
+	"team-repo:grant":      applyTeamRepoGrant,
+	"repo-file:ensure":     applyRepoFileEnsure,
+	"repo-topics:ensure":   applyRepoTopicsEnsure,
+	"repo-template:ensure": applyRepoTemplateEnsure,
+	"repo-pin:ensure":      applyRepoPinEnsure,
+	"repo:delete":          applyRepoDelete,
+	"org-member:remove":    applyOrgMemberRemove,
+}
+
 func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) error {
 	precedence := map[string]int{
-		"custom-role:create":   5, // Create custom roles first, before teams/repos
-		"custom-role:update":   5,
-		"team:create":          10,
-		"repo:ensure":          10,
-		"team-repo:grant":      20,
-		"team-member:ensure":   30,
-		"repo-file:ensure":     40,
-		"repo-topics:ensure":   45,
-		"repo-template:ensure": 46,
-		"repo-pin:ensure":      47,
-		"team:delete":          90,
-		"repo:delete":          90,
-		"custom-role:delete":   95, // Delete custom roles last
+		"custom-role:create":   precedenceCustomRoleCreate,
+		"custom-role:update":   precedenceCustomRoleUpdate,
+		"team:create":          precedenceTeamCreate,
+		"team:update":          precedenceTeamUpdate,
+		"repo:ensure":          precedenceRepoEnsure,
+		"team-repo:grant":      precedenceTeamRepoGrant,
+		"team-member:ensure":   precedenceTeamMemberEnsure,
+		"repo-file:ensure":     precedenceRepoFileEnsure,
+		"repo-topics:ensure":   precedenceRepoTopicsEnsure,
+		"repo-template:ensure": precedenceRepoTemplateEnsure,
+		"repo-pin:ensure":      precedenceRepoPinEnsure,
+		"org-member:remove":    precedenceOrgMemberRemove,
+		"team:delete":          precedenceTeamDelete,
+		"repo:delete":          precedenceRepoDelete,
+		"custom-role:delete":   precedenceCustomRoleDelete,
 	}
 
 	sort.Slice(changes, func(i, j int) bool {
@@ -857,250 +967,29 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 	}
 
 	for _, ch := range changes {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		// Skip custom role changes - already handled above
 		if strings.HasPrefix(ch.Scope, "custom-role") {
 			continue
 		}
 
-		switch ch.Scope + ":" + ch.Action {
-		case "team:create":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			name := fmt.Sprint(d["name"])
-			var privacyPtr, descPtr *string
-			if v, ok := d["privacy"]; ok && fmt.Sprint(v) != "" {
-				pv := fmt.Sprint(v)
-				privacyPtr = github.Ptr(pv)
-			}
-			if v, ok := d["description"]; ok && fmt.Sprint(v) != "" {
-				dv := fmt.Sprint(v)
-				descPtr = github.Ptr(dv)
-			}
-			newTeam := github.NewTeam{Name: name, Privacy: privacyPtr, Description: descPtr}
-			_, _, err := c.REST.Teams.CreateTeam(ctx, org, newTeam)
-			if err != nil {
-				return fmt.Errorf("create team %q: %w", name, err)
-			}
-
-		case "team:delete":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			slug := fmt.Sprint(d["slug"])
-			_, err := c.REST.Teams.DeleteTeamBySlug(ctx, org, slug)
-			if err != nil {
-				return fmt.Errorf("delete team %s: %w", slug, err)
-			}
-
-		case "team-member:ensure":
-			d, ok := ch.Details.(teamMemberChange)
-			if !ok {
-				return fmt.Errorf("invalid details for team-member:ensure")
-			}
-			_, _, err := c.REST.Teams.AddTeamMembershipBySlug(ctx, d.Org, d.Slug, d.User, &github.TeamAddTeamMembershipOptions{Role: d.Role})
-			if err != nil {
-				return fmt.Errorf("add %s as %s to %s: %w", d.User, d.Role, d.Slug, err)
-			}
-
-		case "repo:ensure":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			name := fmt.Sprint(d["name"])
-			private := true
-			if v, ok := d["private"]; ok {
-				private = fmt.Sprint(v) != "false"
-			}
-			isTemplate := false
-			if v, ok := d["template"]; ok {
-				isTemplate = fmt.Sprint(v) == "true"
-			}
-
-			// Check if this repo should be created from a template
-			if fromTemplate, ok := d["from"]; ok && fromTemplate != "" {
-				templateRef := fmt.Sprint(fromTemplate)
-				// Parse template reference (supports "repo-name" or "org/repo-name")
-				templateOrg := org
-				templateRepo := templateRef
-				if strings.Contains(templateRef, "/") {
-					parts := strings.SplitN(templateRef, "/", 2)
-					if len(parts) == 2 {
-						templateOrg = parts[0]
-						templateRepo = parts[1]
-					}
-				}
-
-				// Create repository from template
-				_, _, err := c.REST.Repositories.CreateFromTemplate(ctx, templateOrg, templateRepo, &github.TemplateRepoRequest{
-					Name:    github.Ptr(name),
-					Owner:   github.Ptr(org),
-					Private: github.Ptr(private),
-				})
-				if err != nil {
-					var ghErr *github.ErrorResponse
-					if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == 422 {
-						// already exists race
-					} else {
-						return fmt.Errorf("create repo %s/%s from template %s/%s: %w", org, name, templateOrg, templateRepo, err)
-					}
-				}
-			} else {
-				// Create regular repository
-				_, _, err := c.REST.Repositories.Create(ctx, org, &github.Repository{
-					Name:                github.Ptr(name),
-					Private:             github.Ptr(private),
-					IsTemplate:          github.Ptr(isTemplate),
-					AllowAutoMerge:      github.Ptr(true),
-					AllowMergeCommit:    github.Ptr(false),
-					DeleteBranchOnMerge: github.Ptr(true),
-					HasIssues:           github.Ptr(true),
-				})
-				if err != nil {
-					var ghErr *github.ErrorResponse
-					if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == 422 {
-						// already exists race
-					} else {
-						return fmt.Errorf("create repo %s/%s: %w", org, name, err)
-					}
-				}
-			}
-
-		case "team-repo:grant":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			slug := fmt.Sprint(d["slug"])
-			repo := fmt.Sprint(d["repo"])
-			perm := normalizePermission(fmt.Sprint(d["permission"]))
-			_, err := c.REST.Teams.AddTeamRepoBySlug(ctx, org, slug, org, repo, &github.TeamAddTeamRepoOptions{Permission: perm})
-			if err != nil {
-				return fmt.Errorf("grant %s on %s/%s to %s: %w", perm, org, repo, slug, err)
-			}
-
-		case "repo-file:ensure":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			repo := fmt.Sprint(d["repo"])
-			path := fmt.Sprint(d["path"])
-			content := []byte(fmt.Sprint(d["content"]))
-			message := fmt.Sprint(d["message"])
-			branch := fmt.Sprint(d["branch"])
-			file, _, resp, err := c.REST.Repositories.GetContents(ctx, org, repo, path, &github.RepositoryContentGetOptions{Ref: branch})
-			if err != nil && (resp == nil || resp.StatusCode != http.StatusNotFound) {
-				return fmt.Errorf("check %s/%s:%s: %w", org, repo, path, err)
-			}
-			if file == nil {
-				_, _, err := c.REST.Repositories.CreateFile(ctx, org, repo, path, &github.RepositoryContentFileOptions{
-					Message: github.Ptr(message),
-					Content: content,
-					Branch:  github.Ptr(branch),
-				})
-				if err != nil {
-					// Handle race condition: If repository was created from template,
-					// files may exist even though GetContents returned nil.
-					// This can happen due to timing - template files are copied asynchronously.
-					// GitHub returns 422 with "sha wasn't supplied" or 409 with "reference already exists"
-					// when trying to create a file that already exists.
-					var ghErr *github.ErrorResponse
-					if errors.As(err, &ghErr) && ghErr.Response != nil {
-						// Check if this is a race condition error
-						isRaceCondition := (ghErr.Response.StatusCode == 422 && containsErrorMessage(ghErr, "sha", "wasn't supplied")) ||
-							(ghErr.Response.StatusCode == 409 && containsErrorMessage(ghErr, "reference already exists"))
-
-						if !isRaceCondition {
-							return fmt.Errorf("create file %s in %s/%s: %w", path, org, repo, err)
-						}
-						// File already exists (likely from template), which is what we want - skip error
-					} else {
-						return fmt.Errorf("create file %s in %s/%s: %w", path, org, repo, err)
-					}
-				}
-			} else {
-				// optional: update if differs (skipped for now)
-			}
-
-		case "repo-topics:ensure":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			repo := fmt.Sprint(d["repo"])
-
-			// Handle topics - may come as []string or []any from planning
-			var topicsRaw []string
-			if v, ok := d["topics"]; ok {
-				switch topics := v.(type) {
-				case []string:
-					topicsRaw = topics
-				case []any:
-					for _, t := range topics {
-						if tStr, ok := t.(string); ok {
-							topicsRaw = append(topicsRaw, tStr)
-						}
-					}
-				default:
-					return fmt.Errorf("invalid type for topics for %s/%s: %T", org, repo, v)
-				}
-			}
-
-			_, _, err := c.REST.Repositories.ReplaceAllTopics(ctx, org, repo, topicsRaw)
-			if err != nil {
-				return fmt.Errorf("set topics on %s/%s: %w", org, repo, err)
-			}
-
-		case "repo-template:ensure":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			repo := fmt.Sprint(d["repo"])
-
-			// Mark repository as a template
-			_, _, err := c.REST.Repositories.Edit(ctx, org, repo, &github.Repository{
-				IsTemplate: github.Ptr(true),
-			})
-			if err != nil {
-				return fmt.Errorf("mark repo %s/%s as template: %w", org, repo, err)
-			}
-
-		case "repo-pin:ensure":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			repo := fmt.Sprint(d["repo"])
-
-			// Note: GitHub's GraphQL API does not support pinning repositories to organization profiles.
-			// The pinRepository mutation only works for user profiles, not organizations.
-			// This is a known limitation of the GitHub API.
-			// See: https://github.com/orgs/community/discussions/184845
-			util.Warnf("Skipping pin for %s/%s: GitHub API does not support pinning to organization profiles", org, repo)
-
-		case "repo:delete":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			repo := fmt.Sprint(d["repo"])
-			_, err := c.REST.Repositories.Delete(ctx, org, repo)
-			if err != nil {
-				return fmt.Errorf("delete repo %s/%s: %w", org, repo, err)
-			}
-
-		default:
-			// no-op for unhandled changes
+		if err := gh.RespectRate(ctx, c.REST); err != nil {
+			util.Warnf("rate limit check failed: %v", err)
 		}
+
+		key := ch.Scope + ":" + ch.Action
+		handler, ok := applyHandlers[key]
+		if !ok {
+			util.Warnf("no handler for change %s:%s on %s", ch.Scope, ch.Action, ch.Target)
+			continue
+		}
+		if err := handler(ctx, c, ch); err != nil {
+			util.Audit(ch.Scope, ch.Target, ch.Action, "error")
+			return err
+		}
+		util.Audit(ch.Scope, ch.Target, ch.Action, "ok")
 	}
 	return nil
-}
-
-func normalizePermission(p string) string {
-	// Use lowercase comparison to match built-in roles case-insensitively
-	switch strings.ToLower(p) {
-	case "read", "pull":
-		return "pull"
-	case "triage":
-		return "triage"
-	case "write", "push":
-		return "push"
-	case "maintain":
-		return "maintain"
-	case "admin":
-		return "admin"
-	default:
-		// For custom repository roles (GitHub Enterprise Cloud), pass through the role name as-is
-		// preserving the original case since custom role names may be case-sensitive
-		// Custom roles must be created in the GitHub organization before use
-		// Examples: "actions-manager", "release-manager", "runner-admin"
-		return p
-	}
 }

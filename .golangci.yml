@@ -34,7 +34,6 @@ linters-settings:
     confidence: 0.8
   gosec:
     excludes:
-      - G204 # Audit use of command execution - we need this for bash commands
       - G304 # Audit use of file path - we need this for config files
   goimports:
     local-prefixes: github.com/DragonSecurity/gomgr
@@ -52,6 +51,6 @@ issues:
 
 output:
   formats:
-    - format: colored-line-number
+    colored-line-number: {}
   print-issued-lines: true
   print-linter-name: true

@@ -14,6 +14,8 @@ var outFile string
 var setupTeamCmd = &cobra.Command{
 	Use:   "setup-team",
 	Short: "Bootstrap a team YAML file for a given team name",
+	Example: `  gomgr setup-team -c ./config -n "Backend"
+  gomgr setup-team -n "Frontend" -f ./teams/frontend.yaml`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		slug := strings.ToLower(strings.ReplaceAll(teamName, " ", "-"))
 		path := outFile

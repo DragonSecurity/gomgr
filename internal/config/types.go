@@ -1,5 +1,7 @@
 package config
 
+import "strings"
+
 type AppConfig struct {
 	AppID      int64  `yaml:"app_id,omitempty"`
 	PrivateKey string `yaml:"private_key,omitempty"`
@@ -66,4 +68,12 @@ type Root struct {
 	App  AppConfig    `yaml:"app"`
 	Org  OrgConfig    `yaml:"org"`
 	Team []TeamConfig `yaml:"teams"`
+}
+
+// ResolvedSlug returns the team's slug, deriving it from the name if not explicitly set.
+func (t TeamConfig) ResolvedSlug() string {
+	if t.Slug != "" {
+		return t.Slug
+	}
+	return strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
 }

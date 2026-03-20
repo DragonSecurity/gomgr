@@ -177,6 +177,10 @@ func applyCustomRoleChanges(ctx context.Context, c *gh.Client, changes []util.Ch
 			continue
 		}
 
+		if err := gh.RespectRate(ctx, c.REST); err != nil {
+			util.Warnf("rate limit check failed: %v", err)
+		}
+
 		d, ok := ch.Details.(customRoleChange)
 		if !ok {
 			return fmt.Errorf("invalid details for custom-role change")
@@ -195,6 +199,7 @@ func applyCustomRoleChanges(ctx context.Context, c *gh.Client, changes []util.Ch
 
 			_, _, err := c.REST.Organizations.CreateCustomRepoRole(ctx, d.Org, opts)
 			if err != nil {
+				util.Audit(ch.Scope, ch.Target, ch.Action, "error")
 				return fmt.Errorf("create custom role %q: %w", d.Name, err)
 			}
 
@@ -210,15 +215,19 @@ func applyCustomRoleChanges(ctx context.Context, c *gh.Client, changes []util.Ch
 
 			_, _, err := c.REST.Organizations.UpdateCustomRepoRole(ctx, d.Org, d.ID, opts)
 			if err != nil {
+				util.Audit(ch.Scope, ch.Target, ch.Action, "error")
 				return fmt.Errorf("update custom role %q (ID %d): %w", d.Name, d.ID, err)
 			}
 
 		case "custom-role:delete":
 			_, err := c.REST.Organizations.DeleteCustomRepoRole(ctx, d.Org, d.ID)
 			if err != nil {
+				util.Audit(ch.Scope, ch.Target, ch.Action, "error")
 				return fmt.Errorf("delete custom role %q (ID %d): %w", d.Name, d.ID, err)
 			}
 		}
+
+		util.Audit(ch.Scope, ch.Target, ch.Action, "ok")
 	}
 
 	return nil
