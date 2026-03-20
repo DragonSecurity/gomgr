@@ -934,9 +934,9 @@ func TestPlanCleanups(t *testing.T) {
 	c := newTestClient(t, server)
 	cfg := &config.Root{
 		App: config.AppConfig{
-			Org:                    "myorg",
+			Org:                     "myorg",
 			DeleteUnconfiguredTeams: true,
-			DeleteUnmanagedRepos:   true,
+			DeleteUnmanagedRepos:    true,
 		},
 	}
 	desired := map[string]config.TeamConfig{
