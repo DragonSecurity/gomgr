@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/spf13/cobra"
 
@@ -42,7 +41,7 @@ var syncCmd = &cobra.Command{
 			return err
 		}
 		if appInfo != "" {
-			log.Printf("auth: %s", appInfo)
+			util.Infof("auth: %s", appInfo)
 		}
 
 		plan, err := insync.BuildPlan(ctx, client, cfg)
@@ -56,7 +55,7 @@ var syncCmd = &cobra.Command{
 
 		if dryRun {
 			util.PrintSummary(plan)
-			log.Println("dry-run: no changes applied")
+			util.Infof("dry-run: no changes applied")
 			return nil
 		}
 		return insync.Apply(ctx, client, plan)

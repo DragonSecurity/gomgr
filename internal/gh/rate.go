@@ -3,10 +3,11 @@ package gh
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/google/go-github/v84/github"
+
+	"github.com/DragonSecurity/gomgr/internal/util"
 )
 
 func RespectRate(ctx context.Context, c *github.Client) error {
@@ -19,7 +20,7 @@ func RespectRate(ctx context.Context, c *github.Client) error {
 	}
 	if core := r.GetCore(); core.Remaining < 50 {
 		sleep := time.Until(core.Reset.Time) + time.Second
-		log.Printf("rate-limit: sleeping %s until %s", sleep, core.Reset.Time)
+		util.Infof("rate-limit: sleeping %s until %s", sleep, core.Reset.Time)
 		select {
 		case <-time.After(sleep):
 		case <-ctx.Done():

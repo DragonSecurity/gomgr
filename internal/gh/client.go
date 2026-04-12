@@ -24,9 +24,13 @@ import (
 type Client struct {
 	REST       *github.Client
 	httpClient *http.Client
+	// GraphQLURL is the endpoint used by DoGraphQL. Empty means GitHub's public
+	// GraphQL API. Tests may override it to point at a local server.
+	GraphQLURL string
 }
 
 const defaultMaxRetries = 3
+const defaultGraphQLURL = "https://api.github.com/graphql"
 
 func NewClientFromEnv(ctx context.Context, app config.AppConfig) (*Client, string, error) {
 	// PAT
@@ -66,18 +70,37 @@ func NewClientFromEnv(ctx context.Context, app config.AppConfig) (*Client, strin
 }
 
 func maybeReadPEM(s string) ([]byte, error) {
+	var (
+		data   []byte
+		source string
+	)
 	if strings.Contains(s, "BEGIN") {
-		return []byte(s), nil
+		data = []byte(s)
+		source = "inline key"
+	} else {
+		b, err := os.ReadFile(s)
+		if err != nil {
+			return nil, err
+		}
+		data = b
+		source = s
 	}
-	b, err := os.ReadFile(s)
-	if err != nil {
-		return nil, err
-	}
-	block, _ := pem.Decode(b)
+	block, _ := pem.Decode(data)
 	if block == nil {
-		return nil, fmt.Errorf("invalid PEM at %s", s)
+		return nil, fmt.Errorf("invalid PEM at %s", source)
 	}
-	return b, nil
+	if !isPrivateKeyBlockType(block.Type) {
+		return nil, fmt.Errorf("invalid PEM at %s: expected a private key block, got %q", source, block.Type)
+	}
+	return data, nil
+}
+
+func isPrivateKeyBlockType(t string) bool {
+	switch t {
+	case "RSA PRIVATE KEY", "PRIVATE KEY", "EC PRIVATE KEY":
+		return true
+	}
+	return false
 }
 
 func firstNonEmpty(a, b string) string {
@@ -111,7 +134,11 @@ func (c *Client) DoGraphQL(ctx context.Context, query string, variables map[stri
 		return fmt.Errorf("marshal graphql request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.github.com/graphql", bytes.NewReader(body))
+	url := c.GraphQLURL
+	if url == "" {
+		url = defaultGraphQLURL
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create graphql request: %w", err)
 	}

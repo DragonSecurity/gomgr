@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"sort"
@@ -938,53 +937,22 @@ func containsErrorMessage(ghErr *github.ErrorResponse, searchTerms ...string) bo
 
 // ---- apply ----
 
-// applyHandlers maps change keys (scope:action) to handler functions.
-var applyHandlers = map[string]func(context.Context, *gh.Client, util.Change) error{
-	"team:create":          applyTeamCreate,
-	"team:update":          applyTeamUpdate,
-	"team:delete":          applyTeamDelete,
-	"team-member:ensure":   applyTeamMemberEnsure,
-	"repo:ensure":          applyRepoEnsure,
-	"team-repo:grant":      applyTeamRepoGrant,
-	"repo-file:ensure":     applyRepoFileEnsure,
-	"repo-topics:ensure":   applyRepoTopicsEnsure,
-	"repo-template:ensure": applyRepoTemplateEnsure,
-	"repo-pin:ensure":      applyRepoPinEnsure,
-	"repo:delete":          applyRepoDelete,
-	"org-member:remove":    applyOrgMemberRemove,
+func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) error {
+	return applyChangesWith(ctx, c, changes, defaultRegistry)
 }
 
-func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) error {
-	precedence := map[string]int{
-		"custom-role:create":   precedenceCustomRoleCreate,
-		"custom-role:update":   precedenceCustomRoleUpdate,
-		"team:create":          precedenceTeamCreate,
-		"team:update":          precedenceTeamUpdate,
-		"repo:ensure":          precedenceRepoEnsure,
-		"team-repo:grant":      precedenceTeamRepoGrant,
-		"team-member:ensure":   precedenceTeamMemberEnsure,
-		"repo-file:ensure":     precedenceRepoFileEnsure,
-		"repo-topics:ensure":   precedenceRepoTopicsEnsure,
-		"repo-template:ensure": precedenceRepoTemplateEnsure,
-		"repo-pin:ensure":      precedenceRepoPinEnsure,
-		"org-member:remove":    precedenceOrgMemberRemove,
-		"team:delete":          precedenceTeamDelete,
-		"repo:delete":          precedenceRepoDelete,
-		"custom-role:delete":   precedenceCustomRoleDelete,
-	}
-
-	sort.Slice(changes, func(i, j int) bool {
-		ai := changes[i].Scope + ":" + changes[i].Action
-		aj := changes[j].Scope + ":" + changes[j].Action
-		return precedence[ai] < precedence[aj]
+func applyChangesWith(ctx context.Context, c *gh.Client, changes []util.Change, reg *HandlerRegistry) error {
+	sort.SliceStable(changes, func(i, j int) bool {
+		return reg.Precedence(changes[i].Scope, changes[i].Action) <
+			reg.Precedence(changes[j].Scope, changes[j].Action)
 	})
 
-	// Apply custom role changes first
+	// Apply custom role changes first — they have their own dispatcher.
 	if err := applyCustomRoleChanges(ctx, c, changes); err != nil {
 		return err
 	}
 
-	// Count non-custom-role changes for progress display
+	// Count non-custom-role changes for progress display.
 	total := 0
 	for _, ch := range changes {
 		if !strings.HasPrefix(ch.Scope, "custom-role") {
@@ -997,25 +965,23 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		// Skip custom role changes - already handled above
 		if strings.HasPrefix(ch.Scope, "custom-role") {
 			continue
 		}
 
 		applied++
-		log.Printf("[%d/%d] %s:%s %s", applied, total, ch.Scope, ch.Action, ch.Target)
+		util.Infof("[%d/%d] %s:%s %s", applied, total, ch.Scope, ch.Action, ch.Target)
 
 		if err := gh.RespectRate(ctx, c.REST); err != nil {
 			util.Warnf("rate limit check failed: %v", err)
 		}
 
-		key := ch.Scope + ":" + ch.Action
-		handler, ok := applyHandlers[key]
+		handler, ok := reg.Lookup(ch.Scope, ch.Action)
 		if !ok {
 			util.Warnf("no handler for change %s:%s on %s", ch.Scope, ch.Action, ch.Target)
 			continue
 		}
-		if err := handler(ctx, c, ch); err != nil {
+		if err := handler.Apply(ctx, c, ch); err != nil {
 			util.Audit(ch.Scope, ch.Target, ch.Action, "error")
 			return err
 		}

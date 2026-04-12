@@ -2,9 +2,10 @@ package util
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
@@ -93,16 +94,12 @@ func TestAudit_Disabled(t *testing.T) {
 }
 
 func TestEnableDebug(t *testing.T) {
-	oldOutput := log.Writer()
-	oldFlags := log.Flags()
-	defer func() {
-		log.SetOutput(oldOutput)
-		log.SetFlags(oldFlags)
-	}()
+	oldLevel := levelVar.Level()
+	defer levelVar.Set(oldLevel)
 
 	EnableDebug()
 
-	if log.Flags()&log.Lshortfile == 0 {
-		t.Error("expected Lshortfile flag after EnableDebug")
+	if !Logger().Enabled(context.Background(), slog.LevelDebug) {
+		t.Error("expected debug level enabled after EnableDebug")
 	}
 }

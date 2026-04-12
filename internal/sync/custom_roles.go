@@ -3,7 +3,6 @@ package sync
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/google/go-github/v84/github"
@@ -179,7 +178,7 @@ func applyCustomRoleChanges(ctx context.Context, c *gh.Client, changes []util.Ch
 			continue
 		}
 
-		log.Printf("custom-role:%s %s", ch.Action, ch.Target)
+		util.Infof("custom-role:%s %s", ch.Action, ch.Target)
 
 		if err := gh.RespectRate(ctx, c.REST); err != nil {
 			util.Warnf("rate limit check failed: %v", err)
