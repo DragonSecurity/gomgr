@@ -12,7 +12,7 @@ import (
 )
 
 func TestBuildPlan_Empty(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Return empty lists for all endpoints
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode([]map[string]any{})
@@ -88,7 +88,7 @@ func TestApply_Empty(t *testing.T) {
 	}
 }
 
-func TestApply_ContextCancelled(t *testing.T) {
+func TestApply_ContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -99,6 +99,6 @@ func TestApply_ContextCancelled(t *testing.T) {
 	}
 	err := Apply(ctx, nil, plan)
 	if err == nil {
-		t.Fatal("expected error for cancelled context")
+		t.Fatal("expected error for canceled context")
 	}
 }

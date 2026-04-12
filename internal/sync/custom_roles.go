@@ -3,12 +3,14 @@ package sync
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
+
+	"github.com/google/go-github/v84/github"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
 	"github.com/DragonSecurity/gomgr/internal/util"
-	"github.com/google/go-github/v83/github"
 )
 
 // customRoleChange represents a custom role modification
@@ -176,6 +178,8 @@ func applyCustomRoleChanges(ctx context.Context, c *gh.Client, changes []util.Ch
 		if !strings.HasPrefix(ch.Scope, "custom-role") {
 			continue
 		}
+
+		log.Printf("custom-role:%s %s", ch.Action, ch.Target)
 
 		if err := gh.RespectRate(ctx, c.REST); err != nil {
 			util.Warnf("rate limit check failed: %v", err)

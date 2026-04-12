@@ -14,10 +14,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/bradleyfalzon/ghinstallation/v2"
-	"github.com/google/go-github/v83/github"
+	"github.com/google/go-github/v84/github"
 	"golang.org/x/oauth2"
+
+	"github.com/DragonSecurity/gomgr/internal/config"
 )
 
 type Client struct {
@@ -25,11 +26,14 @@ type Client struct {
 	httpClient *http.Client
 }
 
+const defaultMaxRetries = 3
+
 func NewClientFromEnv(ctx context.Context, app config.AppConfig) (*Client, string, error) {
 	// PAT
 	if tok := os.Getenv("GITHUB_TOKEN"); tok != "" {
 		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: tok})
 		tc := oauth2.NewClient(ctx, ts)
+		tc.Transport = newRetryTransport(tc.Transport, defaultMaxRetries)
 		return &Client{REST: github.NewClient(tc), httpClient: tc}, "PAT", nil
 	}
 	// App
@@ -57,7 +61,7 @@ func NewClientFromEnv(ctx context.Context, app config.AppConfig) (*Client, strin
 		return nil, "", fmt.Errorf("find installation for org %q: %w", app.Org, err)
 	}
 	itr := ghinstallation.NewFromAppsTransport(atr, inst.GetID())
-	httpClient := &http.Client{Transport: itr, Timeout: 30 * time.Second}
+	httpClient := &http.Client{Transport: newRetryTransport(itr, defaultMaxRetries), Timeout: 30 * time.Second}
 	return &Client{REST: github.NewClient(httpClient), httpClient: httpClient}, "Github App", nil
 }
 
@@ -117,7 +121,7 @@ func (c *Client) DoGraphQL(ctx context.Context, query string, variables map[stri
 	if err != nil {
 		return fmt.Errorf("execute graphql request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

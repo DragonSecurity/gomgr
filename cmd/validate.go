@@ -3,8 +3,9 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/DragonSecurity/gomgr/internal/config"
 )
 
 var validateCmd = &cobra.Command{
@@ -12,7 +13,7 @@ var validateCmd = &cobra.Command{
 	Short: "Validate configuration without connecting to GitHub",
 	Example: `  gomgr validate -c ./config
   gomgr validate --config /path/to/config`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		if cfgDir == "" {
 			return fmt.Errorf("--config/-c flag is required")
 		}

@@ -7,9 +7,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/go-github/v84/github"
+
 	"github.com/DragonSecurity/gomgr/internal/gh"
 	"github.com/DragonSecurity/gomgr/internal/util"
-	"github.com/google/go-github/v83/github"
 )
 
 // extractDetails performs a safe type assertion on ch.Details to map[string]any.
@@ -140,11 +141,10 @@ func applyRepoEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
 		})
 		if err != nil {
 			var ghErr *github.ErrorResponse
-			if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == 422 {
-				// already exists race
-			} else {
+			if !errors.As(err, &ghErr) || ghErr.Response == nil || ghErr.Response.StatusCode != 422 {
 				return fmt.Errorf("create repo %s/%s from template %s/%s: %w", org, name, templateOrg, templateRepo, err)
 			}
+			// already exists race — ignore
 		}
 	} else {
 		// Create regular repository
@@ -159,11 +159,10 @@ func applyRepoEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
 		})
 		if err != nil {
 			var ghErr *github.ErrorResponse
-			if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == 422 {
-				// already exists race
-			} else {
+			if !errors.As(err, &ghErr) || ghErr.Response == nil || ghErr.Response.StatusCode != 422 {
 				return fmt.Errorf("create repo %s/%s: %w", org, name, err)
 			}
+			// already exists race — ignore
 		}
 	}
 	return nil
@@ -317,16 +316,16 @@ func applyOrgMemberRemove(ctx context.Context, c *gh.Client, ch util.Change) err
 
 func normalizePermission(p string) string {
 	switch strings.ToLower(p) {
-	case "read", "pull":
-		return "pull"
-	case "triage":
-		return "triage"
-	case "write", "push":
-		return "push"
-	case "maintain":
-		return "maintain"
-	case "admin":
-		return "admin"
+	case "read", permPull:
+		return permPull
+	case permTriage:
+		return permTriage
+	case "write", permPush:
+		return permPush
+	case permMaintain:
+		return permMaintain
+	case permAdmin:
+		return permAdmin
 	default:
 		return p
 	}

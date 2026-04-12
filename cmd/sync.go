@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/spf13/cobra"
+
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
 	insync "github.com/DragonSecurity/gomgr/internal/sync"
 	"github.com/DragonSecurity/gomgr/internal/util"
-	"github.com/spf13/cobra"
 )
 
 var syncCmd = &cobra.Command{
@@ -18,7 +19,7 @@ var syncCmd = &cobra.Command{
 	Example: `  gomgr sync -c ./config
   gomgr sync -c ./config --dry
   gomgr sync -c ./config --timeout 5m --audit-log`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		if cfgDir == "" {
 			return fmt.Errorf("--config/-c flag is required")
 		}

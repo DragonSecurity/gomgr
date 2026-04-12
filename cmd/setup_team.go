@@ -4,8 +4,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/DragonSecurity/gomgr/internal/config"
 )
 
 var teamName string
@@ -16,7 +17,7 @@ var setupTeamCmd = &cobra.Command{
 	Short: "Bootstrap a team YAML file for a given team name",
 	Example: `  gomgr setup-team -c ./config -n "Backend"
   gomgr setup-team -n "Frontend" -f ./teams/frontend.yaml`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		slug := strings.ToLower(strings.ReplaceAll(teamName, " ", "-"))
 		path := outFile
 		if path == "" {

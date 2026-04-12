@@ -7,10 +7,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/google/go-github/v84/github"
+
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
 	"github.com/DragonSecurity/gomgr/internal/util"
-	"github.com/google/go-github/v83/github"
 )
 
 // newTestClient creates a gh.Client backed by the given httptest.Server.
@@ -300,7 +301,7 @@ func TestApplyHandlers_InvalidDetails(t *testing.T) {
 	for key, handler := range handlers {
 		t.Run(key, func(t *testing.T) {
 			ch := util.Change{
-				Scope:   key[:len(key)-len(key)+4], // doesn't matter much
+				Scope:   key[:4], // doesn't matter much
 				Target:  "test",
 				Action:  "test",
 				Details: "not-a-map", // wrong type
@@ -562,7 +563,7 @@ func TestApplyOrgMemberRemove(t *testing.T) {
 }
 
 func TestApplyOrgMemberRemove_Error(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]any{"message": "Not Found"})
 	}))

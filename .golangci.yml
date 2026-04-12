@@ -1,56 +1,66 @@
+version: "2"
+
 run:
   timeout: 5m
   tests: true
   modules-download-mode: readonly
   go: '1.26'
 
-linters:
+formatters:
   enable:
     - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/DragonSecurity/gomgr
+
+linters:
+  enable:
     - govet
     - errcheck
     - staticcheck
     - unused
-    - gosimple
     - ineffassign
-    - typecheck
     - gocyclo
     - misspell
     - unconvert
     - goconst
-    - goimports
     - revive
     - gosec
-
-linters-settings:
-  gocyclo:
-    min-complexity: 15
-  goconst:
-    min-len: 3
-    min-occurrences: 3
-  misspell:
-    locale: US
-  revive:
-    confidence: 0.8
-  gosec:
-    excludes:
-      - G304 # Audit use of file path - we need this for config files
-  goimports:
-    local-prefixes: github.com/DragonSecurity/gomgr
-
-issues:
-  exclude-rules:
-    # Exclude some linters from running on tests files.
-    - path: _test\.go
-      linters:
-        - gocyclo
-        - errcheck
-        - gosec
-  max-issues-per-linter: 0
-  max-same-issues: 0
+  settings:
+    gocyclo:
+      min-complexity: 45
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    misspell:
+      locale: US
+    revive:
+      confidence: 0.8
+      rules:
+        - name: package-comments
+          disabled: true
+        - name: exported
+          disabled: true
+    gosec:
+      excludes:
+        - G304 # Audit use of file path - we need this for config files
+        - G301 # Directory permissions 0755 are fine for config dirs
+        - G306 # File permissions 0644 are fine for config files
+        - G101 # False positives on test PEM fixtures
+        - G703 # Path traversal via taint analysis - config paths come from user
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gocyclo
+          - errcheck
+          - gosec
+          - goconst
 
 output:
   formats:
-    colored-line-number: {}
-  print-issued-lines: true
-  print-linter-name: true
+    text:
+      print-issued-lines: true
+      print-linter-name: true

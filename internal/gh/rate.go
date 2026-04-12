@@ -6,11 +6,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/google/go-github/v83/github"
+	"github.com/google/go-github/v84/github"
 )
 
 func RespectRate(ctx context.Context, c *github.Client) error {
-	r, _, err := c.RateLimits(ctx)
+	r, _, err := c.RateLimit.Get(ctx)
 	if err != nil {
 		return fmt.Errorf("rate limit check: %w", err)
 	}

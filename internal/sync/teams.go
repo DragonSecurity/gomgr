@@ -4,16 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/google/go-github/v84/github"
+
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
 	"github.com/DragonSecurity/gomgr/internal/templates"
 	"github.com/DragonSecurity/gomgr/internal/util"
-	"github.com/google/go-github/v83/github"
 )
 
 const defaultPerPage = 100
@@ -23,6 +25,15 @@ var validTopicRe = regexp.MustCompile(`^[a-z0-9-]+$`)
 const (
 	roleMaintainer = "maintainer"
 	roleMember     = "member"
+)
+
+// Repository permission levels used across planning and apply.
+const (
+	permPull     = "pull"
+	permTriage   = "triage"
+	permPush     = "push"
+	permMaintain = "maintain"
+	permAdmin    = "admin"
 )
 
 const (
@@ -163,7 +174,7 @@ func parseTemplateRef(ref, defaultOrg string) (org, repo string) {
 // resolveTemplate resolves template inheritance for a repository configuration.
 // If the repo has a "from" field, it looks up the template repository and merges settings.
 // Topics are combined (union), template flag is not inherited, and permission can be overridden.
-func resolveTemplate(repoName string, settings repoSettings, allRepos map[string]repoSettings, defaultOrg string) (repoSettings, error) {
+func resolveTemplate(_ string, settings repoSettings, allRepos map[string]repoSettings, defaultOrg string) (repoSettings, error) {
 	if settings.from == "" {
 		return settings, nil
 	}
@@ -239,7 +250,7 @@ func paginate(fn func(opts *github.ListOptions) (*github.Response, error)) error
 
 // ---- planning ----
 
-func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) ([]util.Change, map[string]config.TeamConfig, error) {
+func planTeams(_ context.Context, _ *gh.Client, cfg *config.Root, st *State) ([]util.Change, map[string]config.TeamConfig, error) {
 	var out []util.Change
 	desired := map[string]config.TeamConfig{}
 
@@ -253,25 +264,14 @@ func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) (
 		desired[slug] = t
 	}
 
-	// list actual teams
-	var actual []*github.Team
-	if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
-		ts, resp, err := c.REST.Teams.ListTeams(ctx, st.Org, opts)
-		if err != nil {
-			return nil, err
-		}
-		actual = append(actual, ts...)
-		return resp, nil
-	}); err != nil {
-		return nil, nil, err
-	}
+	// use prefetched teams
 	actualBySlug := map[string]*github.Team{}
-	for _, t := range actual {
+	for _, t := range st.ActualTeams {
 		actualBySlug[t.GetSlug()] = t
 	}
 
 	// Track state
-	st.CurrentTeams = len(actual)
+	st.CurrentTeams = len(st.ActualTeams)
 	st.DesiredTeams = len(desired)
 
 	for slug, want := range desired {
@@ -422,7 +422,7 @@ func planTeamMembership(ctx context.Context, c *gh.Client, st *State, desiredByS
 }
 
 // collectRepoSettings gathers and validates all repository settings from config.
-func collectRepoSettings(cfg *config.Root, org string) (allSettings map[string]repoSettings, managedRepos map[string]bool, err error) {
+func collectRepoSettings(cfg *config.Root, _ string) (allSettings map[string]repoSettings, managedRepos map[string]bool, err error) {
 	allSettings = map[string]repoSettings{}
 	managedRepos = map[string]bool{}
 
@@ -455,12 +455,17 @@ func resolveAllTemplates(allSettings map[string]repoSettings, org string) (map[s
 	return resolved, nil
 }
 
-// countCurrentPermissions counts the current team-repo permission grants from GitHub.
-func countCurrentPermissions(ctx context.Context, c *gh.Client, cfg *config.Root, org string) (int, error) {
+// teamRepoPermKey is "team-slug/repo-name" (lowercase).
+type teamRepoPermKey = string
+
+// fetchCurrentPermissions fetches the current team-repo permission grants from GitHub.
+// Returns the total count and a map of "team/repo" -> permission string.
+func fetchCurrentPermissions(ctx context.Context, c *gh.Client, cfg *config.Root, org string) (int, map[teamRepoPermKey]string, error) {
 	count := 0
+	permMap := map[teamRepoPermKey]string{}
 	for _, t := range cfg.Team {
 		if ctx.Err() != nil {
-			return 0, ctx.Err()
+			return 0, nil, ctx.Err()
 		}
 		teamSlug := t.ResolvedSlug()
 		if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
@@ -473,35 +478,52 @@ func countCurrentPermissions(ctx context.Context, c *gh.Client, cfg *config.Root
 				return nil, err
 			}
 			count += len(teamRepos)
+			for _, repo := range teamRepos {
+				repoName := strings.ToLower(repo.GetName())
+				perm := extractRepoPerm(repo)
+				permMap[teamSlug+"/"+repoName] = perm
+			}
 			return resp, nil
 		}); err != nil {
-			return 0, fmt.Errorf("count permissions for team %s: %w", teamSlug, err)
+			return 0, nil, fmt.Errorf("fetch permissions for team %s: %w", teamSlug, err)
 		}
 	}
-	return count, nil
+	return count, permMap, nil
+}
+
+// extractRepoPerm returns the highest permission level granted to a team for a repo.
+func extractRepoPerm(repo *github.Repository) string {
+	p := repo.Permissions
+	if p == nil {
+		return ""
+	}
+	switch {
+	case p.Admin != nil && *p.Admin:
+		return permAdmin
+	case p.Maintain != nil && *p.Maintain:
+		return permMaintain
+	case p.Push != nil && *p.Push:
+		return permPush
+	case p.Triage != nil && *p.Triage:
+		return permTriage
+	case p.Pull != nil && *p.Pull:
+		return permPull
+	default:
+		return ""
+	}
 }
 
 func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) ([]util.Change, error) {
 	var out []util.Change
 	org := st.Org
 
+	// use prefetched repos
 	existing := map[string]bool{}
 	existingRepos := map[string]*github.Repository{}
-	repoListOpt := &github.RepositoryListByOrgOptions{ListOptions: github.ListOptions{PerPage: defaultPerPage}, Type: "all"}
-	if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
-		repoListOpt.ListOptions = *opts
-		repos, resp, err := c.REST.Repositories.ListByOrg(ctx, org, repoListOpt)
-		if err != nil {
-			return nil, err
-		}
-		for _, r := range repos {
-			repoName := strings.ToLower(r.GetName())
-			existing[repoName] = true
-			existingRepos[repoName] = r
-		}
-		return resp, nil
-	}); err != nil {
-		return nil, err
+	for _, r := range st.ActualRepos {
+		repoName := strings.ToLower(r.GetName())
+		existing[repoName] = true
+		existingRepos[repoName] = r
 	}
 
 	allRepoSettings, managedRepos, err := collectRepoSettings(cfg, org)
@@ -517,6 +539,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 	desiredTopics := map[string][]string{}
 	desiredPinned := map[string]bool{}
 	desiredTemplates := map[string]bool{}
+	emittedFiles := map[string]bool{} // tracks repo-level file changes to avoid duplicates
 
 	for _, t := range cfg.Team {
 		if ctx.Err() != nil {
@@ -586,7 +609,8 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 				desiredPinned[r] = true
 			}
 
-			if cfg.App.AddDefaultReadme {
+			// Emit file changes only once per repo (skip if already emitted from another team)
+			if cfg.App.AddDefaultReadme && !emittedFiles[r+":README.md"] {
 				readmeContent, err := templates.GenerateReadme(org, repo)
 				if err != nil {
 					return nil, fmt.Errorf("failed to generate README for %s: %w", repo, err)
@@ -604,8 +628,9 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 						"branch":  "main",
 					},
 				})
+				emittedFiles[r+":README.md"] = true
 			}
-			if cfg.App.AddRenovateConfig && cfg.App.RenovateConfig != "" {
+			if cfg.App.AddRenovateConfig && cfg.App.RenovateConfig != "" && !emittedFiles[r+":renovate"] {
 				out = append(out, util.Change{
 					Scope:  "repo-file",
 					Target: r + ":.github/renovate.json",
@@ -619,6 +644,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 						"branch":  "main",
 					},
 				})
+				emittedFiles[r+":renovate"] = true
 			}
 		}
 	}
@@ -708,9 +734,9 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 	st.CurrentRepos = len(existing)
 	st.DesiredRepos = len(managedRepos)
 
-	currentPerms, err := countCurrentPermissions(ctx, c, cfg, org)
+	currentPerms, currentPermMap, err := fetchCurrentPermissions(ctx, c, cfg, org)
 	if err != nil {
-		return nil, fmt.Errorf("count current permissions: %w", err)
+		return nil, fmt.Errorf("fetch current permissions: %w", err)
 	}
 	st.CurrentRepoPerms = currentPerms
 	desiredPermsCount := 0
@@ -719,24 +745,29 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 	}
 	st.DesiredRepoPerms = desiredPermsCount
 
-	return out, nil
+	// Filter out no-op grants where the permission already matches
+	filtered := out[:0]
+	for _, ch := range out {
+		if ch.Scope == "team-repo" && ch.Action == "grant" {
+			d := ch.Details.(map[string]any)
+			slug := d["slug"].(string)
+			repo := strings.ToLower(d["repo"].(string))
+			desired := normalizePermission(d["permission"].(string))
+			current := currentPermMap[slug+"/"+repo]
+			if current == desired {
+				continue // skip, already has correct permission
+			}
+		}
+		filtered = append(filtered, ch)
+	}
+
+	return filtered, nil
 }
 
 // planTeamCleanups generates delete changes for teams not in the desired set.
-func planTeamCleanups(ctx context.Context, c *gh.Client, org string, desired map[string]config.TeamConfig) ([]util.Change, error) {
+func planTeamCleanups(st *State, org string, desired map[string]config.TeamConfig) ([]util.Change, error) {
 	var out []util.Change
-	var actual []*github.Team
-	if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
-		ts, resp, err := c.REST.Teams.ListTeams(ctx, org, opts)
-		if err != nil {
-			return nil, err
-		}
-		actual = append(actual, ts...)
-		return resp, nil
-	}); err != nil {
-		return nil, err
-	}
-	for _, at := range actual {
+	for _, at := range st.ActualTeams {
 		if _, ok := desired[at.GetSlug()]; !ok {
 			out = append(out, util.Change{Scope: "team", Target: at.GetSlug(), Action: "delete", Details: map[string]any{"org": org, "slug": at.GetSlug()}})
 		}
@@ -801,25 +832,12 @@ func planMemberCleanups(ctx context.Context, c *gh.Client, org string) ([]util.C
 }
 
 // planRepoCleanups generates delete/warning changes for unmanaged repositories.
-func planRepoCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) ([]util.Change, []string, error) {
+func planRepoCleanups(cfg *config.Root, st *State) ([]util.Change, []string, error) {
 	var out []util.Change
 	var warnings []string
 	org := st.Org
-	var actualRepos []*github.Repository
-	repoOpt := &github.RepositoryListByOrgOptions{ListOptions: github.ListOptions{PerPage: defaultPerPage}, Type: "all"}
-	if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
-		repoOpt.ListOptions = *opts
-		repos, resp, err := c.REST.Repositories.ListByOrg(ctx, org, repoOpt)
-		if err != nil {
-			return nil, err
-		}
-		actualRepos = append(actualRepos, repos...)
-		return resp, nil
-	}); err != nil {
-		return nil, nil, err
-	}
 	var unmanagedRepos []string
-	for _, repo := range actualRepos {
+	for _, repo := range st.ActualRepos {
 		repoName := strings.ToLower(repo.GetName())
 		if !st.ManagedRepos[repoName] {
 			unmanagedRepos = append(unmanagedRepos, repo.GetName())
@@ -851,7 +869,7 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 		if ctx.Err() != nil {
 			return nil, nil, ctx.Err()
 		}
-		changes, err := planTeamCleanups(ctx, c, org, desired)
+		changes, err := planTeamCleanups(st, org, desired)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -873,7 +891,7 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 		if ctx.Err() != nil {
 			return nil, nil, ctx.Err()
 		}
-		changes, w, err := planRepoCleanups(ctx, c, cfg, st)
+		changes, w, err := planRepoCleanups(cfg, st)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -966,6 +984,15 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 		return err
 	}
 
+	// Count non-custom-role changes for progress display
+	total := 0
+	for _, ch := range changes {
+		if !strings.HasPrefix(ch.Scope, "custom-role") {
+			total++
+		}
+	}
+
+	applied := 0
 	for _, ch := range changes {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -974,6 +1001,9 @@ func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) erro
 		if strings.HasPrefix(ch.Scope, "custom-role") {
 			continue
 		}
+
+		applied++
+		log.Printf("[%d/%d] %s:%s %s", applied, total, ch.Scope, ch.Action, ch.Target)
 
 		if err := gh.RespectRate(ctx, c.REST); err != nil {
 			util.Warnf("rate limit check failed: %v", err)

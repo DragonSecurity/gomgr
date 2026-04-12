@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-github/v84/github"
+
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/util"
-	"github.com/google/go-github/v83/github"
 )
 
 func TestParseRepoConfig(t *testing.T) {
@@ -742,22 +743,6 @@ func TestContainsErrorMessage(t *testing.T) {
 // ---- Planning Function Tests ----
 
 func TestPlanTeams(t *testing.T) {
-	// Server returns 2 existing teams: "backend" and "frontend"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/orgs/myorg/teams" && r.Method == "GET" {
-			teams := []map[string]any{
-				{"id": 1, "slug": "backend", "name": "Backend", "description": "Backend team", "privacy": "closed"},
-				{"id": 2, "slug": "frontend", "name": "Frontend", "description": "Old desc", "privacy": "closed"},
-			}
-			w.WriteHeader(http.StatusOK)
-			_ = json.NewEncoder(w).Encode(teams)
-			return
-		}
-		http.NotFound(w, r)
-	}))
-	defer server.Close()
-
-	c := newTestClient(t, server)
 	cfg := &config.Root{
 		App: config.AppConfig{Org: "myorg"},
 		Team: []config.TeamConfig{
@@ -766,9 +751,15 @@ func TestPlanTeams(t *testing.T) {
 			{Name: "Infra", Slug: "infra"},
 		},
 	}
-	st := &State{Org: "myorg"}
+	st := &State{
+		Org: "myorg",
+		ActualTeams: []*github.Team{
+			{ID: github.Ptr(int64(1)), Slug: github.Ptr("backend"), Name: github.Ptr("Backend"), Description: github.Ptr("Backend team"), Privacy: github.Ptr("closed")},
+			{ID: github.Ptr(int64(2)), Slug: github.Ptr("frontend"), Name: github.Ptr("Frontend"), Description: github.Ptr("Old desc"), Privacy: github.Ptr("closed")},
+		},
+	}
 
-	changes, desired, err := planTeams(context.Background(), c, cfg, st)
+	changes, desired, err := planTeams(context.Background(), nil, cfg, st)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -852,11 +843,6 @@ func TestPlanTeamMembership(t *testing.T) {
 func TestPlanRepoPerms(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.URL.Path == "/orgs/myorg/repos" && r.Method == "GET":
-			// Return one existing repo
-			_ = json.NewEncoder(w).Encode([]map[string]any{
-				{"name": "api", "topics": []string{"backend"}},
-			})
 		case strings.HasPrefix(r.URL.Path, "/orgs/myorg/teams/") && strings.HasSuffix(r.URL.Path, "/repos"):
 			_ = json.NewEncoder(w).Encode([]map[string]any{})
 		default:
@@ -882,7 +868,12 @@ func TestPlanRepoPerms(t *testing.T) {
 			},
 		},
 	}
-	st := &State{Org: "myorg"}
+	st := &State{
+		Org: "myorg",
+		ActualRepos: []*github.Repository{
+			{Name: github.Ptr("api"), Topics: []string{"backend"}},
+		},
+	}
 
 	changes, err := planRepoPerms(context.Background(), c, cfg, st)
 	if err != nil {
@@ -912,26 +903,6 @@ func TestPlanRepoPerms(t *testing.T) {
 }
 
 func TestPlanCleanups(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/orgs/myorg/teams" && r.Method == "GET":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
-				{"id": 1, "slug": "backend"},
-				{"id": 2, "slug": "old-team"},
-			})
-		case r.URL.Path == "/orgs/myorg/repos" && r.Method == "GET":
-			_ = json.NewEncoder(w).Encode([]map[string]any{
-				{"name": "api"},
-				{"name": "legacy-app"},
-			})
-		default:
-			w.WriteHeader(http.StatusOK)
-			_ = json.NewEncoder(w).Encode([]map[string]any{})
-		}
-	}))
-	defer server.Close()
-
-	c := newTestClient(t, server)
 	cfg := &config.Root{
 		App: config.AppConfig{
 			Org:                     "myorg",
@@ -942,9 +913,20 @@ func TestPlanCleanups(t *testing.T) {
 	desired := map[string]config.TeamConfig{
 		"backend": {Name: "Backend", Slug: "backend"},
 	}
-	st := &State{Org: "myorg", ManagedRepos: map[string]bool{"api": true}}
+	st := &State{
+		Org:          "myorg",
+		ManagedRepos: map[string]bool{"api": true},
+		ActualTeams: []*github.Team{
+			{ID: github.Ptr(int64(1)), Slug: github.Ptr("backend")},
+			{ID: github.Ptr(int64(2)), Slug: github.Ptr("old-team")},
+		},
+		ActualRepos: []*github.Repository{
+			{Name: github.Ptr("api")},
+			{Name: github.Ptr("legacy-app")},
+		},
+	}
 
-	changes, _, err := planCleanups(context.Background(), c, cfg, st, desired)
+	changes, _, err := planCleanups(context.Background(), nil, cfg, st, desired)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -972,7 +954,7 @@ func TestPlanCleanups(t *testing.T) {
 	}
 }
 
-func TestApplyChanges_ContextCancelled(t *testing.T) {
+func TestApplyChanges_ContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
 
@@ -982,7 +964,7 @@ func TestApplyChanges_ContextCancelled(t *testing.T) {
 
 	err := applyChanges(ctx, nil, changes)
 	if err == nil {
-		t.Fatal("expected error for cancelled context")
+		t.Fatal("expected error for canceled context")
 	}
 	if err != context.Canceled {
 		t.Errorf("expected context.Canceled, got: %v", err)
