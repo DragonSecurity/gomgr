@@ -1,0 +1,45 @@
+name: Public Docs Team
+slug: public-docs-team
+description: Maintainers of the organization's public documentation and OSS projects
+privacy: closed
+
+maintainers:
+  - allanice001
+
+members:
+  - docs-writer
+
+repositories:
+  # Public repository — created as public on GitHub. Any FileSpec whose
+  # `only:` includes a matching glob (e.g. "public-*") will be applied.
+  public-docs:
+    permission: push
+    visibility: public
+    topics:
+      - documentation
+      - public
+
+  # Open-source project, also public. Pairs well with FileSpec entries that
+  # match the "oss-*" glob (e.g. LICENSE).
+  oss-widgets:
+    permission: maintain
+    visibility: public
+    topics:
+      - opensource
+      - library
+
+  # GHEC-only: create a repo visible to everyone in the enterprise but not the
+  # wider public. Falls back to private on non-Enterprise orgs.
+  internal-playbook:
+    permission: push
+    visibility: internal
+    topics:
+      - runbook
+      - internal
+
+  # Default: when `visibility` is omitted the repo is created private, which
+  # matches the pre-Files behaviour.
+  private-notes:
+    permission: admin
+    topics:
+      - private

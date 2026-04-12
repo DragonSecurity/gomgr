@@ -102,6 +102,29 @@ func (r *Root) Validate() error {
 			return fmt.Errorf("org owner: %w", err)
 		}
 	}
+	if err := validateFileSpecs(r.App.Files); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateFileSpecs ensures every templated file has a path and content and
+// that no two specs target the same path (which would make apply order
+// ambiguous).
+func validateFileSpecs(files []FileSpec) error {
+	seen := map[string]bool{}
+	for i, f := range files {
+		if strings.TrimSpace(f.Path) == "" {
+			return fmt.Errorf("app.files[%d]: path must not be empty", i)
+		}
+		if strings.TrimSpace(f.Content) == "" {
+			return fmt.Errorf("app.files[%d] (%s): content must not be empty", i, f.Path)
+		}
+		if seen[f.Path] {
+			return fmt.Errorf("app.files[%d]: duplicate path %q", i, f.Path)
+		}
+		seen[f.Path] = true
+	}
 	return nil
 }
 

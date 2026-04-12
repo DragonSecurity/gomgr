@@ -13,7 +13,6 @@ import (
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
-	"github.com/DragonSecurity/gomgr/internal/templates"
 	"github.com/DragonSecurity/gomgr/internal/util"
 )
 
@@ -72,6 +71,14 @@ type repoSettings struct {
 	pinned     bool
 	template   bool
 	from       string
+	visibility string // "", "public", "private", or "internal"
+}
+
+var validVisibilities = map[string]bool{
+	"":         true,
+	"public":   true,
+	"private":  true,
+	"internal": true,
 }
 
 // validateTopic checks if a topic name meets GitHub requirements:
@@ -154,6 +161,14 @@ func parseRepoConfig(val any) (repoSettings, error) {
 		}
 		if from, ok := m["from"].(string); ok {
 			settings.from = from
+		}
+		if visibility, ok := m["visibility"].(string); ok {
+			if !validVisibilities[visibility] {
+				return settings, fmt.Errorf("invalid visibility %q (must be public, private, or internal)", visibility)
+			}
+			settings.visibility = visibility
+		} else if _, has := m["visibility"]; has {
+			return settings, fmt.Errorf("visibility must be a string, got %T", m["visibility"])
 		}
 	}
 
@@ -535,6 +550,8 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 		return nil, err
 	}
 
+	fileSpecs := materializeFileSpecs(cfg.App)
+
 	desiredTopics := map[string][]string{}
 	desiredPinned := map[string]bool{}
 	desiredTemplates := map[string]bool{}
@@ -551,9 +568,13 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 
 			if !existing[r] && cfg.App.CreateRepo {
 				details := map[string]any{
-					"org":     org,
-					"name":    repo,
-					"private": true,
+					"org":  org,
+					"name": repo,
+				}
+				if settings.visibility != "" {
+					details["visibility"] = settings.visibility
+				} else {
+					details["private"] = true
 				}
 				if settings.from != "" {
 					details["from"] = settings.from
@@ -609,42 +630,11 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 			}
 
 			// Emit file changes only once per repo (skip if already emitted from another team)
-			if cfg.App.AddDefaultReadme && !emittedFiles[r+":README.md"] {
-				readmeContent, err := templates.GenerateReadme(org, repo)
-				if err != nil {
-					return nil, fmt.Errorf("failed to generate README for %s: %w", repo, err)
-				}
-				out = append(out, util.Change{
-					Scope:  "repo-file",
-					Target: r + ":README.md",
-					Action: "ensure",
-					Details: map[string]any{
-						"org":     org,
-						"repo":    repo,
-						"path":    "README.md",
-						"content": readmeContent,
-						"message": "chore: add default README",
-						"branch":  "main",
-					},
-				})
-				emittedFiles[r+":README.md"] = true
+			fileChanges, err := planRepoFiles(org, repo, r, fileSpecs, emittedFiles)
+			if err != nil {
+				return nil, err
 			}
-			if cfg.App.AddRenovateConfig && cfg.App.RenovateConfig != "" && !emittedFiles[r+":renovate"] {
-				out = append(out, util.Change{
-					Scope:  "repo-file",
-					Target: r + ":.github/renovate.json",
-					Action: "ensure",
-					Details: map[string]any{
-						"org":     org,
-						"repo":    repo,
-						"path":    ".github/renovate.json",
-						"content": cfg.App.RenovateConfig,
-						"message": "chore: add Renovate config",
-						"branch":  "main",
-					},
-				})
-				emittedFiles[r+":renovate"] = true
-			}
+			out = append(out, fileChanges...)
 		}
 	}
 

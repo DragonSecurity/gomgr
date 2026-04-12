@@ -133,13 +133,81 @@ delete_unconfigured_teams: true     # delete teams not defined in YAML
 delete_unmanaged_repos: false       # delete repos not defined in any team (DESTRUCTIVE!)
 delete_unmanaged_custom_roles: false # delete custom roles not in org.yaml (DESTRUCTIVE!)
 create_repo: true                   # create repos if missing when referenced by teams
-add_renovate_config: true           # create .github/renovate.json in repos
-add_default_readme: false           # create default README.md in repos (optional)
+
+# Legacy convenience flags — still honoured, but `files:` is the preferred
+# way to declare per-repo content. Legacy flags are materialised into
+# FileSpec entries at load time.
+add_renovate_config: true
+add_default_readme: false
 renovate_config: |
   {
     "$schema": "https://docs.renovatebot.com/renovate-schema.json",
     "extends": ["github>DragonSecurity/renovate-presets"]
   }
+
+# Templated files that gomgr ensures exist in every managed repository.
+# Each `content` is rendered through Go's text/template package with
+# {Org, Repo} as context. `only` restricts an entry to specific repos via
+# path.Match-style globs; omitting `only` matches every managed repo.
+files:
+  - path: README.md
+    message: "chore: add README"
+    branch: main
+    content: |
+      # {{.Repo}}
+
+      Part of the [{{.Org}}](https://github.com/{{.Org}}) organization.
+
+  - path: LICENSE
+    only:
+      - "public-*"
+      - "oss-*"
+    content: |
+      MIT License
+      Copyright (c) {{.Org}} ...
+
+  - path: .github/CODEOWNERS
+    content: |
+      * @{{.Org}}/platform-team
+```
+
+### Files & templating (`app.files`)
+
+The `files:` list on `app.yaml` replaces the older `add_default_readme` /
+`renovate_config` special cases with a single mechanism for declaring any
+file that should exist in every managed repo.
+
+- **`path`** (required): repo-relative path, e.g. `README.md`,
+  `.github/workflows/ci.yml`.
+- **`content`** (required): Go text/template source. `{{.Org}}` and
+  `{{.Repo}}` are available; referencing an unknown field is a hard error at
+  plan time (via `missingkey=error`).
+- **`message`** (optional): commit message; defaults to `chore: add <path>`.
+- **`branch`** (optional): target branch; defaults to `main`.
+- **`only`** (optional): list of `path.Match` globs against the repo name.
+  Empty/omitted matches every repo.
+
+Legacy `add_default_readme` and `add_renovate_config` still work — at load
+time they are converted into FileSpec entries and prepended to `files:`. If
+you list the same `path:` yourself, your entry overrides the legacy one, so
+you can keep the flags on and still supply a custom README.
+
+### Repository visibility
+
+Advanced repo configs accept a `visibility:` field: `public`, `private`
+(the default), or `internal` (GHEC only). It is respected when gomgr creates
+the repository:
+
+```yaml
+repositories:
+  public-docs:
+    permission: push
+    visibility: public      # created public; pairs well with FileSpec `only: [public-*]`
+  internal-playbook:
+    permission: push
+    visibility: internal    # GHEC-only; visible to the whole enterprise
+  private-notes:
+    permission: admin       # visibility omitted → private (backwards-compatible)
 ```
 
 ### `org.yaml`

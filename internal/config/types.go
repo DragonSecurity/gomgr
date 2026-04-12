@@ -13,14 +13,35 @@ type AppConfig struct {
 		WarnUnmanagedRepos        bool `yaml:"warn_unmanaged_repos"`
 		WarnUnmanagedCustomRoles  bool `yaml:"warn_unmanaged_custom_roles"`
 	} `yaml:"dry_warnings"`
-	RemoveMembersWithoutTeam   bool   `yaml:"remove_members_without_team"`
-	DeleteUnconfiguredTeams    bool   `yaml:"delete_unconfigured_teams"`
-	DeleteUnmanagedRepos       bool   `yaml:"delete_unmanaged_repos"`
-	DeleteUnmanagedCustomRoles bool   `yaml:"delete_unmanaged_custom_roles"`
-	CreateRepo                 bool   `yaml:"create_repo"`
-	AddRenovateConfig          bool   `yaml:"add_renovate_config"`
-	RenovateConfig             string `yaml:"renovate_config"`
-	AddDefaultReadme           bool   `yaml:"add_default_readme"`
+	RemoveMembersWithoutTeam   bool `yaml:"remove_members_without_team"`
+	DeleteUnconfiguredTeams    bool `yaml:"delete_unconfigured_teams"`
+	DeleteUnmanagedRepos       bool `yaml:"delete_unmanaged_repos"`
+	DeleteUnmanagedCustomRoles bool `yaml:"delete_unmanaged_custom_roles"`
+	CreateRepo                 bool `yaml:"create_repo"`
+
+	// Files declares templated files that should exist in every managed
+	// repository. Each entry's Content is rendered through text/template with
+	// {Org, Repo} context. Only (optional) limits which repos an entry applies
+	// to via path.Match-style globs.
+	Files []FileSpec `yaml:"files,omitempty"`
+
+	// Legacy convenience flags. These are still honored but are materialized
+	// into Files entries at load time. Prefer Files for new configurations.
+	AddRenovateConfig bool   `yaml:"add_renovate_config,omitempty"`
+	RenovateConfig    string `yaml:"renovate_config,omitempty"`
+	AddDefaultReadme  bool   `yaml:"add_default_readme,omitempty"`
+}
+
+// FileSpec declares a file that gomgr should ensure exists in managed repos.
+// Content is a Go text/template; Path, Message and Branch are literal strings.
+// Only restricts which repositories the file applies to (path.Match globs
+// against the repo name). An empty Only matches every managed repo.
+type FileSpec struct {
+	Path    string   `yaml:"path"`
+	Content string   `yaml:"content"`
+	Message string   `yaml:"message,omitempty"`
+	Branch  string   `yaml:"branch,omitempty"`
+	Only    []string `yaml:"only,omitempty"`
 }
 
 type OrgConfig struct {

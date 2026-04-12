@@ -119,12 +119,23 @@ func applyRepoEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
 	}
 	org := detailString(d, "org")
 	name := detailString(d, "name")
+	visibility := detailString(d, "visibility")
+
+	// visibility wins over the legacy private flag; falling back to
+	// private=true if neither is set preserves the pre-Files behavior.
 	private := true
-	if v, ok := d["private"]; ok {
-		if b, isBool := v.(bool); isBool {
-			private = b
-		} else {
-			private = fmt.Sprint(v) != "false"
+	switch visibility {
+	case "public", "internal":
+		private = false
+	case "private":
+		private = true
+	case "":
+		if v, ok := d["private"]; ok {
+			if b, isBool := v.(bool); isBool {
+				private = b
+			} else {
+				private = fmt.Sprint(v) != "false"
+			}
 		}
 	}
 	isTemplate := detailBool(d, "template")
@@ -133,7 +144,6 @@ func applyRepoEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
 	if templateRef := detailString(d, "from"); templateRef != "" {
 		templateOrg, templateRepo := parseTemplateRef(templateRef, org)
 
-		// Create repository from template
 		_, _, err := c.REST.Repositories.CreateFromTemplate(ctx, templateOrg, templateRepo, &github.TemplateRepoRequest{
 			Name:    github.Ptr(name),
 			Owner:   github.Ptr(org),
@@ -147,8 +157,7 @@ func applyRepoEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
 			// already exists race — ignore
 		}
 	} else {
-		// Create regular repository
-		_, _, err := c.REST.Repositories.Create(ctx, org, &github.Repository{
+		repo := &github.Repository{
 			Name:                github.Ptr(name),
 			Private:             github.Ptr(private),
 			IsTemplate:          github.Ptr(isTemplate),
@@ -156,7 +165,11 @@ func applyRepoEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
 			AllowMergeCommit:    github.Ptr(false),
 			DeleteBranchOnMerge: github.Ptr(true),
 			HasIssues:           github.Ptr(true),
-		})
+		}
+		if visibility != "" {
+			repo.Visibility = github.Ptr(visibility)
+		}
+		_, _, err := c.REST.Repositories.Create(ctx, org, repo)
 		if err != nil {
 			var ghErr *github.ErrorResponse
 			if !errors.As(err, &ghErr) || ghErr.Response == nil || ghErr.Response.StatusCode != 422 {
