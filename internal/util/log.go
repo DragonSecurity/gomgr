@@ -1,10 +1,15 @@
 package util
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"runtime"
+	"sync"
 	"time"
 )
 
@@ -12,26 +17,66 @@ import (
 var AuditLog bool
 
 var (
-	levelVar = new(slog.LevelVar)
-	logger   = newLogger(false)
+	levelVar   = new(slog.LevelVar)
+	showSource bool
+	logger     = slog.New(newSimpleHandler(os.Stdout, levelVar))
 )
-
-func newLogger(addSource bool) *slog.Logger {
-	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level:     levelVar,
-		AddSource: addSource,
-	}))
-}
 
 // Logger returns the package-level structured logger.
 func Logger() *slog.Logger { return logger }
 
-// EnableDebug switches the package logger to debug level with source info.
+// EnableDebug switches the package logger to debug level and prefixes records
+// with file:line so operators can trace noisy runs.
 func EnableDebug() {
 	levelVar.Set(slog.LevelDebug)
-	logger = newLogger(true)
+	showSource = true
 	slog.SetDefault(logger)
 }
+
+// simpleHandler renders slog records as plain text without the key=value
+// prefix slog.TextHandler produces. Info records are emitted as bare messages
+// so CLI output stays readable; warn/error/debug get a short label.
+type simpleHandler struct {
+	out   io.Writer
+	level slog.Leveler
+	mu    sync.Mutex
+}
+
+func newSimpleHandler(out io.Writer, level slog.Leveler) *simpleHandler {
+	return &simpleHandler{out: out, level: level}
+}
+
+func (h *simpleHandler) Enabled(_ context.Context, l slog.Level) bool {
+	return l >= h.level.Level()
+}
+
+func (h *simpleHandler) Handle(_ context.Context, r slog.Record) error {
+	var prefix string
+	switch r.Level {
+	case slog.LevelDebug:
+		prefix = "DEBUG: "
+	case slog.LevelWarn:
+		prefix = "WARN: "
+	case slog.LevelError:
+		prefix = "ERROR: "
+	}
+
+	var suffix string
+	if showSource && r.PC != 0 {
+		frames := runtime.CallersFrames([]uintptr{r.PC})
+		if frame, _ := frames.Next(); frame.File != "" {
+			suffix = fmt.Sprintf(" (%s:%d)", filepath.Base(frame.File), frame.Line)
+		}
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	_, err := fmt.Fprintln(h.out, prefix+r.Message+suffix)
+	return err
+}
+
+func (h *simpleHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
+func (h *simpleHandler) WithGroup(_ string) slog.Handler      { return h }
 
 // Infof emits a formatted info-level log line via slog.
 func Infof(format string, args ...any) {

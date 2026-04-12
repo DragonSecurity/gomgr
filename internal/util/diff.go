@@ -1,7 +1,6 @@
 package util
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 )
@@ -32,13 +31,55 @@ type Plan struct {
 	Stats    *StateStats `json:"stats,omitempty"`
 }
 
+// PrintPlan writes the plan's changes as a short, one-line-per-change list.
+// File contents and other verbose detail fields are omitted; the summary
+// block printed by PrintSummary carries the aggregate stats.
 func PrintPlan(p Plan) error {
-	b, err := json.MarshalIndent(p, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal plan: %w", err)
+	if len(p.Changes) == 0 {
+		fmt.Println("Plan: no changes")
+		return nil
 	}
-	fmt.Println(string(b))
+
+	kinds := make([]string, len(p.Changes))
+	longest := 0
+	for i, ch := range p.Changes {
+		kinds[i] = ch.Scope + ":" + ch.Action
+		if len(kinds[i]) > longest {
+			longest = len(kinds[i])
+		}
+	}
+
+	fmt.Printf("Plan (%d changes):\n", len(p.Changes))
+	for i, ch := range p.Changes {
+		fmt.Printf("  %s %-*s  %s\n", changeSymbol(ch.Action), longest, kinds[i], formatTarget(ch))
+	}
 	return nil
+}
+
+// changeSymbol returns a one-character marker for the change's direction:
+// `+` for creation, `-` for removal, `~` for in-place updates.
+func changeSymbol(action string) string {
+	switch action {
+	case "create", "ensure", "grant":
+		return "+"
+	case "delete", "remove":
+		return "-"
+	case "update":
+		return "~"
+	}
+	return "·"
+}
+
+// formatTarget prefixes ch.Target with the org when one is present in the
+// details map. Typed detail structs (team-member, custom-role) fall through
+// to the bare target.
+func formatTarget(ch Change) string {
+	if d, ok := ch.Details.(map[string]any); ok {
+		if org, ok := d["org"].(string); ok && org != "" {
+			return org + "/" + ch.Target
+		}
+	}
+	return ch.Target
 }
 
 // PrintSummary prints a human-readable summary of the plan

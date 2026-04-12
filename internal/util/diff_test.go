@@ -2,46 +2,68 @@ package util
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"os"
 	"strings"
 	"testing"
 )
 
-func TestPrintPlan(t *testing.T) {
-	plan := Plan{
-		Changes: []Change{
-			{Scope: "team", Target: "backend", Action: "create", Details: map[string]any{"org": "myorg"}},
-		},
-		Warnings: []string{"test warning"},
-	}
-
-	// Capture stdout
+// capturePrint runs fn with os.Stdout redirected to a pipe and returns the
+// captured output.
+func capturePrint(t *testing.T, fn func()) string {
+	t.Helper()
 	old := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-
-	err := PrintPlan(plan)
-
-	w.Close()
+	fn()
+	_ = w.Close()
 	os.Stdout = old
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
 	var buf bytes.Buffer
 	_, _ = io.Copy(&buf, r)
-	output := buf.String()
+	return buf.String()
+}
 
-	// Verify it's valid JSON
-	var parsed Plan
-	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &parsed); err != nil {
-		t.Fatalf("output is not valid JSON: %v\nOutput: %s", err, output)
+func TestPrintPlan_HumanReadable(t *testing.T) {
+	plan := Plan{
+		Changes: []Change{
+			{Scope: "repo-file", Target: "infra:README.md", Action: "ensure", Details: map[string]any{"org": "KaMuses"}},
+			{Scope: "repo", Target: "api", Action: "delete", Details: map[string]any{"org": "KaMuses"}},
+			{Scope: "team", Target: "backend", Action: "update", Details: map[string]any{"org": "KaMuses"}},
+		},
 	}
-	if len(parsed.Changes) != 1 {
-		t.Errorf("expected 1 change, got %d", len(parsed.Changes))
+
+	out := capturePrint(t, func() {
+		if err := PrintPlan(plan); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	want := []string{
+		"Plan (3 changes):",
+		"+ repo-file:ensure",
+		"KaMuses/infra:README.md",
+		"- repo:delete",
+		"KaMuses/api",
+		"~ team:update",
+		"KaMuses/backend",
+	}
+	for _, s := range want {
+		if !strings.Contains(out, s) {
+			t.Errorf("expected output to contain %q, got:\n%s", s, out)
+		}
+	}
+	// Ensure the noisy JSON details are gone.
+	if strings.Contains(out, `"details"`) {
+		t.Errorf("expected no JSON details in output, got:\n%s", out)
+	}
+}
+
+func TestPrintPlan_Empty(t *testing.T) {
+	out := capturePrint(t, func() {
+		_ = PrintPlan(Plan{})
+	})
+	if !strings.Contains(out, "no changes") {
+		t.Errorf("expected 'no changes' message, got %q", out)
 	}
 }
 
