@@ -17,7 +17,8 @@ var syncCmd = &cobra.Command{
 	Short: "Synchronize org state to match YAML configuration",
 	Example: `  gomgr sync -c ./config
   gomgr sync -c ./config --dry
-  gomgr sync -c ./config --timeout 5m --audit-log`,
+  gomgr sync -c ./config --timeout 5m --audit-log
+  gomgr sync -c ./config --continue-on-error`,
 	RunE: func(_ *cobra.Command, _ []string) error {
 		if cfgDir == "" {
 			return fmt.Errorf("--config/-c flag is required")
@@ -58,7 +59,7 @@ var syncCmd = &cobra.Command{
 			util.Infof("dry-run: no changes applied")
 			return nil
 		}
-		return insync.Apply(ctx, client, plan)
+		return insync.ApplyWithOptions(ctx, client, plan, insync.ApplyOptions{ContinueOnError: continueOnError})
 	},
 }
 

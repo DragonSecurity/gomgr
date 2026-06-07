@@ -142,6 +142,19 @@ func prefetchState(ctx context.Context, c *gh.Client, st *State) error {
 	return nil
 }
 
+// ApplyOptions tunes how Apply processes the change set.
+type ApplyOptions struct {
+	// ContinueOnError keeps applying remaining changes after a handler fails,
+	// then returns an aggregated error at the end. When false (the default),
+	// the first handler error aborts the run.
+	ContinueOnError bool
+}
+
 func Apply(ctx context.Context, c *gh.Client, plan util.Plan) error {
-	return applyChanges(ctx, c, plan.Changes)
+	return ApplyWithOptions(ctx, c, plan, ApplyOptions{})
+}
+
+// ApplyWithOptions applies the plan's changes using the given options.
+func ApplyWithOptions(ctx context.Context, c *gh.Client, plan util.Plan, opts ApplyOptions) error {
+	return applyChangesWith(ctx, c, plan.Changes, defaultRegistry, opts)
 }

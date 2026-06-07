@@ -991,16 +991,18 @@ func containsErrorMessage(ghErr *github.ErrorResponse, searchTerms ...string) bo
 // ---- apply ----
 
 func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) error {
-	return applyChangesWith(ctx, c, changes, defaultRegistry)
+	return applyChangesWith(ctx, c, changes, defaultRegistry, ApplyOptions{})
 }
 
-func applyChangesWith(ctx context.Context, c *gh.Client, changes []util.Change, reg *HandlerRegistry) error {
+func applyChangesWith(ctx context.Context, c *gh.Client, changes []util.Change, reg *HandlerRegistry, opts ApplyOptions) error {
 	sort.SliceStable(changes, func(i, j int) bool {
 		return reg.Precedence(changes[i].Scope, changes[i].Action) <
 			reg.Precedence(changes[j].Scope, changes[j].Action)
 	})
 
-	// Apply custom role changes first — they have their own dispatcher.
+	// Apply custom role changes first — they have their own dispatcher. These
+	// are a prerequisite for dependent changes, so a failure here always aborts
+	// regardless of ContinueOnError.
 	if err := applyCustomRoleChanges(ctx, c, changes); err != nil {
 		return err
 	}
@@ -1013,6 +1015,7 @@ func applyChangesWith(ctx context.Context, c *gh.Client, changes []util.Change, 
 		}
 	}
 
+	var failed []error
 	applied := 0
 	for _, ch := range changes {
 		if ctx.Err() != nil {
@@ -1036,9 +1039,20 @@ func applyChangesWith(ctx context.Context, c *gh.Client, changes []util.Change, 
 		}
 		if err := handler.Apply(ctx, c, ch); err != nil {
 			util.Audit(ch.Scope, ch.Target, ch.Action, "error")
-			return err
+			if !opts.ContinueOnError {
+				return err
+			}
+			wrapped := fmt.Errorf("%s:%s %s: %w", ch.Scope, ch.Action, ch.Target, err)
+			util.Warnf("continuing after error: %v", wrapped)
+			failed = append(failed, wrapped)
+			continue
 		}
 		util.Audit(ch.Scope, ch.Target, ch.Action, "ok")
+	}
+
+	if len(failed) > 0 {
+		util.Warnf("%d of %d changes failed", len(failed), total)
+		return fmt.Errorf("apply completed with %d error(s): %w", len(failed), errors.Join(failed...))
 	}
 	return nil
 }
