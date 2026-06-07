@@ -137,3 +137,146 @@ func TestMaterializeFileSpecs_PreservesUserOrder(t *testing.T) {
 		t.Errorf("expected LICENSE, CODEOWNERS order, got %q, %q", files[0].Path, files[1].Path)
 	}
 }
+
+func TestRenderCodeowners(t *testing.T) {
+	tests := []struct {
+		name   string
+		owners []string
+		want   string
+	}{
+		{"empty", nil, ""},
+		{"bare username", []string{"octocat"}, "* @octocat\n"},
+		{"already prefixed", []string{"@octocat"}, "* @octocat\n"},
+		{"team ref", []string{"@my-org/team"}, "* @my-org/team\n"},
+		{"dedup", []string{"octocat", "@octocat"}, "* @octocat\n"},
+		{"multiple", []string{"a", "@b", "@org/t"}, "* @a @b @org/t\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := renderCodeowners(tt.owners)
+			if got != tt.want {
+				t.Errorf("renderCodeowners(%v) = %q, want %q", tt.owners, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPlanCodeowners_EmitsPerRepo(t *testing.T) {
+	owners := map[string][]string{
+		"api": {"allanice001"},
+		"web": {"@org/frontend"},
+	}
+	names := map[string]string{"api": "api", "web": "web"}
+	emitted := map[string]bool{}
+
+	changes := planCodeowners("acme", owners, names, map[string]bool{}, emitted)
+	if len(changes) != 2 {
+		t.Fatalf("expected 2 changes, got %d", len(changes))
+	}
+
+	// Deterministic order (sorted): api, web
+	if changes[0].Target != "api:.github/CODEOWNERS" {
+		t.Errorf("expected api first, got %q", changes[0].Target)
+	}
+	d := changes[0].Details.(map[string]any)
+	if d["path"] != ".github/CODEOWNERS" {
+		t.Errorf("expected .github/CODEOWNERS path, got %q", d["path"])
+	}
+	if d["content"] != "* @allanice001\n" {
+		t.Errorf("unexpected api content: %q", d["content"])
+	}
+	if d["branch"] != "main" {
+		t.Errorf("expected branch main, got %q", d["branch"])
+	}
+	if d["reconcile"] != true {
+		t.Errorf("expected synthesized CODEOWNERS to be reconciled, got %v", d["reconcile"])
+	}
+	if !emitted["api:.github/CODEOWNERS"] {
+		t.Error("expected emitted set to be updated")
+	}
+}
+
+func TestPlanCodeowners_SkipsWhenUserDeclared(t *testing.T) {
+	owners := map[string][]string{"api": {"octocat"}}
+	names := map[string]string{"api": "api"}
+	userFiles := map[string]bool{".github/CODEOWNERS": true}
+
+	changes := planCodeowners("acme", owners, names, userFiles, map[string]bool{})
+	if len(changes) != 0 {
+		t.Errorf("expected user-declared CODEOWNERS to win, got %d synthesized changes", len(changes))
+	}
+}
+
+func TestPlanCodeowners_SkipsRepoWithoutOwners(t *testing.T) {
+	owners := map[string][]string{
+		"api":   {"octocat"},
+		"empty": nil,
+	}
+	names := map[string]string{"api": "api", "empty": "empty"}
+	changes := planCodeowners("acme", owners, names, map[string]bool{}, map[string]bool{})
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 change (api only), got %d", len(changes))
+	}
+	if changes[0].Target != "api:.github/CODEOWNERS" {
+		t.Errorf("expected api change, got %q", changes[0].Target)
+	}
+}
+
+func TestPlanCodeowners_RespectsEmittedSet(t *testing.T) {
+	owners := map[string][]string{"api": {"octocat"}}
+	names := map[string]string{"api": "api"}
+	emitted := map[string]bool{"api:.github/CODEOWNERS": true}
+
+	changes := planCodeowners("acme", owners, names, map[string]bool{}, emitted)
+	if len(changes) != 0 {
+		t.Errorf("expected no changes when already emitted, got %d", len(changes))
+	}
+}
+
+func TestPlanCodeownersDeletions_OnlyForReposWithoutOwners(t *testing.T) {
+	managed := map[string]bool{"api": true, "web": true, "infra": true}
+	names := map[string]string{"api": "api", "web": "web", "infra": "infra"}
+	owners := map[string][]string{"api": {"octocat"}}
+
+	changes := planCodeownersDeletions("acme", managed, names, owners, map[string]bool{}, map[string]bool{})
+	if len(changes) != 2 {
+		t.Fatalf("expected 2 delete changes (web, infra), got %d", len(changes))
+	}
+	// Sorted: infra, web
+	if changes[0].Target != "infra:.github/CODEOWNERS" {
+		t.Errorf("expected infra first, got %q", changes[0].Target)
+	}
+	if changes[0].Action != "delete" {
+		t.Errorf("expected delete action, got %q", changes[0].Action)
+	}
+	d := changes[0].Details.(map[string]any)
+	if d["path"] != ".github/CODEOWNERS" {
+		t.Errorf("expected .github/CODEOWNERS path, got %q", d["path"])
+	}
+	if d["message"] == "" {
+		t.Error("expected non-empty commit message")
+	}
+}
+
+func TestPlanCodeownersDeletions_SkipsWhenUserDeclared(t *testing.T) {
+	managed := map[string]bool{"api": true}
+	names := map[string]string{"api": "api"}
+	owners := map[string][]string{} // no owners -> would normally delete
+	userFiles := map[string]bool{".github/CODEOWNERS": true}
+
+	changes := planCodeownersDeletions("acme", managed, names, owners, userFiles, map[string]bool{})
+	if len(changes) != 0 {
+		t.Errorf("expected user-declared CODEOWNERS to suppress deletion, got %d", len(changes))
+	}
+}
+
+func TestPlanCodeownersDeletions_RespectsEmittedSet(t *testing.T) {
+	managed := map[string]bool{"api": true}
+	names := map[string]string{"api": "api"}
+	emitted := map[string]bool{"api:.github/CODEOWNERS": true}
+
+	changes := planCodeownersDeletions("acme", managed, names, map[string][]string{}, map[string]bool{}, emitted)
+	if len(changes) != 0 {
+		t.Errorf("expected no changes when already emitted (write wins), got %d", len(changes))
+	}
+}

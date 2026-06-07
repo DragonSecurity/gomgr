@@ -158,6 +158,38 @@ func validateUsername(name string) error {
 	return nil
 }
 
+var validTeamSlug = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+
+// ValidateCodeOwner checks that a CODEOWNERS entry is well-formed. Accepts
+// bare usernames (octocat), explicit user refs (@octocat), and team refs
+// (@org/team-slug). Emails are not yet supported.
+func ValidateCodeOwner(co string) error {
+	if co == "" {
+		return fmt.Errorf("codeowner must not be empty")
+	}
+	if strings.ContainsAny(co, " \t\n\r") {
+		return fmt.Errorf("codeowner contains whitespace: %q", co)
+	}
+	name := strings.TrimPrefix(co, "@")
+	if strings.Contains(name, "/") {
+		parts := strings.SplitN(name, "/", 2)
+		if err := validateUsername(parts[0]); err != nil {
+			return fmt.Errorf("codeowner %q: org segment: %w", co, err)
+		}
+		if parts[1] == "" || len(parts[1]) > 100 {
+			return fmt.Errorf("codeowner %q: team slug must be 1-100 characters", co)
+		}
+		if !validTeamSlug.MatchString(parts[1]) {
+			return fmt.Errorf("codeowner %q: team slug contains invalid characters", co)
+		}
+		return nil
+	}
+	if err := validateUsername(name); err != nil {
+		return fmt.Errorf("codeowner %q: %w", co, err)
+	}
+	return nil
+}
+
 func BootstrapTeamYAML(path string, name string) error {
 	t := TeamConfig{
 		Name:         name,

@@ -1026,3 +1026,103 @@ func TestPlanCustomRoles(t *testing.T) {
 		t.Errorf("expected 1 custom-role:update, got %d", updates)
 	}
 }
+
+func TestParseRepoConfig_Codeowners(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   any
+		want    []string
+		wantErr bool
+	}{
+		{
+			name: "list of usernames",
+			input: map[string]any{
+				"permission": "push",
+				"codeowners": []any{"allanice001", "@octocat"},
+			},
+			want: []string{"allanice001", "@octocat"},
+		},
+		{
+			name: "team ref",
+			input: map[string]any{
+				"codeowners": []any{"@dragon/platform"},
+			},
+			want: []string{"@dragon/platform"},
+		},
+		{
+			name: "not a list",
+			input: map[string]any{
+				"codeowners": "octocat",
+			},
+			wantErr: true,
+		},
+		{
+			name: "non-string entry",
+			input: map[string]any{
+				"codeowners": []any{"octocat", 123},
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid entry",
+			input: map[string]any{
+				"codeowners": []any{"bad user"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty entry",
+			input: map[string]any{
+				"codeowners": []any{""},
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseRepoConfig(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("parseRepoConfig err=%v wantErr=%v", err, tt.wantErr)
+			}
+			if err != nil {
+				return
+			}
+			if len(got.codeowners) != len(tt.want) {
+				t.Fatalf("codeowners=%v want %v", got.codeowners, tt.want)
+			}
+			for i, co := range got.codeowners {
+				if co != tt.want[i] {
+					t.Errorf("codeowners[%d]=%q want %q", i, co, tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestResolveTemplate_CodeownersUnion(t *testing.T) {
+	all := map[string]repoSettings{
+		"template-go-api": {
+			permission: "push",
+			template:   true,
+			codeowners: []string{"allanice001"},
+		},
+		"my-api": {
+			permission: "push",
+			from:       "template-go-api",
+			codeowners: []string{"octocat"},
+		},
+	}
+	resolved, err := resolveTemplate("my-api", all["my-api"], all, "myorg")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := map[string]bool{"allanice001": true, "octocat": true}
+	if len(resolved.codeowners) != len(want) {
+		t.Fatalf("codeowners=%v want union of both", resolved.codeowners)
+	}
+	for _, co := range resolved.codeowners {
+		if !want[co] {
+			t.Errorf("unexpected codeowner %q", co)
+		}
+	}
+}

@@ -34,6 +34,8 @@ The content is organized as follows:
 
 # Directory Structure
 ```
+.claude/
+  settings.local.json
 .github/
   ISSUE_TEMPLATE/
     bug_report.md
@@ -43,9 +45,11 @@ The content is organized as follows:
     release.yaml
   renovate.json
 cmd/
+  cmd_test.go
   root.go
   setup_team.go
   sync.go
+  validate.go
   version.go
 config/
   example/
@@ -72,15 +76,25 @@ examples/
     org.yaml
 internal/
   config/
+    loader_test.go
     loader.go
     types_test.go
     types.go
   gh/
+    client_test.go
     client.go
+    rate_test.go
     rate.go
+    retry_test.go
+    retry.go
   sync/
+    apply_handlers_test.go
+    apply_handlers.go
+    apply_registry_test.go
+    apply_registry.go
     custom_roles_test.go
     custom_roles.go
+    orchestrator_test.go
     orchestrator.go
     teams_test.go
     teams.go
@@ -90,8 +104,10 @@ internal/
   util/
     diff_test.go
     diff.go
+    log_test.go
     log.go
   version/
+    version_test.go
     version.go
 .gitignore
 .golangci.yml
@@ -107,207 +123,46 @@ repomix.config.json
 
 # Files
 
-## File: .repomixignore
-````
-*.pem
-
-# gomgr binary
-/gomgr
-/build/
-
-# Test coverage
-/coverage/
-
-# Created by https://www.toptal.com/developers/gitignore/api/go,goland
-# Edit at https://www.toptal.com/developers/gitignore?templates=go,goland
-
-### Go ###
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-
-# Test binary, built with `go test -c`
-*.test
-
-# Output of the go coverage tool, specifically when used with LiteIDE
-*.out
-
-# Dependency directories (remove the comment below to include it)
-# vendor/
-
-# Go workspace file
-go.work
-
-### GoLand ###
-# Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio, WebStorm and Rider
-# Reference: https://intellij-support.jetbrains.com/hc/en-us/articles/206544839
-
-# User-specific stuff
-.idea/**/workspace.xml
-.idea/**/tasks.xml
-.idea/**/usage.statistics.xml
-.idea/**/dictionaries
-.idea/**/shelf
-
-# AWS User-specific
-.idea/**/aws.xml
-
-# Generated files
-.idea/**/contentModel.xml
-
-# Sensitive or high-churn files
-.idea/**/dataSources/
-.idea/**/dataSources.ids
-.idea/**/dataSources.local.xml
-.idea/**/sqlDataSources.xml
-.idea/**/dynamic.xml
-.idea/**/uiDesigner.xml
-.idea/**/dbnavigator.xml
-
-# Gradle
-.idea/**/gradle.xml
-.idea/**/libraries
-
-# Gradle and Maven with auto-import
-# When using Gradle or Maven with auto-import, you should exclude module files,
-# since they will be recreated, and may cause churn.  Uncomment if using
-# auto-import.
-# .idea/artifacts
-# .idea/compiler.xml
-# .idea/jarRepositories.xml
-# .idea/modules.xml
-# .idea/*.iml
-# .idea/modules
-# *.iml
-# *.ipr
-
-# CMake
-cmake-build-*/
-
-# Mongo Explorer plugin
-.idea/**/mongoSettings.xml
-
-# File-based project format
-*.iws
-
-# IntelliJ
-out/
-
-# mpeltonen/sbt-idea plugin
-.idea_modules/
-
-# JIRA plugin
-atlassian-ide-plugin.xml
-
-# Cursive Clojure plugin
-.idea/replstate.xml
-
-# SonarLint plugin
-.idea/sonarlint/
-
-# Crashlytics plugin (for Android Studio and IntelliJ)
-com_crashlytics_export_strings.xml
-crashlytics.properties
-crashlytics-build.properties
-fabric.properties
-
-# Editor-based Rest Client
-.idea/httpRequests
-
-# Android studio 3.1+ serialized cache file
-.idea/caches/build_file_checksums.ser
-
-### GoLand Patch ###
-# Comment Reason: https://github.com/joeblau/gitignore.io/issues/186#issuecomment-215987721
-
-# *.iml
-# modules.xml
-# .idea/misc.xml
-# *.ipr
-
-# Sonarlint plugin
-# https://plugins.jetbrains.com/plugin/7973-sonarlint
-.idea/**/sonarlint/
-
-# SonarQube Plugin
-# https://plugins.jetbrains.com/plugin/7238-sonarqube-community-plugin
-.idea/**/sonarIssues.xml
-
-# Markdown Navigator plugin
-# https://plugins.jetbrains.com/plugin/7896-markdown-navigator-enhanced
-.idea/**/markdown-navigator.xml
-.idea/**/markdown-navigator-enh.xml
-.idea/**/markdown-navigator/
-
-# Cache file creation bug
-# See https://youtrack.jetbrains.com/issue/JBR-2257
-.idea/$CACHE_FILE$
-
-# CodeStream plugin
-# https://plugins.jetbrains.com/plugin/12206-codestream
-.idea/codestream.xml
-
-# Azure Toolkit for IntelliJ plugin
-# https://plugins.jetbrains.com/plugin/8053-azure-toolkit-for-intellij
-.idea/**/azureSettings.xml
-
-# End of https://www.toptal.com/developers/gitignore/api/go,goland
-
-.idea
-
-.env
-.pem
-````
-
-## File: repomix.config.json
+## File: .claude/settings.local.json
 ````json
 {
-  "$schema": "https://repomix.com/schemas/latest/schema.json",
-  "input": {
-    "maxFileSize": 52428800
-  },
-  "output": {
-    "filePath": "repomix-output.md",
-    "style": "markdown",
-    "parsableStyle": false,
-    "fileSummary": true,
-    "directoryStructure": true,
-    "files": true,
-    "removeComments": false,
-    "removeEmptyLines": false,
-    "compress": false,
-    "topFilesLength": 5,
-    "showLineNumbers": false,
-    "truncateBase64": false,
-    "copyToClipboard": false,
-    "includeFullDirectoryStructure": false,
-    "tokenCountTree": false,
-    "git": {
-      "sortByChanges": true,
-      "sortByChangesMaxCommits": 100,
-      "includeDiffs": false,
-      "includeLogs": false,
-      "includeLogsCount": 50
-    }
-  },
-  "include": [],
-  "ignore": {
-    "useGitignore": true,
-    "useDotIgnore": true,
-    "useDefaultPatterns": true,
-    "customPatterns": []
-  },
-  "security": {
-    "enableSecurityCheck": true
-  },
-  "tokenCount": {
-    "encoding": "o200k_base"
+  "permissions": {
+    "allow": [
+      "Bash(wc -l /Users/dragon/projects/DragonSecurity/gomgr/internal/sync/*.go)",
+      "Bash(wc -l /Users/dragon/projects/DragonSecurity/gomgr/internal/**/*.go)",
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(go vet:*)",
+      "Bash(make vet:*)",
+      "Bash(make test:*)",
+      "Bash(/tmp/gomgr sync:*)",
+      "Bash(go mod:*)",
+      "Bash(grep -n \"applyChanges\\\\|^func Apply\" internal/sync/*.go)",
+      "Bash(go tool:*)",
+      "Bash(grep:*)",
+      "Bash(golangci-lint run:*)",
+      "Bash(golangci-lint:*)",
+      "Bash(make lint:*)",
+      "WebSearch",
+      "WebFetch(domain:golangci-lint.run)",
+      "Bash(gofmt -w internal/sync/orchestrator.go)",
+      "Bash(goimports -w cmd/setup_team.go cmd/sync.go)",
+      "Bash(gofmt:*)",
+      "Bash(go install:*)",
+      "Bash(git stash:*)",
+      "Bash(gh api:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git --version)",
+      "Read(//Users/dragon/.buddy/**)",
+      "Bash(claude mcp:*)",
+      "mcp__buddy__buddy_status",
+      "mcp__buddy__buddy_hatch",
+      "Bash(wc -l internal/**/*.go)",
+      "Bash(ls -la /Users/dragon/projects/DragonSecurity/gomgr/cmd/*_test.go)",
+      "mcp__buddy__buddy_observe",
+      "Bash(cat examples/config/teams/*.yaml)"
+    ]
   }
 }
 ````
@@ -384,6 +239,245 @@ Add any other context or screenshots about the feature request here.
     "$schema": "https://docs.renovatebot.com/renovate-schema.json",
     "extends": ["github>DragonSecurity/renovate-presets"]
   }
+````
+
+## File: cmd/cmd_test.go
+````go
+package cmd
+
+import (
+	"bytes"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+)
+
+// runCmd invokes rootCmd with the given args, capturing anything written to
+// either the cobra Out/Err sinks or os.Stdout (several commands use fmt.Println
+// directly). The caller gets stdout, stderr, and the command's error back.
+//
+// Tests that use this helper must not run in parallel — rootCmd is a package
+// singleton with shared flag state.
+func runCmd(t *testing.T, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+
+	cfgDir = ""
+	debug = false
+	dryRun = false
+	timeout = 10 * time.Minute
+	auditLog = false
+	teamName = ""
+	outFile = ""
+	resetFlagsChanged(rootCmd)
+
+	outBuf := &bytes.Buffer{}
+	errBuf := &bytes.Buffer{}
+	rootCmd.SetOut(outBuf)
+	rootCmd.SetErr(errBuf)
+
+	origStdout := os.Stdout
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatalf("pipe: %v", pipeErr)
+	}
+	os.Stdout = w
+
+	rootCmd.SetArgs(args)
+	execErr := rootCmd.Execute()
+
+	_ = w.Close()
+	os.Stdout = origStdout
+	var stdoutBuf bytes.Buffer
+	_, _ = io.Copy(&stdoutBuf, r)
+
+	t.Cleanup(func() {
+		rootCmd.SetArgs(nil)
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+	})
+
+	return stdoutBuf.String() + outBuf.String(), errBuf.String(), execErr
+}
+
+// resetFlagsChanged walks a cobra command tree and clears the Changed flag on
+// every pflag so required-flag detection works across sequential Execute calls.
+func resetFlagsChanged(c *cobra.Command) {
+	clear := func(f *pflag.Flag) { f.Changed = false }
+	c.Flags().VisitAll(clear)
+	c.PersistentFlags().VisitAll(clear)
+	for _, child := range c.Commands() {
+		resetFlagsChanged(child)
+	}
+}
+
+// writeConfigDir builds a minimal but valid gomgr config tree under dir and
+// returns the dir path. The team file references a repo called "api".
+func writeConfigDir(t *testing.T, dir string) string {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(dir, "teams"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(path, contents string) {
+		if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(dir, "app.yaml"), "org: testorg\n")
+	write(filepath.Join(dir, "org.yaml"), "owners:\n  - alice\n")
+	write(filepath.Join(dir, "teams", "backend.yaml"), `name: Backend
+slug: backend
+privacy: closed
+maintainers:
+  - alice
+members:
+  - bob
+repositories:
+  api:
+    permission: push
+`)
+	return dir
+}
+
+func TestVersionCommand(t *testing.T) {
+	stdout, _, err := runCmd(t, "version")
+	if err != nil {
+		t.Fatalf("version command failed: %v", err)
+	}
+	if !strings.Contains(stdout, "Version:") {
+		t.Errorf("expected 'Version:' in output, got %q", stdout)
+	}
+}
+
+func TestValidate_MissingConfigFlag(t *testing.T) {
+	_, _, err := runCmd(t, "validate")
+	if err == nil {
+		t.Fatal("expected error when --config is missing")
+	}
+	if !strings.Contains(err.Error(), "--config") {
+		t.Errorf("expected error to mention --config, got %v", err)
+	}
+}
+
+func TestValidate_NonexistentConfigDir(t *testing.T) {
+	_, _, err := runCmd(t, "validate", "-c", "/nonexistent/path/gomgr-test")
+	if err == nil {
+		t.Fatal("expected error for nonexistent config dir")
+	}
+}
+
+func TestValidate_ValidConfig(t *testing.T) {
+	dir := writeConfigDir(t, t.TempDir())
+	stdout, _, err := runCmd(t, "validate", "-c", dir)
+	if err != nil {
+		t.Fatalf("validate failed on good config: %v", err)
+	}
+	if !strings.Contains(stdout, "Configuration is valid") {
+		t.Errorf("expected success message, got %q", stdout)
+	}
+}
+
+func TestValidate_InvalidConfig_EmptyOrg(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "app.yaml"), []byte("org: \"\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "org.yaml"), []byte("owners: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := runCmd(t, "validate", "-c", dir)
+	if err == nil {
+		t.Fatal("expected validation error for empty org")
+	}
+	if !strings.Contains(err.Error(), "org") {
+		t.Errorf("expected error to mention 'org', got %v", err)
+	}
+}
+
+func TestValidate_InvalidConfig_BadTeamPrivacy(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "teams"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile := func(path, contents string) {
+		if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeFile(filepath.Join(dir, "app.yaml"), "org: testorg\n")
+	writeFile(filepath.Join(dir, "org.yaml"), "owners:\n  - alice\n")
+	writeFile(filepath.Join(dir, "teams", "bad.yaml"), "name: Bad\nprivacy: open\n")
+
+	_, _, err := runCmd(t, "validate", "-c", dir)
+	if err == nil {
+		t.Fatal("expected validation error for bad privacy")
+	}
+	if !strings.Contains(err.Error(), "privacy") {
+		t.Errorf("expected error to mention 'privacy', got %v", err)
+	}
+}
+
+func TestSetupTeam_CreatesFile(t *testing.T) {
+	dir := t.TempDir()
+	_, _, err := runCmd(t, "setup-team", "-c", dir, "-n", "Backend Team")
+	if err != nil {
+		t.Fatalf("setup-team failed: %v", err)
+	}
+	// slug should be lowercase with dashes.
+	expected := filepath.Join(dir, "teams", "backend-team.yaml")
+	if _, err := os.Stat(expected); err != nil {
+		t.Fatalf("expected team file at %s, got: %v", expected, err)
+	}
+	b, err := os.ReadFile(expected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "Backend Team") {
+		t.Errorf("expected team file to contain team name, got %q", string(b))
+	}
+}
+
+func TestSetupTeam_MissingNameFlag(t *testing.T) {
+	dir := t.TempDir()
+	_, _, err := runCmd(t, "setup-team", "-c", dir)
+	if err == nil {
+		t.Fatal("expected error when --name is missing")
+	}
+}
+
+func TestSetupTeam_ExplicitOutFile(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "frontend.yaml")
+	_, _, err := runCmd(t, "setup-team", "-c", dir, "-n", "Frontend", "-f", out)
+	if err != nil {
+		t.Fatalf("setup-team failed: %v", err)
+	}
+	if _, err := os.Stat(out); err != nil {
+		t.Fatalf("expected file at %s, got: %v", out, err)
+	}
+}
+
+func TestSync_MissingConfigFlag(t *testing.T) {
+	_, _, err := runCmd(t, "sync")
+	if err == nil {
+		t.Fatal("expected error when --config is missing")
+	}
+	if !strings.Contains(err.Error(), "--config") {
+		t.Errorf("expected error to mention --config, got %v", err)
+	}
+}
+
+func TestRoot_UnknownCommand(t *testing.T) {
+	_, _, err := runCmd(t, "does-not-exist")
+	if err == nil {
+		t.Fatal("expected error for unknown command")
+	}
+}
 ````
 
 ## File: examples/config/teams/backend-team.yaml
@@ -647,6 +741,661 @@ repositories:
       - policies
 ````
 
+## File: internal/config/loader_test.go
+````go
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestLoad_ValidConfig(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "app.yaml"), `org: myorg
+create_repo: true
+`)
+	writeFile(t, filepath.Join(dir, "org.yaml"), `owners:
+  - alice
+`)
+	teamsDir := filepath.Join(dir, "teams")
+	if err := os.MkdirAll(teamsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(teamsDir, "backend.yaml"), `name: Backend
+slug: backend
+members:
+  - alice
+repositories:
+  api: push
+`)
+
+	root, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if root.App.Org != "myorg" {
+		t.Errorf("expected org=myorg, got %q", root.App.Org)
+	}
+	if !root.App.CreateRepo {
+		t.Error("expected CreateRepo=true")
+	}
+	if len(root.Org.Owners) != 1 || root.Org.Owners[0] != "alice" {
+		t.Errorf("expected owners=[alice], got %v", root.Org.Owners)
+	}
+	if len(root.Team) != 1 {
+		t.Fatalf("expected 1 team, got %d", len(root.Team))
+	}
+	if root.Team[0].Name != "Backend" {
+		t.Errorf("expected team name=Backend, got %q", root.Team[0].Name)
+	}
+}
+
+func TestLoad_MissingAppYaml(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "org.yaml"), `owners: []`)
+
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error for missing app.yaml")
+	}
+	if !strings.Contains(err.Error(), "app.yaml") {
+		t.Errorf("expected error about app.yaml, got: %v", err)
+	}
+}
+
+func TestLoad_MissingOrg(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "app.yaml"), `create_repo: true`)
+	writeFile(t, filepath.Join(dir, "org.yaml"), `owners: []`)
+
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error for empty org")
+	}
+	if !strings.Contains(err.Error(), "app.org is required") {
+		t.Errorf("expected 'app.org is required' error, got: %v", err)
+	}
+}
+
+func TestLoad_InvalidYAML(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "app.yaml"), `{{{invalid yaml`)
+	writeFile(t, filepath.Join(dir, "org.yaml"), `owners: []`)
+
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error for invalid YAML")
+	}
+	if !strings.Contains(err.Error(), "parse YAML") {
+		t.Errorf("expected parse YAML error, got: %v", err)
+	}
+}
+
+func TestLoad_NoTeamsDir(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "app.yaml"), `org: myorg`)
+	writeFile(t, filepath.Join(dir, "org.yaml"), `owners: []`)
+
+	root, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(root.Team) != 0 {
+		t.Errorf("expected 0 teams, got %d", len(root.Team))
+	}
+}
+
+func TestLoad_IgnoresNonYAMLFiles(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "app.yaml"), `org: myorg`)
+	writeFile(t, filepath.Join(dir, "org.yaml"), `owners: []`)
+	teamsDir := filepath.Join(dir, "teams")
+	if err := os.MkdirAll(teamsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(teamsDir, ".DS_Store"), "binary junk")
+	writeFile(t, filepath.Join(teamsDir, "README.md"), "# Teams")
+	writeFile(t, filepath.Join(teamsDir, "backend.yaml"), `name: Backend
+members:
+  - alice
+`)
+
+	root, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(root.Team) != 1 {
+		t.Errorf("expected 1 team (ignoring non-YAML), got %d", len(root.Team))
+	}
+}
+
+func TestBootstrapTeamYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "teams", "new-team.yaml")
+
+	if err := BootstrapTeamYAML(path, "New Team"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read file: %v", err)
+	}
+	content := string(b)
+	if !strings.Contains(content, "name: New Team") {
+		t.Errorf("expected 'name: New Team' in output, got:\n%s", content)
+	}
+}
+
+func TestResolvedSlug(t *testing.T) {
+	tests := []struct {
+		name string
+		tc   TeamConfig
+		want string
+	}{
+		{
+			name: "explicit slug",
+			tc:   TeamConfig{Name: "Backend", Slug: "be-team"},
+			want: "be-team",
+		},
+		{
+			name: "derived from name",
+			tc:   TeamConfig{Name: "Backend Team"},
+			want: "backend-team",
+		},
+		{
+			name: "empty both",
+			tc:   TeamConfig{},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.tc.ResolvedSlug()
+			if got != tt.want {
+				t.Errorf("ResolvedSlug() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write %s: %v", path, err)
+	}
+}
+````
+
+## File: internal/gh/retry_test.go
+````go
+package gh
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
+	"testing"
+)
+
+func TestRetryTransport_SuccessOnFirstAttempt(t *testing.T) {
+	var calls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := &http.Client{
+		Transport: newRetryTransport(http.DefaultTransport, 3),
+	}
+
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if c := atomic.LoadInt32(&calls); c != 1 {
+		t.Errorf("expected 1 call, got %d", c)
+	}
+}
+
+func TestRetryTransport_RetriesOn502(t *testing.T) {
+	var calls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n := atomic.AddInt32(&calls, 1)
+		if n < 3 {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := &http.Client{
+		Transport: newRetryTransport(http.DefaultTransport, 3),
+	}
+
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 after retries, got %d", resp.StatusCode)
+	}
+	if c := atomic.LoadInt32(&calls); c != 3 {
+		t.Errorf("expected 3 calls, got %d", c)
+	}
+}
+
+func TestRetryTransport_ExhaustsRetries(t *testing.T) {
+	var calls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := &http.Client{
+		Transport: newRetryTransport(http.DefaultTransport, 2),
+	}
+
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("expected 500 after exhausting retries, got %d", resp.StatusCode)
+	}
+	// 1 initial + 2 retries = 3 total
+	if c := atomic.LoadInt32(&calls); c != 3 {
+		t.Errorf("expected 3 calls, got %d", c)
+	}
+}
+
+func TestRetryTransport_NoRetryOnClientError(t *testing.T) {
+	var calls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := &http.Client{
+		Transport: newRetryTransport(http.DefaultTransport, 3),
+	}
+
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	resp.Body.Close()
+
+	if c := atomic.LoadInt32(&calls); c != 1 {
+		t.Errorf("expected 1 call (no retry on 404), got %d", c)
+	}
+}
+
+func TestRetryTransport_RespectsRetryAfter(t *testing.T) {
+	var calls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n := atomic.AddInt32(&calls, 1)
+		if n == 1 {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := &http.Client{
+		Transport: newRetryTransport(http.DefaultTransport, 3),
+	}
+
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 after retry, got %d", resp.StatusCode)
+	}
+	if c := atomic.LoadInt32(&calls); c != 2 {
+		t.Errorf("expected 2 calls, got %d", c)
+	}
+}
+````
+
+## File: internal/gh/retry.go
+````go
+package gh
+
+import (
+	"math"
+	"math/rand"
+	"net/http"
+	"strconv"
+	"time"
+)
+
+// retryTransport wraps an http.RoundTripper and retries on transient failures
+// (5xx responses and 429 rate limits) with exponential backoff and jitter.
+type retryTransport struct {
+	base       http.RoundTripper
+	maxRetries int
+}
+
+// newRetryTransport wraps the given transport with retry logic.
+func newRetryTransport(base http.RoundTripper, maxRetries int) http.RoundTripper {
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return &retryTransport{base: base, maxRetries: maxRetries}
+}
+
+func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	var resp *http.Response
+	var err error
+
+	for attempt := 0; attempt <= t.maxRetries; attempt++ {
+		resp, err = t.base.RoundTrip(req)
+		if err != nil {
+			// Network-level error: only retry if the request is idempotent or retryable
+			if !isRetryableMethod(req.Method) || attempt == t.maxRetries {
+				return resp, err
+			}
+			backoff := calcBackoff(attempt)
+			time.Sleep(backoff)
+			continue
+		}
+
+		if !isRetryableStatus(resp.StatusCode) {
+			return resp, nil
+		}
+
+		// Don't retry if we've exhausted attempts
+		if attempt == t.maxRetries {
+			return resp, nil
+		}
+
+		// Use Retry-After header if present (GitHub sends it on 429)
+		backoff := retryAfterDuration(resp)
+		if backoff == 0 {
+			backoff = calcBackoff(attempt)
+		}
+
+		// Drain and close response body before retry
+		_ = resp.Body.Close()
+		time.Sleep(backoff)
+	}
+
+	return resp, err
+}
+
+func isRetryableStatus(status int) bool {
+	return status == http.StatusTooManyRequests || // 429
+		status == http.StatusInternalServerError || // 500
+		status == http.StatusBadGateway || // 502
+		status == http.StatusServiceUnavailable || // 503
+		status == http.StatusGatewayTimeout // 504
+}
+
+func isRetryableMethod(method string) bool {
+	return method == http.MethodGet || method == http.MethodHead
+}
+
+// calcBackoff returns exponential backoff with jitter: base * 2^attempt + random jitter.
+func calcBackoff(attempt int) time.Duration {
+	base := 500 * time.Millisecond
+	exp := time.Duration(math.Pow(2, float64(attempt))) * base
+	if exp > 30*time.Second {
+		exp = 30 * time.Second
+	}
+	jitter := time.Duration(rand.Int63n(int64(500 * time.Millisecond))) //nolint:gosec
+	return exp + jitter
+}
+
+// retryAfterDuration parses the Retry-After header if present.
+func retryAfterDuration(resp *http.Response) time.Duration {
+	ra := resp.Header.Get("Retry-After")
+	if ra == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(ra); err == nil {
+		return time.Duration(secs) * time.Second
+	}
+	return 0
+}
+````
+
+## File: internal/sync/apply_registry_test.go
+````go
+package sync
+
+import (
+	"context"
+	"errors"
+	"math"
+	"testing"
+
+	"github.com/DragonSecurity/gomgr/internal/gh"
+	"github.com/DragonSecurity/gomgr/internal/util"
+)
+
+func TestHandlerRegistry_RegisterAndLookup(t *testing.T) {
+	r := NewHandlerRegistry()
+	want := errors.New("boom")
+	r.Register("team", "create", 10, HandlerFunc(func(context.Context, *gh.Client, util.Change) error {
+		return want
+	}))
+
+	h, ok := r.Lookup("team", "create")
+	if !ok {
+		t.Fatal("expected Lookup to find team:create")
+	}
+	if err := h.Apply(context.Background(), nil, util.Change{}); !errors.Is(err, want) {
+		t.Errorf("expected registered handler to run, got %v", err)
+	}
+
+	if _, ok := r.Lookup("repo", "delete"); ok {
+		t.Error("expected Lookup to miss unregistered keys")
+	}
+}
+
+func TestHandlerRegistry_Precedence(t *testing.T) {
+	r := NewHandlerRegistry()
+	r.Register("team", "create", 10, HandlerFunc(noopHandler))
+	r.Register("repo", "delete", 90, HandlerFunc(noopHandler))
+
+	if got := r.Precedence("team", "create"); got != 10 {
+		t.Errorf("team:create precedence = %d, want 10", got)
+	}
+	if got := r.Precedence("repo", "delete"); got != 90 {
+		t.Errorf("repo:delete precedence = %d, want 90", got)
+	}
+	if got := r.Precedence("unknown", "action"); got != math.MaxInt {
+		t.Errorf("unknown precedence = %d, want MaxInt (sort last)", got)
+	}
+}
+
+func TestHandlerRegistry_DuplicatePanics(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic on duplicate registration")
+		}
+	}()
+	r := NewHandlerRegistry()
+	r.Register("team", "create", 10, HandlerFunc(noopHandler))
+	r.Register("team", "create", 20, HandlerFunc(noopHandler))
+}
+
+func TestDefaultRegistry_HasKnownKinds(t *testing.T) {
+	kinds := []struct{ scope, action string }{
+		{"team", "create"},
+		{"team", "update"},
+		{"team", "delete"},
+		{"team-member", "ensure"},
+		{"repo", "ensure"},
+		{"repo", "delete"},
+		{"team-repo", "grant"},
+		{"repo-file", "ensure"},
+		{"repo-topics", "ensure"},
+		{"repo-template", "ensure"},
+		{"repo-pin", "ensure"},
+		{"org-member", "remove"},
+		{"custom-role", "create"},
+		{"custom-role", "update"},
+		{"custom-role", "delete"},
+	}
+	for _, k := range kinds {
+		if _, ok := defaultRegistry.Lookup(k.scope, k.action); !ok {
+			t.Errorf("defaultRegistry missing handler for %s:%s", k.scope, k.action)
+		}
+	}
+}
+
+func TestDefaultRegistry_PrecedenceOrdering(t *testing.T) {
+	// Create must run before member additions, which must run before deletions.
+	if defaultRegistry.Precedence("team", "create") >= defaultRegistry.Precedence("team-member", "ensure") {
+		t.Error("team:create should precede team-member:ensure")
+	}
+	if defaultRegistry.Precedence("team-member", "ensure") >= defaultRegistry.Precedence("team", "delete") {
+		t.Error("team-member:ensure should precede team:delete")
+	}
+	if defaultRegistry.Precedence("repo", "ensure") >= defaultRegistry.Precedence("repo", "delete") {
+		t.Error("repo:ensure should precede repo:delete")
+	}
+}
+
+func noopHandler(context.Context, *gh.Client, util.Change) error { return nil }
+````
+
+## File: internal/sync/apply_registry.go
+````go
+package sync
+
+import (
+	"context"
+	"fmt"
+	"math"
+
+	"github.com/DragonSecurity/gomgr/internal/gh"
+	"github.com/DragonSecurity/gomgr/internal/util"
+)
+
+// Handler applies a single planned change against GitHub.
+//
+// Implementations should be idempotent where possible; the planner already
+// filters out no-op changes, but partial failures mid-apply are possible.
+type Handler interface {
+	Apply(ctx context.Context, c *gh.Client, ch util.Change) error
+}
+
+// HandlerFunc adapts an ordinary function to the Handler interface.
+type HandlerFunc func(ctx context.Context, c *gh.Client, ch util.Change) error
+
+// Apply implements Handler.
+func (f HandlerFunc) Apply(ctx context.Context, c *gh.Client, ch util.Change) error {
+	return f(ctx, c, ch)
+}
+
+// registration bundles a handler with the ordering precedence used during apply.
+type registration struct {
+	handler    Handler
+	precedence int
+}
+
+// HandlerRegistry resolves change kinds (scope:action) to handlers and orders them.
+type HandlerRegistry struct {
+	entries map[string]registration
+}
+
+// NewHandlerRegistry returns an empty registry.
+func NewHandlerRegistry() *HandlerRegistry {
+	return &HandlerRegistry{entries: map[string]registration{}}
+}
+
+// Register binds a Handler to scope:action with the given precedence.
+// Lower precedence runs first. Duplicate registrations panic so misconfigured
+// registries fail fast at startup rather than during an apply.
+func (r *HandlerRegistry) Register(scope, action string, precedence int, h Handler) {
+	key := changeKey(scope, action)
+	if _, exists := r.entries[key]; exists {
+		panic(fmt.Sprintf("handler already registered for %s", key))
+	}
+	r.entries[key] = registration{handler: h, precedence: precedence}
+}
+
+// Lookup returns the Handler registered for scope:action, if any.
+func (r *HandlerRegistry) Lookup(scope, action string) (Handler, bool) {
+	e, ok := r.entries[changeKey(scope, action)]
+	if !ok {
+		return nil, false
+	}
+	return e.handler, true
+}
+
+// Precedence returns the ordering weight for scope:action. Unregistered keys
+// sort last so unknown change kinds don't silently jump the queue.
+func (r *HandlerRegistry) Precedence(scope, action string) int {
+	if e, ok := r.entries[changeKey(scope, action)]; ok {
+		return e.precedence
+	}
+	return math.MaxInt
+}
+
+func changeKey(scope, action string) string { return scope + ":" + action }
+
+// defaultRegistry is the set of built-in handlers applyChanges consults.
+var defaultRegistry = buildDefaultRegistry()
+
+func buildDefaultRegistry() *HandlerRegistry {
+	r := NewHandlerRegistry()
+
+	// Creation / mutation phase (low precedence = runs first).
+	r.Register("custom-role", "create", precedenceCustomRoleCreate, HandlerFunc(applyCustomRoleNoop))
+	r.Register("custom-role", "update", precedenceCustomRoleUpdate, HandlerFunc(applyCustomRoleNoop))
+	r.Register("team", "create", precedenceTeamCreate, HandlerFunc(applyTeamCreate))
+	r.Register("repo", "ensure", precedenceRepoEnsure, HandlerFunc(applyRepoEnsure))
+	r.Register("team", "update", precedenceTeamUpdate, HandlerFunc(applyTeamUpdate))
+	r.Register("team-repo", "grant", precedenceTeamRepoGrant, HandlerFunc(applyTeamRepoGrant))
+	r.Register("team-member", "ensure", precedenceTeamMemberEnsure, HandlerFunc(applyTeamMemberEnsure))
+	r.Register("repo-file", "ensure", precedenceRepoFileEnsure, HandlerFunc(applyRepoFileEnsure))
+	r.Register("repo-topics", "ensure", precedenceRepoTopicsEnsure, HandlerFunc(applyRepoTopicsEnsure))
+	r.Register("repo-template", "ensure", precedenceRepoTemplateEnsure, HandlerFunc(applyRepoTemplateEnsure))
+	r.Register("repo-pin", "ensure", precedenceRepoPinEnsure, HandlerFunc(applyRepoPinEnsure))
+
+	// Cleanup phase (high precedence = runs last).
+	r.Register("org-member", "remove", precedenceOrgMemberRemove, HandlerFunc(applyOrgMemberRemove))
+	r.Register("team", "delete", precedenceTeamDelete, HandlerFunc(applyTeamDelete))
+	r.Register("repo", "delete", precedenceRepoDelete, HandlerFunc(applyRepoDelete))
+	r.Register("custom-role", "delete", precedenceCustomRoleDelete, HandlerFunc(applyCustomRoleNoop))
+
+	return r
+}
+
+// applyCustomRoleNoop is a placeholder for custom-role changes; they are
+// dispatched via applyCustomRoleChanges before the main loop runs, so this
+// handler is only consulted for precedence ordering and should never execute.
+func applyCustomRoleNoop(_ context.Context, _ *gh.Client, ch util.Change) error {
+	return fmt.Errorf("custom-role change reached generic apply loop: %s:%s %s", ch.Scope, ch.Action, ch.Target)
+}
+````
+
 ## File: internal/sync/custom_roles_test.go
 ````go
 package sync
@@ -714,252 +1463,6 @@ func TestPermissionsEqual(t *testing.T) {
 			}
 		})
 	}
-}
-````
-
-## File: internal/sync/custom_roles.go
-````go
-package sync
-
-import (
-	"context"
-	"fmt"
-	"strings"
-
-	"github.com/DragonSecurity/gomgr/internal/config"
-	"github.com/DragonSecurity/gomgr/internal/gh"
-	"github.com/DragonSecurity/gomgr/internal/util"
-	"github.com/google/go-github/v83/github"
-)
-
-// customRoleChange represents a custom role modification
-type customRoleChange struct {
-	Org         string
-	ID          int64
-	Name        string
-	Description string
-	BaseRole    string
-	Permissions []string
-}
-
-// planCustomRoles determines what custom repository role changes are needed
-func planCustomRoles(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) ([]util.Change, error) {
-	var out []util.Change
-	org := st.Org
-
-	if len(cfg.Org.CustomRoles) == 0 {
-		// No custom roles configured
-		return out, nil
-	}
-
-	// Fetch existing custom roles from GitHub
-	existingRolesResp, _, err := c.REST.Organizations.ListCustomRepoRoles(ctx, org)
-	if err != nil {
-		// If the org doesn't have custom roles enabled (not Enterprise Cloud),
-		// return an error with helpful context
-		return out, fmt.Errorf("list custom repo roles: %w (note: custom roles require GitHub Enterprise Cloud)", err)
-	}
-
-	// Build map of existing roles by name (lowercase for case-insensitive comparison)
-	existingByName := make(map[string]*github.CustomRepoRoles)
-	for _, role := range existingRolesResp.CustomRepoRoles {
-		if role.Name != nil {
-			existingByName[strings.ToLower(*role.Name)] = role
-		}
-	}
-
-	// Track state
-	st.CurrentCustomRoles = len(existingRolesResp.CustomRepoRoles)
-	st.DesiredCustomRoles = len(cfg.Org.CustomRoles)
-
-	// Plan changes for each desired role
-	for _, desiredRole := range cfg.Org.CustomRoles {
-		roleName := desiredRole.Name
-		roleNameLower := strings.ToLower(roleName)
-
-		existingRole, exists := existingByName[roleNameLower]
-
-		if !exists {
-			// Create new role
-			out = append(out, util.Change{
-				Scope:  "custom-role",
-				Target: roleName,
-				Action: "create",
-				Details: customRoleChange{
-					Org:         org,
-					Name:        roleName,
-					Description: desiredRole.Description,
-					BaseRole:    desiredRole.BaseRole,
-					Permissions: desiredRole.Permissions,
-				},
-			})
-		} else {
-			// Check if update is needed
-			needsUpdate := false
-
-			// Check description changes
-			existingDesc := ""
-			if existingRole.Description != nil {
-				existingDesc = *existingRole.Description
-			}
-			if existingDesc != desiredRole.Description {
-				needsUpdate = true
-			}
-
-			// Check base role changes
-			if existingRole.BaseRole != nil && *existingRole.BaseRole != desiredRole.BaseRole {
-				needsUpdate = true
-			}
-
-			// Check permission changes
-			if !permissionsEqual(existingRole.Permissions, desiredRole.Permissions) {
-				needsUpdate = true
-			}
-
-			if needsUpdate {
-				out = append(out, util.Change{
-					Scope:  "custom-role",
-					Target: roleName,
-					Action: "update",
-					Details: customRoleChange{
-						Org:         org,
-						ID:          existingRole.GetID(),
-						Name:        roleName,
-						Description: desiredRole.Description,
-						BaseRole:    desiredRole.BaseRole,
-						Permissions: desiredRole.Permissions,
-					},
-				})
-			}
-		}
-	}
-
-	return out, nil
-}
-
-// planCustomRoleCleanups determines which custom roles should be deleted
-func planCustomRoleCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) ([]util.Change, []string, error) {
-	var out []util.Change
-	var warnings []string
-	org := st.Org
-
-	if !cfg.App.DeleteUnmanagedCustomRoles && !cfg.App.DryWarnings.WarnUnmanagedCustomRoles {
-		return out, warnings, nil
-	}
-
-	// Fetch existing custom roles
-	existingRolesResp, _, err := c.REST.Organizations.ListCustomRepoRoles(ctx, org)
-	if err != nil {
-		// If custom roles aren't available, skip cleanup
-		return out, warnings, nil
-	}
-
-	// Build set of desired role names (case-insensitive)
-	desiredNames := make(map[string]bool)
-	for _, role := range cfg.Org.CustomRoles {
-		desiredNames[strings.ToLower(role.Name)] = true
-	}
-
-	// Find unmanaged roles
-	var unmanagedRoles []string
-	for _, role := range existingRolesResp.CustomRepoRoles {
-		if role.Name == nil {
-			continue
-		}
-		roleName := *role.Name
-		if !desiredNames[strings.ToLower(roleName)] {
-			unmanagedRoles = append(unmanagedRoles, roleName)
-			if cfg.App.DeleteUnmanagedCustomRoles {
-				out = append(out, util.Change{
-					Scope:  "custom-role",
-					Target: roleName,
-					Action: "delete",
-					Details: customRoleChange{
-						Org:  org,
-						ID:   role.GetID(),
-						Name: roleName,
-					},
-				})
-			}
-		}
-	}
-
-	if cfg.App.DryWarnings.WarnUnmanagedCustomRoles && len(unmanagedRoles) > 0 {
-		warnings = append(warnings, fmt.Sprintf("Found %d unmanaged custom repository roles: %v", len(unmanagedRoles), unmanagedRoles))
-	}
-
-	return out, warnings, nil
-}
-
-// applyCustomRoleChanges handles creating, updating, and deleting custom roles
-func applyCustomRoleChanges(ctx context.Context, c *gh.Client, changes []util.Change) error {
-	for _, ch := range changes {
-		if !strings.HasPrefix(ch.Scope, "custom-role") {
-			continue
-		}
-
-		d, ok := ch.Details.(customRoleChange)
-		if !ok {
-			return fmt.Errorf("invalid details for custom-role change")
-		}
-
-		switch ch.Scope + ":" + ch.Action {
-		case "custom-role:create":
-			opts := &github.CreateOrUpdateCustomRepoRoleOptions{
-				Name:        github.Ptr(d.Name),
-				BaseRole:    github.Ptr(d.BaseRole),
-				Permissions: d.Permissions,
-			}
-			if d.Description != "" {
-				opts.Description = github.Ptr(d.Description)
-			}
-
-			_, _, err := c.REST.Organizations.CreateCustomRepoRole(ctx, d.Org, opts)
-			if err != nil {
-				return fmt.Errorf("create custom role %q: %w", d.Name, err)
-			}
-
-		case "custom-role:update":
-			opts := &github.CreateOrUpdateCustomRepoRoleOptions{
-				Name:        github.Ptr(d.Name),
-				BaseRole:    github.Ptr(d.BaseRole),
-				Permissions: d.Permissions,
-			}
-			if d.Description != "" {
-				opts.Description = github.Ptr(d.Description)
-			}
-
-			_, _, err := c.REST.Organizations.UpdateCustomRepoRole(ctx, d.Org, d.ID, opts)
-			if err != nil {
-				return fmt.Errorf("update custom role %q (ID %d): %w", d.Name, d.ID, err)
-			}
-
-		case "custom-role:delete":
-			_, err := c.REST.Organizations.DeleteCustomRepoRole(ctx, d.Org, d.ID)
-			if err != nil {
-				return fmt.Errorf("delete custom role %q (ID %d): %w", d.Name, d.ID, err)
-			}
-		}
-	}
-
-	return nil
-}
-
-// permissionsEqual checks if two permission lists are equivalent
-func permissionsEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	aSet := make(map[string]bool)
-	for _, p := range a {
-		aSet[p] = true
-	}
-	for _, p := range b {
-		if !aSet[p] {
-			return false
-		}
-	}
-	return true
 }
 ````
 
@@ -1091,231 +1594,176 @@ func GenerateReadme(org, repo string) (string, error) {
 }
 ````
 
-## File: internal/util/diff_test.go
+## File: internal/version/version_test.go
 ````go
-package util
+package version
 
-import (
-	"bytes"
-	"io"
-	"os"
-	"strings"
-	"testing"
-)
+import "testing"
 
-func TestPrintSummary(t *testing.T) {
-	tests := []struct {
-		name             string
-		plan             Plan
-		expectedContains []string
-	}{
-		{
-			name: "with changes and warnings",
-			plan: Plan{
-				Changes: []Change{
-					{Scope: "team", Target: "team1", Action: "create", Details: nil},
-					{Scope: "team", Target: "team2", Action: "create", Details: nil},
-					{Scope: "team-member", Target: "user1", Action: "ensure", Details: nil},
-					{Scope: "team-repo", Target: "repo1", Action: "grant", Details: nil},
-					{Scope: "repo-pin", Target: "repo1", Action: "ensure", Details: nil},
-				},
-				Warnings: []string{"Test warning 1", "Test warning 2"},
-			},
-			expectedContains: []string{
-				"Summary of Proposed Changes",
-				"Total changes: 5",
-				"Changes by scope:",
-				"team:",
-				"team-member:",
-				"team-repo:",
-				"repo-pin:",
-				"Changes by action:",
-				"create:",
-				"ensure:",
-				"grant:",
-				"Warnings: 2",
-				"Test warning 1",
-				"Test warning 2",
-			},
-		},
-		{
-			name: "no changes",
-			plan: Plan{
-				Changes:  []Change{},
-				Warnings: nil,
-			},
-			expectedContains: []string{
-				"Summary of Proposed Changes",
-				"No changes required - configuration is in sync",
-			},
-		},
-		{
-			name: "changes without warnings",
-			plan: Plan{
-				Changes: []Change{
-					{Scope: "team", Target: "team1", Action: "create", Details: nil},
-				},
-				Warnings: nil,
-			},
-			expectedContains: []string{
-				"Summary of Proposed Changes",
-				"Total changes: 1",
-				"Changes by scope:",
-				"team:",
-				"Changes by action:",
-				"create:",
-			},
-		},
-		{
-			name: "with state statistics",
-			plan: Plan{
-				Changes: []Change{
-					{Scope: "team", Target: "team1", Action: "create", Details: nil},
-					{Scope: "team-member", Target: "user1", Action: "ensure", Details: nil},
-				},
-				Warnings: nil,
-				Stats: &StateStats{
-					Teams: StatePair{
-						Current: 2,
-						Desired: 3,
-					},
-					TeamMembers: StatePair{
-						Current: 5,
-						Desired: 7,
-					},
-					Repositories: StatePair{
-						Current: 10,
-						Desired: 12,
-					},
-					RepoPermissions: StatePair{
-						Current: 15,
-						Desired: 18,
-					},
-				},
-			},
-			expectedContains: []string{
-				"Summary of Proposed Changes",
-				"Current State vs Desired State:",
-				"Teams:",
-				"2 → 3",
-				"Team Members:",
-				"5 → 7",
-				"Repositories:",
-				"10 → 12",
-				"Repo Permissions:",
-				"15 → 18",
-				"Total changes: 2",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Capture stdout
-			old := os.Stdout
-			r, w, _ := os.Pipe()
-			os.Stdout = w
-
-			PrintSummary(tt.plan)
-
-			w.Close()
-			os.Stdout = old
-
-			var buf bytes.Buffer
-			_, _ = io.Copy(&buf, r) // explicitly discard error
-			output := buf.String()
-
-			// Verify expected strings are in output
-			for _, expected := range tt.expectedContains {
-				if !strings.Contains(output, expected) {
-					t.Errorf("Expected output to contain %q, but it didn't.\nFull output:\n%s", expected, output)
-				}
-			}
-		})
+func TestGetBuildInfo(t *testing.T) {
+	info := GetBuildInfo()
+	if info.Version == "" {
+		t.Error("expected non-empty Version field")
 	}
 }
 ````
 
-## File: internal/util/log.go
-````go
-package util
-
-import (
-	"fmt"
-	"log"
-	"os"
-)
-
-func EnableDebug() {
-	log.SetOutput(os.Stdout)
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-}
-
-// Warnf prints a warning message to stderr
-func Warnf(format string, v ...any) {
-	fmt.Fprintf(os.Stderr, "WARNING: "+format+"\n", v...)
-}
+## File: .repomixignore
 ````
+*.pem
 
-## File: .golangci.yml
-````yaml
-run:
-  timeout: 5m
-  tests: true
-  modules-download-mode: readonly
-  go: '1.26'
+# gomgr binary
+/gomgr
+/build/
 
-linters:
-  enable:
-    - gofmt
-    - govet
-    - errcheck
-    - staticcheck
-    - unused
-    - gosimple
-    - ineffassign
-    - typecheck
-    - gocyclo
-    - misspell
-    - unconvert
-    - goconst
-    - goimports
-    - revive
-    - gosec
+# Test coverage
+/coverage/
 
-linters-settings:
-  gocyclo:
-    min-complexity: 15
-  goconst:
-    min-len: 3
-    min-occurrences: 3
-  misspell:
-    locale: US
-  revive:
-    confidence: 0.8
-  gosec:
-    excludes:
-      - G204 # Audit use of command execution - we need this for bash commands
-      - G304 # Audit use of file path - we need this for config files
-  goimports:
-    local-prefixes: github.com/DragonSecurity/gomgr
+# Created by https://www.toptal.com/developers/gitignore/api/go,goland
+# Edit at https://www.toptal.com/developers/gitignore?templates=go,goland
 
-issues:
-  exclude-rules:
-    # Exclude some linters from running on tests files.
-    - path: _test\.go
-      linters:
-        - gocyclo
-        - errcheck
-        - gosec
-  max-issues-per-linter: 0
-  max-same-issues: 0
+### Go ###
+# If you prefer the allow list template instead of the deny list, see community template:
+# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
+#
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 
-output:
-  formats:
-    - format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+
+### GoLand ###
+# Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio, WebStorm and Rider
+# Reference: https://intellij-support.jetbrains.com/hc/en-us/articles/206544839
+
+# User-specific stuff
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries
+.idea/**/shelf
+
+# AWS User-specific
+.idea/**/aws.xml
+
+# Generated files
+.idea/**/contentModel.xml
+
+# Sensitive or high-churn files
+.idea/**/dataSources/
+.idea/**/dataSources.ids
+.idea/**/dataSources.local.xml
+.idea/**/sqlDataSources.xml
+.idea/**/dynamic.xml
+.idea/**/uiDesigner.xml
+.idea/**/dbnavigator.xml
+
+# Gradle
+.idea/**/gradle.xml
+.idea/**/libraries
+
+# Gradle and Maven with auto-import
+# When using Gradle or Maven with auto-import, you should exclude module files,
+# since they will be recreated, and may cause churn.  Uncomment if using
+# auto-import.
+# .idea/artifacts
+# .idea/compiler.xml
+# .idea/jarRepositories.xml
+# .idea/modules.xml
+# .idea/*.iml
+# .idea/modules
+# *.iml
+# *.ipr
+
+# CMake
+cmake-build-*/
+
+# Mongo Explorer plugin
+.idea/**/mongoSettings.xml
+
+# File-based project format
+*.iws
+
+# IntelliJ
+out/
+
+# mpeltonen/sbt-idea plugin
+.idea_modules/
+
+# JIRA plugin
+atlassian-ide-plugin.xml
+
+# Cursive Clojure plugin
+.idea/replstate.xml
+
+# SonarLint plugin
+.idea/sonarlint/
+
+# Crashlytics plugin (for Android Studio and IntelliJ)
+com_crashlytics_export_strings.xml
+crashlytics.properties
+crashlytics-build.properties
+fabric.properties
+
+# Editor-based Rest Client
+.idea/httpRequests
+
+# Android studio 3.1+ serialized cache file
+.idea/caches/build_file_checksums.ser
+
+### GoLand Patch ###
+# Comment Reason: https://github.com/joeblau/gitignore.io/issues/186#issuecomment-215987721
+
+# *.iml
+# modules.xml
+# .idea/misc.xml
+# *.ipr
+
+# Sonarlint plugin
+# https://plugins.jetbrains.com/plugin/7973-sonarlint
+.idea/**/sonarlint/
+
+# SonarQube Plugin
+# https://plugins.jetbrains.com/plugin/7238-sonarqube-community-plugin
+.idea/**/sonarIssues.xml
+
+# Markdown Navigator plugin
+# https://plugins.jetbrains.com/plugin/7896-markdown-navigator-enhanced
+.idea/**/markdown-navigator.xml
+.idea/**/markdown-navigator-enh.xml
+.idea/**/markdown-navigator/
+
+# Cache file creation bug
+# See https://youtrack.jetbrains.com/issue/JBR-2257
+.idea/$CACHE_FILE$
+
+# CodeStream plugin
+# https://plugins.jetbrains.com/plugin/12206-codestream
+.idea/codestream.xml
+
+# Azure Toolkit for IntelliJ plugin
+# https://plugins.jetbrains.com/plugin/8053-azure-toolkit-for-intellij
+.idea/**/azureSettings.xml
+
+# End of https://www.toptal.com/developers/gitignore/api/go,goland
+
+.idea
+
+.env
+.pem
 ````
 
 ## File: LICENSE.md
@@ -1523,230 +1971,86 @@ Apache License
    limitations under the License.
 ````
 
-## File: .github/workflows/ci.yaml
-````yaml
-name: CI
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-jobs:
-  test:
-    name: Test
-    runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        go-version: ['1.26.0']
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - name: Setup Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
-        with:
-          go-version: ${{ matrix.go-version }}
-
-      - name: Cache Go modules
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Download dependencies
-        run: make mod-download
-
-      - name: Verify dependencies
-        run: make mod-verify
-
-      - name: Run tests
-        run: make test-coverage
-
-      - name: Upload coverage to artifacts
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: coverage-report
-          path: coverage/
-          if-no-files-found: error
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - name: Setup Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
-        with:
-          go-version: '1.26.0'
-
-      - name: Cache Go modules
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Check formatting
-        run: make fmt-check
-
-      - name: Run go vet
-        run: make vet
-
-      - name: Install golangci-lint
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.0
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-
-      - name: Run golangci-lint
-        run: make lint
-
-  security:
-    name: Security
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - name: Setup Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
-        with:
-          go-version: '1.26.0'
-
-      - name: Cache Go modules
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Install gosec
-        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
-
-      - name: Run security checks
-        run: make security
-
-  build:
-    name: Build
-    runs-on: ubuntu-24.04
-    needs: [test, lint, security]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-      - name: Setup Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
-        with:
-          go-version: '1.26.0'
-
-      - name: Cache Go modules
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Build
-        run: make build
-
-      - name: Upload binary
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: gomgr-binary
-          path: build/gomgr
-          if-no-files-found: error
+## File: repomix.config.json
+````json
+{
+  "$schema": "https://repomix.com/schemas/latest/schema.json",
+  "input": {
+    "maxFileSize": 52428800
+  },
+  "output": {
+    "filePath": "repomix-output.md",
+    "style": "markdown",
+    "parsableStyle": false,
+    "fileSummary": true,
+    "directoryStructure": true,
+    "files": true,
+    "removeComments": false,
+    "removeEmptyLines": false,
+    "compress": false,
+    "topFilesLength": 5,
+    "showLineNumbers": false,
+    "truncateBase64": false,
+    "copyToClipboard": false,
+    "includeFullDirectoryStructure": false,
+    "tokenCountTree": false,
+    "git": {
+      "sortByChanges": true,
+      "sortByChangesMaxCommits": 100,
+      "includeDiffs": false,
+      "includeLogs": false,
+      "includeLogsCount": 50
+    }
+  },
+  "include": [],
+  "ignore": {
+    "useGitignore": true,
+    "useDotIgnore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": []
+  },
+  "security": {
+    "enableSecurityCheck": true
+  },
+  "tokenCount": {
+    "encoding": "o200k_base"
+  }
+}
 ````
 
-## File: cmd/root.go
+## File: cmd/validate.go
 ````go
 package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
-)
-
-var (
-	cfgDir string
-	debug  bool
-	dryRun bool
-)
-
-var rootCmd = &cobra.Command{
-	Use:   "gomgr",
-	Short: "GitHub Organization Manager (Go)",
-	Long:  "Sync GitHub org owners, teams, members, and repo permissions from YAML.",
-}
-
-func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-}
-
-func init() {
-	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable verbose debug logs")
-	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry", false, "Show a plan without applying changes")
-}
-````
-
-## File: cmd/setup_team.go
-````go
-package cmd
-
-import (
-	"path/filepath"
-	"strings"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
-	"github.com/spf13/cobra"
 )
 
-var teamName string
-var outFile string
-
-var setupTeamCmd = &cobra.Command{
-	Use:   "setup-team",
-	Short: "Bootstrap a team YAML file for a given team name",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		slug := strings.ToLower(strings.ReplaceAll(teamName, " ", "-"))
-		path := outFile
-		if path == "" {
-			path = filepath.Join(cfgDir, "teams", slug+".yaml")
+var validateCmd = &cobra.Command{
+	Use:   "validate",
+	Short: "Validate configuration without connecting to GitHub",
+	Example: `  gomgr validate -c ./config
+  gomgr validate --config /path/to/config`,
+	RunE: func(_ *cobra.Command, _ []string) error {
+		if cfgDir == "" {
+			return fmt.Errorf("--config/-c flag is required")
 		}
-		return config.BootstrapTeamYAML(path, teamName)
+		cfg, err := config.Load(cfgDir)
+		if err != nil {
+			return err
+		}
+		_ = cfg
+		fmt.Println("Configuration is valid.")
+		return nil
 	},
 }
 
 func init() {
-	setupTeamCmd.Flags().StringVarP(&teamName, "name", "n", "", "Team display name (required)")
-	_ = setupTeamCmd.MarkFlagRequired("name")
-	setupTeamCmd.Flags().StringVarP(&outFile, "file", "f", "", "Force output file path")
-	rootCmd.AddCommand(setupTeamCmd)
+	rootCmd.AddCommand(validateCmd)
 }
 ````
 
@@ -2035,11 +2339,2094 @@ custom_roles:
       - write_secret_scanning_alerts
 ````
 
+## File: internal/gh/client_test.go
+````go
+package gh
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestMaybeReadPEM_InlineKey(t *testing.T) {
+	inline := "-----BEGIN RSA PRIVATE KEY-----\nMIIBogIBAAJBALRiMLAH\n-----END RSA PRIVATE KEY-----\n"
+	b, err := maybeReadPEM(inline)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(b) != inline {
+		t.Errorf("got %q, want inline key back", string(b))
+	}
+}
+
+func TestMaybeReadPEM_InlineGarbage(t *testing.T) {
+	_, err := maybeReadPEM("BEGIN but not a real pem")
+	if err == nil {
+		t.Fatal("expected error for malformed inline key")
+	}
+	if !strings.Contains(err.Error(), "invalid PEM") {
+		t.Errorf("expected 'invalid PEM' in error, got: %v", err)
+	}
+}
+
+func TestMaybeReadPEM_WrongBlockType(t *testing.T) {
+	cert := "-----BEGIN CERTIFICATE-----\nMIIBogIBAAJBALRiMLAH\n-----END CERTIFICATE-----\n"
+	_, err := maybeReadPEM(cert)
+	if err == nil {
+		t.Fatal("expected error for non-private-key block")
+	}
+	if !strings.Contains(err.Error(), "expected a private key block") {
+		t.Errorf("expected block-type error, got: %v", err)
+	}
+}
+
+func TestMaybeReadPEM_PKCS8(t *testing.T) {
+	pkcs8 := "-----BEGIN PRIVATE KEY-----\nMIIBogIBAAJBALRiMLAH\n-----END PRIVATE KEY-----\n"
+	if _, err := maybeReadPEM(pkcs8); err != nil {
+		t.Fatalf("unexpected error for PKCS#8 block: %v", err)
+	}
+}
+
+func TestMaybeReadPEM_FromFile(t *testing.T) {
+	pem := "-----BEGIN RSA PRIVATE KEY-----\nMIIBogIBAAJBALRiMLAH\n-----END RSA PRIVATE KEY-----\n"
+	dir := t.TempDir()
+	path := filepath.Join(dir, "key.pem")
+	if err := os.WriteFile(path, []byte(pem), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	b, err := maybeReadPEM(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(b) != pem {
+		t.Errorf("got %q, want file contents", string(b))
+	}
+}
+
+func TestMaybeReadPEM_InvalidFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.pem")
+	if err := os.WriteFile(path, []byte("not a pem"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := maybeReadPEM(path)
+	if err == nil {
+		t.Fatal("expected error for invalid PEM")
+	}
+	if !strings.Contains(err.Error(), "invalid PEM") {
+		t.Errorf("expected 'invalid PEM' in error, got: %v", err)
+	}
+}
+
+func TestMaybeReadPEM_MissingFile(t *testing.T) {
+	_, err := maybeReadPEM("/nonexistent/path/key.pem")
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+}
+
+func newGraphQLClient(t *testing.T, handler http.HandlerFunc) (*Client, *httptest.Server) {
+	t.Helper()
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+	return &Client{
+		httpClient: srv.Client(),
+		GraphQLURL: srv.URL,
+	}, srv
+}
+
+func TestDoGraphQL_Success(t *testing.T) {
+	var gotBody map[string]any
+	c, _ := newGraphQLClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			t.Errorf("expected Content-Type=application/json, got %q", ct)
+		}
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &gotBody)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":{"viewer":{"login":"octocat"}}}`))
+	})
+
+	var out struct {
+		Viewer struct {
+			Login string `json:"login"`
+		} `json:"viewer"`
+	}
+	err := c.DoGraphQL(context.Background(), "query { viewer { login } }", map[string]any{"x": 1}, &out)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out.Viewer.Login != "octocat" {
+		t.Errorf("expected login=octocat, got %q", out.Viewer.Login)
+	}
+	if gotBody["query"] == nil {
+		t.Error("expected request body to include query")
+	}
+	if gotBody["variables"] == nil {
+		t.Error("expected request body to include variables")
+	}
+}
+
+func TestDoGraphQL_OmitsEmptyVariables(t *testing.T) {
+	var gotBody map[string]any
+	c, _ := newGraphQLClient(t, func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &gotBody)
+		_, _ = w.Write([]byte(`{"data":{}}`))
+	})
+
+	if err := c.DoGraphQL(context.Background(), "query { viewer { login } }", nil, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, present := gotBody["variables"]; present {
+		t.Error("expected variables to be omitted when empty")
+	}
+}
+
+func TestDoGraphQL_HTTPError(t *testing.T) {
+	c, _ := newGraphQLClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"message":"Bad credentials"}`))
+	})
+
+	err := c.DoGraphQL(context.Background(), "query {}", nil, nil)
+	if err == nil {
+		t.Fatal("expected error for 401 response")
+	}
+	if !strings.Contains(err.Error(), "status 401") {
+		t.Errorf("expected 'status 401' in error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "Bad credentials") {
+		t.Errorf("expected upstream message to be surfaced, got %v", err)
+	}
+}
+
+func TestDoGraphQL_GraphQLErrors(t *testing.T) {
+	c, _ := newGraphQLClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"errors":[{"message":"field missing"},{"message":"another issue"}]}`))
+	})
+
+	err := c.DoGraphQL(context.Background(), "query {}", nil, nil)
+	if err == nil {
+		t.Fatal("expected error for graphql errors")
+	}
+	if !strings.Contains(err.Error(), "field missing") || !strings.Contains(err.Error(), "another issue") {
+		t.Errorf("expected both error messages to be joined, got %v", err)
+	}
+}
+
+func TestDoGraphQL_MalformedJSON(t *testing.T) {
+	c, _ := newGraphQLClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data": not-json`))
+	})
+
+	err := c.DoGraphQL(context.Background(), "query {}", nil, nil)
+	if err == nil {
+		t.Fatal("expected error for malformed JSON")
+	}
+	if !strings.Contains(err.Error(), "decode graphql response") {
+		t.Errorf("expected decode error, got %v", err)
+	}
+}
+
+func TestDoGraphQL_NilResultSkipsDataUnmarshal(t *testing.T) {
+	c, _ := newGraphQLClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":{"anything":123}}`))
+	})
+
+	if err := c.DoGraphQL(context.Background(), "query {}", nil, nil); err != nil {
+		t.Errorf("expected nil error when result is nil, got %v", err)
+	}
+}
+
+func TestDoGraphQL_EmptyQueryRejected(t *testing.T) {
+	c := &Client{httpClient: &http.Client{}}
+	if err := c.DoGraphQL(context.Background(), "   ", nil, nil); err == nil {
+		t.Fatal("expected error for empty query")
+	}
+}
+
+func TestDoGraphQL_NilClientRejected(t *testing.T) {
+	var c *Client
+	if err := c.DoGraphQL(context.Background(), "query {}", nil, nil); err == nil {
+		t.Fatal("expected error for nil client")
+	}
+}
+
+func TestDoGraphQL_NilHTTPClientRejected(t *testing.T) {
+	c := &Client{}
+	if err := c.DoGraphQL(context.Background(), "query {}", nil, nil); err == nil {
+		t.Fatal("expected error for nil httpClient")
+	}
+}
+
+func TestFirstNonEmpty(t *testing.T) {
+	tests := []struct {
+		a, b, want string
+	}{
+		{"hello", "world", "hello"},
+		{"", "world", "world"},
+		{"", "", ""},
+		{"a", "", "a"},
+	}
+	for _, tt := range tests {
+		got := firstNonEmpty(tt.a, tt.b)
+		if got != tt.want {
+			t.Errorf("firstNonEmpty(%q, %q) = %q, want %q", tt.a, tt.b, got, tt.want)
+		}
+	}
+}
+````
+
+## File: internal/gh/rate_test.go
+````go
+package gh
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/google/go-github/v84/github"
+)
+
+func TestRespectRate_Healthy(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		resp := map[string]any{
+			"resources": map[string]any{
+				"core": map[string]any{
+					"limit":     5000,
+					"remaining": 4999,
+					"reset":     time.Now().Add(time.Hour).Unix(),
+				},
+			},
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := github.NewClient(nil)
+	url := server.URL + "/"
+	client.BaseURL, _ = client.BaseURL.Parse(url)
+
+	err := RespectRate(context.Background(), client)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRespectRate_APIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"message": "server error"})
+	}))
+	defer server.Close()
+
+	client := github.NewClient(nil)
+	url := server.URL + "/"
+	client.BaseURL, _ = client.BaseURL.Parse(url)
+
+	err := RespectRate(context.Background(), client)
+	if err == nil {
+		t.Fatal("expected error for 500 response")
+	}
+	if !strings.Contains(err.Error(), "rate limit check") {
+		t.Errorf("expected 'rate limit check' in error, got: %v", err)
+	}
+}
+````
+
+## File: internal/sync/apply_handlers_test.go
+````go
+package sync
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/google/go-github/v84/github"
+
+	"github.com/DragonSecurity/gomgr/internal/config"
+	"github.com/DragonSecurity/gomgr/internal/gh"
+	"github.com/DragonSecurity/gomgr/internal/util"
+)
+
+// newTestClient creates a gh.Client backed by the given httptest.Server.
+func newTestClient(t *testing.T, server *httptest.Server) *gh.Client {
+	t.Helper()
+	client := github.NewClient(nil)
+	url := server.URL + "/"
+	client.BaseURL, _ = client.BaseURL.Parse(url)
+	return &gh.Client{REST: client}
+}
+
+func TestApplyTeamCreate(t *testing.T) {
+	var gotBody map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && r.URL.Path == "/orgs/myorg/teams" {
+			_ = json.NewDecoder(r.Body).Decode(&gotBody)
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 1, "slug": "backend"})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	ch := util.Change{
+		Scope:  "team",
+		Target: "backend",
+		Action: "create",
+		Details: map[string]any{
+			"org":         "myorg",
+			"name":        "Backend",
+			"privacy":     "closed",
+			"description": "Backend team",
+		},
+	}
+
+	err := applyTeamCreate(context.Background(), c, ch)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotBody["name"] != "Backend" {
+		t.Errorf("expected name=Backend, got %v", gotBody["name"])
+	}
+}
+
+func TestApplyTeamDelete(t *testing.T) {
+	deleted := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "DELETE" && r.URL.Path == "/orgs/myorg/teams/old-team" {
+			deleted = true
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	ch := util.Change{
+		Scope:  "team",
+		Target: "old-team",
+		Action: "delete",
+		Details: map[string]any{
+			"org":  "myorg",
+			"slug": "old-team",
+		},
+	}
+
+	err := applyTeamDelete(context.Background(), c, ch)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deleted {
+		t.Error("expected DELETE request to be made")
+	}
+}
+
+func TestApplyRepoEnsure(t *testing.T) {
+	t.Run("regular repo", func(t *testing.T) {
+		var gotBody map[string]any
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "POST" && r.URL.Path == "/orgs/myorg/repos" {
+				_ = json.NewDecoder(r.Body).Decode(&gotBody)
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(map[string]any{"id": 1, "name": "api"})
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		c := newTestClient(t, server)
+		ch := util.Change{
+			Scope:  "repo",
+			Target: "api",
+			Action: "ensure",
+			Details: map[string]any{
+				"org":     "myorg",
+				"name":    "api",
+				"private": true,
+			},
+		}
+
+		err := applyRepoEnsure(context.Background(), c, ch)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if gotBody["name"] != "api" {
+			t.Errorf("expected name=api, got %v", gotBody["name"])
+		}
+	})
+
+	t.Run("from template", func(t *testing.T) {
+		created := false
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "POST" && r.URL.Path == "/repos/myorg/template-go/generate" {
+				created = true
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(map[string]any{"id": 2, "name": "new-api"})
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		c := newTestClient(t, server)
+		ch := util.Change{
+			Scope:  "repo",
+			Target: "new-api",
+			Action: "ensure",
+			Details: map[string]any{
+				"org":     "myorg",
+				"name":    "new-api",
+				"private": true,
+				"from":    "template-go",
+			},
+		}
+
+		err := applyRepoEnsure(context.Background(), c, ch)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !created {
+			t.Error("expected template creation request to be made")
+		}
+	})
+}
+
+func TestApplyRepoFileEnsure_RaceCondition(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		errBody    map[string]any
+		wantErr    bool
+	}{
+		{
+			name:       "422 sha not supplied (race condition)",
+			statusCode: 422,
+			errBody: map[string]any{
+				"message": `"sha" wasn't supplied`,
+			},
+			wantErr: false,
+		},
+		{
+			name:       "409 reference already exists (race condition)",
+			statusCode: 409,
+			errBody: map[string]any{
+				"message": "reference already exists",
+			},
+			wantErr: false,
+		},
+		{
+			name:       "422 unrelated error",
+			statusCode: 422,
+			errBody: map[string]any{
+				"message": "Validation Failed",
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// GetContents returns 404 (file not found)
+				if r.Method == "GET" {
+					w.WriteHeader(http.StatusNotFound)
+					_ = json.NewEncoder(w).Encode(map[string]any{"message": "Not Found"})
+					return
+				}
+				// CreateFile returns the race condition error
+				if r.Method == "PUT" {
+					w.WriteHeader(tt.statusCode)
+					_ = json.NewEncoder(w).Encode(tt.errBody)
+					return
+				}
+				http.NotFound(w, r)
+			}))
+			defer server.Close()
+
+			c := newTestClient(t, server)
+			ch := util.Change{
+				Scope:  "repo-file",
+				Target: "api:README.md",
+				Action: "ensure",
+				Details: map[string]any{
+					"org":     "myorg",
+					"repo":    "api",
+					"path":    "README.md",
+					"content": "# API",
+					"message": "add readme",
+					"branch":  "main",
+				},
+			}
+
+			err := applyRepoFileEnsure(context.Background(), c, ch)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("applyRepoFileEnsure() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestApplyRepoTopicsEnsure(t *testing.T) {
+	tests := []struct {
+		name   string
+		topics any
+	}{
+		{
+			name:   "string slice",
+			topics: []string{"backend", "api"},
+		},
+		{
+			name:   "any slice",
+			topics: []any{"backend", "api"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == "PUT" && r.URL.Path == "/repos/myorg/api/topics" {
+					w.WriteHeader(http.StatusOK)
+					_ = json.NewEncoder(w).Encode(map[string]any{"names": []string{"backend", "api"}})
+					return
+				}
+				http.NotFound(w, r)
+			}))
+			defer server.Close()
+
+			c := newTestClient(t, server)
+			ch := util.Change{
+				Scope:  "repo-topics",
+				Target: "api",
+				Action: "ensure",
+				Details: map[string]any{
+					"org":    "myorg",
+					"repo":   "api",
+					"topics": tt.topics,
+				},
+			}
+
+			err := applyRepoTopicsEnsure(context.Background(), c, ch)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestApplyHandlers_InvalidDetails(t *testing.T) {
+	handlers := map[string]func(context.Context, *gh.Client, util.Change) error{
+		"team:create":          applyTeamCreate,
+		"team:update":          applyTeamUpdate,
+		"team:delete":          applyTeamDelete,
+		"repo:ensure":          applyRepoEnsure,
+		"team-repo:grant":      applyTeamRepoGrant,
+		"repo-file:ensure":     applyRepoFileEnsure,
+		"repo-topics:ensure":   applyRepoTopicsEnsure,
+		"repo-template:ensure": applyRepoTemplateEnsure,
+		"repo-pin:ensure":      applyRepoPinEnsure,
+		"repo:delete":          applyRepoDelete,
+	}
+
+	for key, handler := range handlers {
+		t.Run(key, func(t *testing.T) {
+			ch := util.Change{
+				Scope:   key[:4], // doesn't matter much
+				Target:  "test",
+				Action:  "test",
+				Details: "not-a-map", // wrong type
+			}
+			err := handler(context.Background(), nil, ch)
+			if err == nil {
+				t.Errorf("expected error for invalid details type, got nil")
+			}
+			if err != nil && !containsSubstr(err.Error(), "invalid details") {
+				t.Errorf("expected 'invalid details' in error, got: %v", err)
+			}
+		})
+	}
+
+	// Test team-member:ensure separately (expects teamMemberChange, not map)
+	t.Run("team-member:ensure", func(t *testing.T) {
+		ch := util.Change{
+			Scope:   "team-member",
+			Target:  "test",
+			Action:  "ensure",
+			Details: "not-a-struct",
+		}
+		err := applyTeamMemberEnsure(context.Background(), nil, ch)
+		if err == nil {
+			t.Error("expected error for invalid details type, got nil")
+		}
+	})
+}
+
+func containsSubstr(s, substr string) bool {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+func TestApplyTeamUpdate(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PATCH" && r.URL.Path == "/orgs/myorg/teams/backend" {
+			_ = json.NewDecoder(r.Body).Decode(&gotBody)
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 1, "slug": "backend"})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	ch := util.Change{
+		Scope:  "team",
+		Target: "backend",
+		Action: "update",
+		Details: map[string]any{
+			"org":         "myorg",
+			"slug":        "backend",
+			"name":        "Backend",
+			"description": "Updated description",
+			"privacy":     "secret",
+		},
+	}
+
+	err := applyTeamUpdate(context.Background(), c, ch)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotBody["name"] != "Backend" {
+		t.Errorf("expected name=Backend, got %v", gotBody["name"])
+	}
+	if gotBody["description"] != "Updated description" {
+		t.Errorf("expected description='Updated description', got %v", gotBody["description"])
+	}
+	if gotBody["privacy"] != "secret" {
+		t.Errorf("expected privacy=secret, got %v", gotBody["privacy"])
+	}
+}
+
+func TestApplyTeamMemberEnsure(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PUT" && r.URL.Path == "/orgs/myorg/teams/backend/memberships/alice" {
+			gotPath = r.URL.Path
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{"state": "active", "role": "member"})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	ch := util.Change{
+		Scope:   "team-member",
+		Target:  "backend",
+		Action:  "ensure",
+		Details: teamMemberChange{Org: "myorg", Slug: "backend", User: "alice", Role: "member"},
+	}
+
+	err := applyTeamMemberEnsure(context.Background(), c, ch)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotPath != "/orgs/myorg/teams/backend/memberships/alice" {
+		t.Errorf("expected PUT to memberships path, got %s", gotPath)
+	}
+}
+
+func TestApplyRepoTemplateEnsure(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PATCH" && r.URL.Path == "/repos/myorg/api" {
+			_ = json.NewDecoder(r.Body).Decode(&gotBody)
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 1, "name": "api", "is_template": true})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	ch := util.Change{
+		Scope:  "repo-template",
+		Target: "api",
+		Action: "ensure",
+		Details: map[string]any{
+			"org":      "myorg",
+			"repo":     "api",
+			"template": true,
+		},
+	}
+
+	err := applyRepoTemplateEnsure(context.Background(), c, ch)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotBody["is_template"] != true {
+		t.Errorf("expected is_template=true, got %v", gotBody["is_template"])
+	}
+}
+
+func TestApplyRepoPinEnsure(t *testing.T) {
+	ch := util.Change{
+		Scope:  "repo-pin",
+		Target: "api",
+		Action: "ensure",
+		Details: map[string]any{
+			"org":    "myorg",
+			"repo":   "api",
+			"pinned": true,
+		},
+	}
+
+	err := applyRepoPinEnsure(context.Background(), nil, ch)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestApplyRepoDelete(t *testing.T) {
+	deleted := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "DELETE" && r.URL.Path == "/repos/myorg/old-repo" {
+			deleted = true
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	ch := util.Change{
+		Scope:  "repo",
+		Target: "old-repo",
+		Action: "delete",
+		Details: map[string]any{
+			"org":  "myorg",
+			"repo": "old-repo",
+		},
+	}
+
+	err := applyRepoDelete(context.Background(), c, ch)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deleted {
+		t.Error("expected DELETE request to be made")
+	}
+}
+
+func TestApplyTeamRepoGrant(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PUT" && r.URL.Path == "/orgs/myorg/teams/backend/repos/myorg/api" {
+			gotPath = r.URL.Path
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	ch := util.Change{
+		Scope:  "team-repo",
+		Target: "backend/api",
+		Action: "grant",
+		Details: map[string]any{
+			"org":        "myorg",
+			"slug":       "backend",
+			"repo":       "api",
+			"permission": "push",
+		},
+	}
+
+	err := applyTeamRepoGrant(context.Background(), c, ch)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotPath != "/orgs/myorg/teams/backend/repos/myorg/api" {
+		t.Errorf("expected PUT to team repos path, got %s", gotPath)
+	}
+}
+
+func TestApplyOrgMemberRemove(t *testing.T) {
+	removed := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "DELETE" && r.URL.Path == "/orgs/myorg/memberships/bob" {
+			removed = true
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	ch := util.Change{
+		Scope:  "org-member",
+		Target: "bob",
+		Action: "remove",
+		Details: map[string]any{
+			"org":  "myorg",
+			"user": "bob",
+		},
+	}
+
+	err := applyOrgMemberRemove(context.Background(), c, ch)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !removed {
+		t.Error("expected DELETE request to be made")
+	}
+}
+
+func TestApplyOrgMemberRemove_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"message": "Not Found"})
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	ch := util.Change{
+		Scope:  "org-member",
+		Target: "ghost",
+		Action: "remove",
+		Details: map[string]any{
+			"org":  "myorg",
+			"user": "ghost",
+		},
+	}
+
+	err := applyOrgMemberRemove(context.Background(), c, ch)
+	if err == nil {
+		t.Fatal("expected error for 404 response")
+	}
+	if !containsSubstr(err.Error(), "remove member") {
+		t.Errorf("expected 'remove member' in error, got: %v", err)
+	}
+}
+
+func TestApplyOrgMemberRemove_InvalidDetails(t *testing.T) {
+	ch := util.Change{
+		Scope:   "org-member",
+		Target:  "test",
+		Action:  "remove",
+		Details: "not-a-map",
+	}
+	err := applyOrgMemberRemove(context.Background(), nil, ch)
+	if err == nil {
+		t.Error("expected error for invalid details type")
+	}
+}
+
+func TestApplyCustomRoleCreate(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && r.URL.Path == "/orgs/myorg/custom-repository-roles" {
+			_ = json.NewDecoder(r.Body).Decode(&gotBody)
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 1, "name": "deployer"})
+			return
+		}
+		// Rate limit endpoint
+		if r.URL.Path == "/rate_limit" {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"resources": map[string]any{
+					"core": map[string]any{"limit": 5000, "remaining": 4999, "reset": 9999999999},
+				},
+			})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	changes := []util.Change{
+		{
+			Scope:  "custom-role",
+			Target: "deployer",
+			Action: "create",
+			Details: customRoleChange{
+				Org:         "myorg",
+				Name:        "deployer",
+				Description: "Deploy role",
+				BaseRole:    "read",
+				Permissions: []string{"manage_actions"},
+			},
+		},
+	}
+
+	err := applyCustomRoleChanges(context.Background(), c, changes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotBody["name"] != "deployer" {
+		t.Errorf("expected name=deployer, got %v", gotBody["name"])
+	}
+}
+
+func TestApplyCustomRoleUpdate(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PATCH" && r.URL.Path == "/orgs/myorg/custom-repository-roles/42" {
+			_ = json.NewDecoder(r.Body).Decode(&gotBody)
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 42, "name": "deployer"})
+			return
+		}
+		if r.URL.Path == "/rate_limit" {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"resources": map[string]any{
+					"core": map[string]any{"limit": 5000, "remaining": 4999, "reset": 9999999999},
+				},
+			})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	changes := []util.Change{
+		{
+			Scope:  "custom-role",
+			Target: "deployer",
+			Action: "update",
+			Details: customRoleChange{
+				Org:         "myorg",
+				ID:          42,
+				Name:        "deployer",
+				Description: "Updated desc",
+				BaseRole:    "write",
+				Permissions: []string{"manage_actions", "create_releases"},
+			},
+		},
+	}
+
+	err := applyCustomRoleChanges(context.Background(), c, changes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotBody["name"] != "deployer" {
+		t.Errorf("expected name=deployer, got %v", gotBody["name"])
+	}
+}
+
+func TestApplyCustomRoleDelete(t *testing.T) {
+	deleted := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "DELETE" && r.URL.Path == "/orgs/myorg/custom-repository-roles/42" {
+			deleted = true
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if r.URL.Path == "/rate_limit" {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"resources": map[string]any{
+					"core": map[string]any{"limit": 5000, "remaining": 4999, "reset": 9999999999},
+				},
+			})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	changes := []util.Change{
+		{
+			Scope:  "custom-role",
+			Target: "deployer",
+			Action: "delete",
+			Details: customRoleChange{
+				Org:  "myorg",
+				ID:   42,
+				Name: "deployer",
+			},
+		},
+	}
+
+	err := applyCustomRoleChanges(context.Background(), c, changes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deleted {
+		t.Error("expected DELETE request to be made")
+	}
+}
+
+func TestApplyCustomRoleChanges_SkipsNonCustomRole(t *testing.T) {
+	changes := []util.Change{
+		{Scope: "team", Target: "backend", Action: "create", Details: map[string]any{"org": "myorg"}},
+	}
+	// Should not error - just skip non-custom-role changes
+	err := applyCustomRoleChanges(context.Background(), nil, changes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPlanCustomRoleCleanups(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/orgs/myorg/custom-repository-roles" && r.Method == "GET" {
+			resp := map[string]any{
+				"total_count": 2,
+				"custom_roles": []map[string]any{
+					{"id": 1, "name": "deployer"},
+					{"id": 2, "name": "stale-role"},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	cfg := &config.Root{
+		App: config.AppConfig{
+			Org:                        "myorg",
+			DeleteUnmanagedCustomRoles: true,
+		},
+		Org: config.OrgConfig{
+			CustomRoles: []config.CustomRoleConfig{
+				{Name: "deployer", BaseRole: "read"},
+			},
+		},
+	}
+	st := &State{Org: "myorg"}
+
+	changes, warnings, err := planCustomRoleCleanups(context.Background(), c, cfg, st)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("expected 0 warnings, got %d", len(warnings))
+	}
+	// Should have a delete change for "stale-role"
+	found := false
+	for _, ch := range changes {
+		if ch.Scope == "custom-role" && ch.Action == "delete" && ch.Target == "stale-role" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected custom-role:delete change for stale-role")
+	}
+}
+````
+
+## File: internal/sync/apply_handlers.go
+````go
+package sync
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"github.com/google/go-github/v84/github"
+
+	"github.com/DragonSecurity/gomgr/internal/gh"
+	"github.com/DragonSecurity/gomgr/internal/util"
+)
+
+// extractDetails performs a safe type assertion on ch.Details to map[string]any.
+func extractDetails(ch util.Change) (map[string]any, error) {
+	d, ok := ch.Details.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("invalid details for %s:%s: expected map[string]any, got %T", ch.Scope, ch.Action, ch.Details)
+	}
+	return d, nil
+}
+
+func detailString(d map[string]any, key string) string {
+	if v, ok := d[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+		return fmt.Sprint(v)
+	}
+	return ""
+}
+
+func detailBool(d map[string]any, key string) bool {
+	if v, ok := d[key]; ok {
+		if b, ok := v.(bool); ok {
+			return b
+		}
+		return fmt.Sprint(v) == "true"
+	}
+	return false
+}
+
+func applyTeamCreate(ctx context.Context, c *gh.Client, ch util.Change) error {
+	d, err := extractDetails(ch)
+	if err != nil {
+		return err
+	}
+	org := detailString(d, "org")
+	name := detailString(d, "name")
+	var privacyPtr, descPtr *string
+	if pv := detailString(d, "privacy"); pv != "" {
+		privacyPtr = github.Ptr(pv)
+	}
+	if dv := detailString(d, "description"); dv != "" {
+		descPtr = github.Ptr(dv)
+	}
+	newTeam := github.NewTeam{Name: name, Privacy: privacyPtr, Description: descPtr}
+	_, _, err = c.REST.Teams.CreateTeam(ctx, org, newTeam)
+	if err != nil {
+		return fmt.Errorf("create team %q: %w", name, err)
+	}
+	return nil
+}
+
+func applyTeamUpdate(ctx context.Context, c *gh.Client, ch util.Change) error {
+	d, err := extractDetails(ch)
+	if err != nil {
+		return err
+	}
+	org := detailString(d, "org")
+	slug := detailString(d, "slug")
+	name := detailString(d, "name")
+	newTeam := github.NewTeam{Name: name}
+	if dv := detailString(d, "description"); dv != "" {
+		newTeam.Description = github.Ptr(dv)
+	}
+	if pv := detailString(d, "privacy"); pv != "" {
+		newTeam.Privacy = github.Ptr(pv)
+	}
+	_, _, err = c.REST.Teams.EditTeamBySlug(ctx, org, slug, newTeam, false)
+	if err != nil {
+		return fmt.Errorf("update team %q: %w", slug, err)
+	}
+	return nil
+}
+
+func applyTeamDelete(ctx context.Context, c *gh.Client, ch util.Change) error {
+	d, err := extractDetails(ch)
+	if err != nil {
+		return err
+	}
+	org := detailString(d, "org")
+	slug := detailString(d, "slug")
+	_, err = c.REST.Teams.DeleteTeamBySlug(ctx, org, slug)
+	if err != nil {
+		return fmt.Errorf("delete team %q in org %q: %w", slug, org, err)
+	}
+	return nil
+}
+
+func applyTeamMemberEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
+	d, ok := ch.Details.(teamMemberChange)
+	if !ok {
+		return fmt.Errorf("invalid details for team-member:ensure: expected teamMemberChange, got %T", ch.Details)
+	}
+	_, _, err := c.REST.Teams.AddTeamMembershipBySlug(ctx, d.Org, d.Slug, d.User, &github.TeamAddTeamMembershipOptions{Role: d.Role})
+	if err != nil {
+		return fmt.Errorf("add %q as %q to %q in org %q: %w", d.User, d.Role, d.Slug, d.Org, err)
+	}
+	return nil
+}
+
+func applyRepoEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
+	d, err := extractDetails(ch)
+	if err != nil {
+		return err
+	}
+	org := detailString(d, "org")
+	name := detailString(d, "name")
+	private := true
+	if v, ok := d["private"]; ok {
+		if b, isBool := v.(bool); isBool {
+			private = b
+		} else {
+			private = fmt.Sprint(v) != "false"
+		}
+	}
+	isTemplate := detailBool(d, "template")
+
+	// Check if this repo should be created from a template
+	if templateRef := detailString(d, "from"); templateRef != "" {
+		templateOrg, templateRepo := parseTemplateRef(templateRef, org)
+
+		// Create repository from template
+		_, _, err := c.REST.Repositories.CreateFromTemplate(ctx, templateOrg, templateRepo, &github.TemplateRepoRequest{
+			Name:    github.Ptr(name),
+			Owner:   github.Ptr(org),
+			Private: github.Ptr(private),
+		})
+		if err != nil {
+			var ghErr *github.ErrorResponse
+			if !errors.As(err, &ghErr) || ghErr.Response == nil || ghErr.Response.StatusCode != 422 {
+				return fmt.Errorf("create repo %s/%s from template %s/%s: %w", org, name, templateOrg, templateRepo, err)
+			}
+			// already exists race — ignore
+		}
+	} else {
+		// Create regular repository
+		_, _, err := c.REST.Repositories.Create(ctx, org, &github.Repository{
+			Name:                github.Ptr(name),
+			Private:             github.Ptr(private),
+			IsTemplate:          github.Ptr(isTemplate),
+			AllowAutoMerge:      github.Ptr(true),
+			AllowMergeCommit:    github.Ptr(false),
+			DeleteBranchOnMerge: github.Ptr(true),
+			HasIssues:           github.Ptr(true),
+		})
+		if err != nil {
+			var ghErr *github.ErrorResponse
+			if !errors.As(err, &ghErr) || ghErr.Response == nil || ghErr.Response.StatusCode != 422 {
+				return fmt.Errorf("create repo %s/%s: %w", org, name, err)
+			}
+			// already exists race — ignore
+		}
+	}
+	return nil
+}
+
+func applyTeamRepoGrant(ctx context.Context, c *gh.Client, ch util.Change) error {
+	d, err := extractDetails(ch)
+	if err != nil {
+		return err
+	}
+	org := detailString(d, "org")
+	slug := detailString(d, "slug")
+	repo := detailString(d, "repo")
+	perm := normalizePermission(detailString(d, "permission"))
+	_, err = c.REST.Teams.AddTeamRepoBySlug(ctx, org, slug, org, repo, &github.TeamAddTeamRepoOptions{Permission: perm})
+	if err != nil {
+		return fmt.Errorf("grant %q on %s/%s to %q: %w", perm, org, repo, slug, err)
+	}
+	return nil
+}
+
+func applyRepoFileEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
+	d, err := extractDetails(ch)
+	if err != nil {
+		return err
+	}
+	org := detailString(d, "org")
+	repo := detailString(d, "repo")
+	path := detailString(d, "path")
+	content := []byte(detailString(d, "content"))
+	message := detailString(d, "message")
+	branch := detailString(d, "branch")
+	file, _, resp, err := c.REST.Repositories.GetContents(ctx, org, repo, path, &github.RepositoryContentGetOptions{Ref: branch})
+	if err != nil && (resp == nil || resp.StatusCode != http.StatusNotFound) {
+		return fmt.Errorf("check %s/%s:%s: %w", org, repo, path, err)
+	}
+	if file == nil {
+		_, _, err := c.REST.Repositories.CreateFile(ctx, org, repo, path, &github.RepositoryContentFileOptions{
+			Message: github.Ptr(message),
+			Content: content,
+			Branch:  github.Ptr(branch),
+		})
+		if err != nil {
+			// Handle race condition: If repository was created from template,
+			// files may exist even though GetContents returned nil.
+			var ghErr *github.ErrorResponse
+			if errors.As(err, &ghErr) && ghErr.Response != nil {
+				isRaceCondition := (ghErr.Response.StatusCode == 422 && containsErrorMessage(ghErr, errTermSHA, errTermSHANotSupplied)) ||
+					(ghErr.Response.StatusCode == 409 && containsErrorMessage(ghErr, errTermRefExists))
+
+				if !isRaceCondition {
+					return fmt.Errorf("create file %s in %s/%s: %w", path, org, repo, err)
+				}
+				// File already exists (likely from template), which is what we want - skip error
+			} else {
+				return fmt.Errorf("create file %s in %s/%s: %w", path, org, repo, err)
+			}
+		}
+	}
+	return nil
+}
+
+func applyRepoTopicsEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
+	d, err := extractDetails(ch)
+	if err != nil {
+		return err
+	}
+	org := detailString(d, "org")
+	repo := detailString(d, "repo")
+
+	// Handle topics - may come as []string or []any from planning
+	var topicsRaw []string
+	if v, ok := d["topics"]; ok {
+		switch topics := v.(type) {
+		case []string:
+			topicsRaw = topics
+		case []any:
+			for _, t := range topics {
+				if tStr, ok := t.(string); ok {
+					topicsRaw = append(topicsRaw, tStr)
+				}
+			}
+		default:
+			return fmt.Errorf("invalid type for topics for %s/%s: %T", org, repo, v)
+		}
+	}
+
+	_, _, err = c.REST.Repositories.ReplaceAllTopics(ctx, org, repo, topicsRaw)
+	if err != nil {
+		return fmt.Errorf("set topics on %s/%s: %w", org, repo, err)
+	}
+	return nil
+}
+
+func applyRepoTemplateEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
+	d, err := extractDetails(ch)
+	if err != nil {
+		return err
+	}
+	org := detailString(d, "org")
+	repo := detailString(d, "repo")
+
+	_, _, err = c.REST.Repositories.Edit(ctx, org, repo, &github.Repository{
+		IsTemplate: github.Ptr(true),
+	})
+	if err != nil {
+		return fmt.Errorf("mark repo %s/%s as template: %w", org, repo, err)
+	}
+	return nil
+}
+
+func applyRepoPinEnsure(_ context.Context, _ *gh.Client, ch util.Change) error {
+	d, err := extractDetails(ch)
+	if err != nil {
+		return err
+	}
+	org := detailString(d, "org")
+	repo := detailString(d, "repo")
+
+	util.Warnf("Skipping pin for %s/%s: GitHub API does not support pinning to organization profiles", org, repo)
+	return nil
+}
+
+func applyRepoDelete(ctx context.Context, c *gh.Client, ch util.Change) error {
+	d, err := extractDetails(ch)
+	if err != nil {
+		return err
+	}
+	org := detailString(d, "org")
+	repo := detailString(d, "repo")
+	_, err = c.REST.Repositories.Delete(ctx, org, repo)
+	if err != nil {
+		return fmt.Errorf("delete repo %q in org %q: %w", repo, org, err)
+	}
+	return nil
+}
+
+func applyOrgMemberRemove(ctx context.Context, c *gh.Client, ch util.Change) error {
+	d, err := extractDetails(ch)
+	if err != nil {
+		return err
+	}
+	org := detailString(d, "org")
+	user := detailString(d, "user")
+	_, err = c.REST.Organizations.RemoveOrgMembership(ctx, user, org)
+	if err != nil {
+		return fmt.Errorf("remove member %q from org %q: %w", user, org, err)
+	}
+	return nil
+}
+
+func normalizePermission(p string) string {
+	switch strings.ToLower(p) {
+	case "read", permPull:
+		return permPull
+	case permTriage:
+		return permTriage
+	case "write", permPush:
+		return permPush
+	case permMaintain:
+		return permMaintain
+	case permAdmin:
+		return permAdmin
+	default:
+		return p
+	}
+}
+````
+
+## File: internal/sync/orchestrator_test.go
+````go
+package sync
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/DragonSecurity/gomgr/internal/config"
+	"github.com/DragonSecurity/gomgr/internal/util"
+)
+
+func TestBuildPlan_Empty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Return empty lists for all endpoints
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode([]map[string]any{})
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	cfg := &config.Root{
+		App: config.AppConfig{Org: "myorg"},
+	}
+
+	plan, err := BuildPlan(context.Background(), c, cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(plan.Changes) != 0 {
+		t.Errorf("expected 0 changes, got %d", len(plan.Changes))
+	}
+	if plan.Stats == nil {
+		t.Fatal("expected stats to be populated")
+	}
+	if plan.Stats.Teams.Current != 0 || plan.Stats.Teams.Desired != 0 {
+		t.Errorf("expected 0/0 teams, got %d/%d", plan.Stats.Teams.Current, plan.Stats.Teams.Desired)
+	}
+}
+
+func TestBuildPlan_WithTeams(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/orgs/myorg/teams" && r.Method == "GET":
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+		case r.URL.Path == "/orgs/myorg/repos" && r.Method == "GET":
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+		default:
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+		}
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	cfg := &config.Root{
+		App: config.AppConfig{Org: "myorg"},
+		Team: []config.TeamConfig{
+			{Name: "Backend", Slug: "backend"},
+		},
+	}
+
+	plan, err := BuildPlan(context.Background(), c, cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if plan.Stats.Teams.Desired != 1 {
+		t.Errorf("expected 1 desired team, got %d", plan.Stats.Teams.Desired)
+	}
+	// Should have at least a team:create change
+	found := false
+	for _, ch := range plan.Changes {
+		if ch.Scope == "team" && ch.Action == "create" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected a team:create change")
+	}
+}
+
+func TestApply_Empty(t *testing.T) {
+	plan := util.Plan{Changes: []util.Change{}}
+	err := Apply(context.Background(), nil, plan)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestApply_ContextCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	plan := util.Plan{
+		Changes: []util.Change{
+			{Scope: "team", Target: "test", Action: "create", Details: map[string]any{"org": "myorg", "name": "test"}},
+		},
+	}
+	err := Apply(ctx, nil, plan)
+	if err == nil {
+		t.Fatal("expected error for canceled context")
+	}
+}
+````
+
+## File: internal/util/diff_test.go
+````go
+package util
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"os"
+	"strings"
+	"testing"
+)
+
+func TestPrintPlan(t *testing.T) {
+	plan := Plan{
+		Changes: []Change{
+			{Scope: "team", Target: "backend", Action: "create", Details: map[string]any{"org": "myorg"}},
+		},
+		Warnings: []string{"test warning"},
+	}
+
+	// Capture stdout
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := PrintPlan(plan)
+
+	w.Close()
+	os.Stdout = old
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	// Verify it's valid JSON
+	var parsed Plan
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &parsed); err != nil {
+		t.Fatalf("output is not valid JSON: %v\nOutput: %s", err, output)
+	}
+	if len(parsed.Changes) != 1 {
+		t.Errorf("expected 1 change, got %d", len(parsed.Changes))
+	}
+}
+
+func TestPrintStatePair(t *testing.T) {
+	tests := []struct {
+		name     string
+		label    string
+		pair     StatePair
+		contains string
+		empty    bool
+	}{
+		{name: "increase", label: "Teams:", pair: StatePair{Current: 2, Desired: 5}, contains: "(+3)"},
+		{name: "decrease", label: "Teams:", pair: StatePair{Current: 5, Desired: 2}, contains: "(-3)"},
+		{name: "no change", label: "Teams:", pair: StatePair{Current: 3, Desired: 3}, contains: "(no change)"},
+		{name: "both zero", label: "Teams:", pair: StatePair{Current: 0, Desired: 0}, empty: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			old := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			printStatePair(tt.label, tt.pair)
+
+			w.Close()
+			os.Stdout = old
+
+			var buf bytes.Buffer
+			_, _ = io.Copy(&buf, r)
+			output := buf.String()
+
+			if tt.empty {
+				if output != "" {
+					t.Errorf("expected no output for zero pair, got %q", output)
+				}
+				return
+			}
+			if !strings.Contains(output, tt.contains) {
+				t.Errorf("expected output to contain %q, got %q", tt.contains, output)
+			}
+		})
+	}
+}
+
+func TestPrintSummary(t *testing.T) {
+	tests := []struct {
+		name             string
+		plan             Plan
+		expectedContains []string
+	}{
+		{
+			name: "with changes and warnings",
+			plan: Plan{
+				Changes: []Change{
+					{Scope: "team", Target: "team1", Action: "create", Details: nil},
+					{Scope: "team", Target: "team2", Action: "create", Details: nil},
+					{Scope: "team-member", Target: "user1", Action: "ensure", Details: nil},
+					{Scope: "team-repo", Target: "repo1", Action: "grant", Details: nil},
+					{Scope: "repo-pin", Target: "repo1", Action: "ensure", Details: nil},
+				},
+				Warnings: []string{"Test warning 1", "Test warning 2"},
+			},
+			expectedContains: []string{
+				"Summary of Proposed Changes",
+				"Total changes: 5",
+				"Changes by scope:",
+				"team:",
+				"team-member:",
+				"team-repo:",
+				"repo-pin:",
+				"Changes by action:",
+				"create:",
+				"ensure:",
+				"grant:",
+				"Warnings: 2",
+				"Test warning 1",
+				"Test warning 2",
+			},
+		},
+		{
+			name: "no changes",
+			plan: Plan{
+				Changes:  []Change{},
+				Warnings: nil,
+			},
+			expectedContains: []string{
+				"Summary of Proposed Changes",
+				"No changes required - configuration is in sync",
+			},
+		},
+		{
+			name: "changes without warnings",
+			plan: Plan{
+				Changes: []Change{
+					{Scope: "team", Target: "team1", Action: "create", Details: nil},
+				},
+				Warnings: nil,
+			},
+			expectedContains: []string{
+				"Summary of Proposed Changes",
+				"Total changes: 1",
+				"Changes by scope:",
+				"team:",
+				"Changes by action:",
+				"create:",
+			},
+		},
+		{
+			name: "with state statistics",
+			plan: Plan{
+				Changes: []Change{
+					{Scope: "team", Target: "team1", Action: "create", Details: nil},
+					{Scope: "team-member", Target: "user1", Action: "ensure", Details: nil},
+				},
+				Warnings: nil,
+				Stats: &StateStats{
+					Teams: StatePair{
+						Current: 2,
+						Desired: 3,
+					},
+					TeamMembers: StatePair{
+						Current: 5,
+						Desired: 7,
+					},
+					Repositories: StatePair{
+						Current: 10,
+						Desired: 12,
+					},
+					RepoPermissions: StatePair{
+						Current: 15,
+						Desired: 18,
+					},
+				},
+			},
+			expectedContains: []string{
+				"Summary of Proposed Changes",
+				"Current State vs Desired State:",
+				"Teams:",
+				"2 → 3",
+				"Team Members:",
+				"5 → 7",
+				"Repositories:",
+				"10 → 12",
+				"Repo Permissions:",
+				"15 → 18",
+				"Total changes: 2",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Capture stdout
+			old := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			PrintSummary(tt.plan)
+
+			w.Close()
+			os.Stdout = old
+
+			var buf bytes.Buffer
+			_, _ = io.Copy(&buf, r) // explicitly discard error
+			output := buf.String()
+
+			// Verify expected strings are in output
+			for _, expected := range tt.expectedContains {
+				if !strings.Contains(output, expected) {
+					t.Errorf("Expected output to contain %q, but it didn't.\nFull output:\n%s", expected, output)
+				}
+			}
+		})
+	}
+}
+````
+
+## File: internal/util/log_test.go
+````go
+package util
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"log/slog"
+	"os"
+	"strings"
+	"testing"
+)
+
+func TestWarnf(t *testing.T) {
+	old := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	Warnf("something %s happened", "bad")
+
+	w.Close()
+	os.Stderr = old
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	if !strings.Contains(output, "WARNING:") {
+		t.Errorf("expected WARNING: prefix, got %q", output)
+	}
+	if !strings.Contains(output, "something bad happened") {
+		t.Errorf("expected formatted message, got %q", output)
+	}
+}
+
+func TestAudit_Enabled(t *testing.T) {
+	oldVal := AuditLog
+	AuditLog = true
+	defer func() { AuditLog = oldVal }()
+
+	old := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	Audit("team", "backend", "create", "ok")
+
+	w.Close()
+	os.Stderr = old
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := strings.TrimSpace(buf.String())
+
+	var entry map[string]string
+	if err := json.Unmarshal([]byte(output), &entry); err != nil {
+		t.Fatalf("expected valid JSON, got error: %v\nOutput: %s", err, output)
+	}
+	if entry["scope"] != "team" {
+		t.Errorf("expected scope=team, got %q", entry["scope"])
+	}
+	if entry["target"] != "backend" {
+		t.Errorf("expected target=backend, got %q", entry["target"])
+	}
+	if entry["action"] != "create" {
+		t.Errorf("expected action=create, got %q", entry["action"])
+	}
+	if entry["status"] != "ok" {
+		t.Errorf("expected status=ok, got %q", entry["status"])
+	}
+	if entry["ts"] == "" {
+		t.Error("expected non-empty ts field")
+	}
+}
+
+func TestAudit_Disabled(t *testing.T) {
+	oldVal := AuditLog
+	AuditLog = false
+	defer func() { AuditLog = oldVal }()
+
+	old := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	Audit("team", "backend", "create", "ok")
+
+	w.Close()
+	os.Stderr = old
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	if buf.Len() != 0 {
+		t.Errorf("expected no output when audit disabled, got %q", buf.String())
+	}
+}
+
+func TestEnableDebug(t *testing.T) {
+	oldLevel := levelVar.Level()
+	defer levelVar.Set(oldLevel)
+
+	EnableDebug()
+
+	if !Logger().Enabled(context.Background(), slog.LevelDebug) {
+		t.Error("expected debug level enabled after EnableDebug")
+	}
+}
+````
+
+## File: internal/version/version.go
+````go
+package version
+
+import (
+	"runtime/debug"
+)
+
+// BuildInfo contains version and build information
+type BuildInfo struct {
+	Version    string
+	Revision   string
+	Modified   bool
+	CommitTime string
+}
+
+// GetBuildInfo returns version information from runtime/debug
+func GetBuildInfo() BuildInfo {
+	info := BuildInfo{
+		Version: "dev",
+	}
+
+	buildInfo, ok := debug.ReadBuildInfo()
+	if !ok {
+		return info
+	}
+
+	// Extract VCS information from build settings
+	for _, setting := range buildInfo.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			info.Revision = setting.Value
+			if len(info.Revision) > 12 {
+				info.Revision = info.Revision[:12]
+			}
+		case "vcs.time":
+			info.CommitTime = setting.Value
+		case "vcs.modified":
+			info.Modified = setting.Value == "true"
+		}
+	}
+
+	// Use VCS revision as version if available, otherwise check for version in main module
+	if info.Revision != "" {
+		if info.Modified {
+			info.Version = info.Revision + "-dirty"
+		} else {
+			info.Version = info.Revision
+		}
+	} else if buildInfo.Main.Version != "" && buildInfo.Main.Version != "(devel)" {
+		info.Version = buildInfo.Main.Version
+	}
+
+	return info
+}
+````
+
+## File: main.go
+````go
+package main
+
+import "github.com/DragonSecurity/gomgr/cmd"
+
+func main() {
+	cmd.Execute()
+}
+````
+
+## File: cmd/root.go
+````go
+package cmd
+
+import (
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/spf13/cobra"
+)
+
+var (
+	cfgDir   string
+	debug    bool
+	dryRun   bool
+	timeout  time.Duration
+	auditLog bool
+)
+
+var rootCmd = &cobra.Command{
+	Use:   "gomgr",
+	Short: "GitHub Organization Manager (Go)",
+	Long:  "Sync GitHub org owners, teams, members, and repo permissions from YAML.",
+}
+
+func Execute() {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func init() {
+	rootCmd.PersistentFlags().StringVarP(&cfgDir, "config", "c", "", "Path to config directory (required)")
+	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable verbose debug logs")
+	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry", false, "Show a plan without applying changes")
+	rootCmd.PersistentFlags().DurationVar(&timeout, "timeout", 10*time.Minute, "Overall context timeout for the sync operation")
+	rootCmd.PersistentFlags().BoolVar(&auditLog, "audit-log", false, "Emit structured JSON audit log entries to stderr")
+}
+````
+
+## File: config/example/teams/example-team.yaml
+````yaml
+name: Platform Team
+description: Core platform engineers
+privacy: closed
+parents: []
+maintainers:
+  - octocat
+repositories:
+  # Simple permission string (backward compatible)
+  infra: maintain
+  
+  # Template repository - can be reused by other repos
+  template-go-api:
+    permission: push
+    template: true
+    topics:
+      - backend
+      - api
+      - go-template
+  
+  # Advanced config with topics and pinning
+  api:
+    permission: push
+    topics:
+      - backend
+      - api
+      - project-platform
+  
+  # Repository using template (inherits permission and topics)
+  my-api:
+    from: template-go-api
+    topics:
+      - my-project
+      # Will inherit: backend, api, go-template from template
+  
+  # Repository with pinning
+  platform-index:
+    permission: admin
+    topics:
+      - project-platform
+      - documentation
+    pinned: true
+  
+  # Simple read-only access
+  web: pull
+````
+
+## File: examples/config/app.yaml
+````yaml
+org: KaMuses
+# GitHub App auth (preferred):
+app_id: 1719369
+private_key: ./dsec-gom.2026-02-20.private-key.pem
+
+dry_warnings:
+  warn_unmanaged_teams: true
+  warn_members_without_any_team: true
+  warn_unmanaged_repos: true
+  warn_unmanaged_custom_roles: true  # warn about custom roles not defined in org.yaml
+
+remove_members_without_team: true   # remove org members not in any team
+delete_unconfigured_teams: true     # delete teams not defined in YAML
+delete_unmanaged_repos: true        # delete repos not defined in any team (DESTRUCTIVE!)
+delete_unmanaged_custom_roles: false # delete custom roles not defined in org.yaml
+create_repo: true                   # create repos if missing when referenced by teams
+add_renovate_config: true           # create .github/renovate.json in repos
+add_default_readme: false           # create default README.md in repos (optional)
+
+renovate_config: | 
+  { 
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": ["github>DragonSecurity/renovate-presets"]
+  }
+````
+
 ## File: internal/config/types_test.go
 ````go
 package config
 
 import (
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -2229,6 +4616,166 @@ custom_roles:
 		t.Errorf("Expected base_role 'write', got %q", role2.BaseRole)
 	}
 }
+
+func TestValidate(t *testing.T) {
+	tests := []struct {
+		name      string
+		root      Root
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name: "valid config",
+			root: Root{
+				App: AppConfig{Org: "myorg"},
+				Team: []TeamConfig{
+					{Name: "backend", Privacy: "closed"},
+					{Name: "frontend", Privacy: "secret"},
+					{Name: "ops"},
+				},
+				Org: OrgConfig{
+					CustomRoles: []CustomRoleConfig{
+						{Name: "deployer", BaseRole: "write"},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid team privacy",
+			root: Root{
+				App:  AppConfig{Org: "myorg"},
+				Team: []TeamConfig{{Name: "backend", Privacy: "public"}},
+			},
+			wantErr:   true,
+			errSubstr: "invalid privacy",
+		},
+		{
+			name: "invalid custom role base_role",
+			root: Root{
+				App: AppConfig{Org: "myorg"},
+				Org: OrgConfig{
+					CustomRoles: []CustomRoleConfig{
+						{Name: "deployer", BaseRole: "superadmin"},
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "invalid base_role",
+		},
+		{
+			name: "empty team name",
+			root: Root{
+				App:  AppConfig{Org: "myorg"},
+				Team: []TeamConfig{{Name: ""}},
+			},
+			wantErr:   true,
+			errSubstr: "team name must not be empty",
+		},
+		{
+			name: "empty custom role name",
+			root: Root{
+				App: AppConfig{Org: "myorg"},
+				Org: OrgConfig{
+					CustomRoles: []CustomRoleConfig{
+						{Name: "", BaseRole: "read"},
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "custom role name must not be empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.root.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err != nil && tt.errSubstr != "" && !strings.Contains(err.Error(), tt.errSubstr) {
+				t.Errorf("Validate() error = %q, want substring %q", err.Error(), tt.errSubstr)
+			}
+		})
+	}
+}
+
+func TestValidateRepoName(t *testing.T) {
+	tests := []struct {
+		name      string
+		repoName  string
+		wantErr   bool
+		errSubstr string
+	}{
+		{name: "valid simple", repoName: "my-repo", wantErr: false},
+		{name: "valid with dots", repoName: "repo.name", wantErr: false},
+		{name: "valid with underscore", repoName: "repo_name", wantErr: false},
+		{name: "valid single char", repoName: "a", wantErr: false},
+		{name: "invalid space", repoName: "repo name", wantErr: true, errSubstr: "invalid characters"},
+		{name: "invalid at sign", repoName: "repo@name", wantErr: true, errSubstr: "invalid characters"},
+		{name: "invalid dot dot", repoName: "..", wantErr: true, errSubstr: "cannot be"},
+		{name: "invalid single dot", repoName: ".", wantErr: true, errSubstr: "cannot be"},
+		{name: "invalid too long", repoName: strings.Repeat("a", 101), wantErr: true, errSubstr: "1-100 characters"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := Root{
+				App: AppConfig{Org: "myorg"},
+				Team: []TeamConfig{
+					{Name: "test", Repositories: map[string]any{tt.repoName: "push"}},
+				},
+			}
+			err := r.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err != nil && tt.errSubstr != "" && !strings.Contains(err.Error(), tt.errSubstr) {
+				t.Errorf("Validate() error = %q, want substring %q", err.Error(), tt.errSubstr)
+			}
+		})
+	}
+}
+
+func TestValidateUsername(t *testing.T) {
+	tests := []struct {
+		name      string
+		username  string
+		wantErr   bool
+		errSubstr string
+	}{
+		{name: "valid simple", username: "alice", wantErr: false},
+		{name: "valid with hyphen", username: "bob-smith", wantErr: false},
+		{name: "valid alphanumeric", username: "a1", wantErr: false},
+		{name: "valid single char", username: "a", wantErr: false},
+		{name: "invalid consecutive hyphens", username: "a--b", wantErr: true, errSubstr: "consecutive hyphens"},
+		{name: "invalid starts with hyphen", username: "-bob", wantErr: true, errSubstr: "invalid characters"},
+		{name: "invalid ends with hyphen", username: "bob-", wantErr: true, errSubstr: "invalid characters"},
+		{name: "invalid special chars", username: "alice@bob", wantErr: true, errSubstr: "invalid characters"},
+		{name: "invalid too long", username: strings.Repeat("a", 40), wantErr: true, errSubstr: "1-39 characters"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := Root{
+				App: AppConfig{Org: "myorg"},
+				Team: []TeamConfig{
+					{Name: "test", Members: []string{tt.username}},
+				},
+			}
+			err := r.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err != nil && tt.errSubstr != "" && !strings.Contains(err.Error(), tt.errSubstr) {
+				t.Errorf("Validate() error = %q, want substring %q", err.Error(), tt.errSubstr)
+			}
+		})
+	}
+}
 ````
 
 ## File: internal/util/diff.go
@@ -2267,9 +4814,13 @@ type Plan struct {
 	Stats    *StateStats `json:"stats,omitempty"`
 }
 
-func PrintPlan(p Plan) {
-	b, _ := json.MarshalIndent(p, "", "  ")
+func PrintPlan(p Plan) error {
+	b, err := json.MarshalIndent(p, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal plan: %w", err)
+	}
 	fmt.Println(string(b))
+	return nil
 }
 
 // PrintSummary prints a human-readable summary of the plan
@@ -2362,60 +4913,76 @@ func printStatePair(label string, pair StatePair) {
 }
 ````
 
-## File: internal/version/version.go
+## File: internal/util/log.go
 ````go
-package version
+package util
 
 import (
-	"runtime/debug"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"os"
+	"time"
 )
 
-// BuildInfo contains version and build information
-type BuildInfo struct {
-	Version    string
-	Revision   string
-	Modified   bool
-	CommitTime string
+// AuditLog controls whether structured audit log entries are emitted to stderr.
+var AuditLog bool
+
+var (
+	levelVar = new(slog.LevelVar)
+	logger   = newLogger(false)
+)
+
+func newLogger(addSource bool) *slog.Logger {
+	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level:     levelVar,
+		AddSource: addSource,
+	}))
 }
 
-// GetBuildInfo returns version information from runtime/debug
-func GetBuildInfo() BuildInfo {
-	info := BuildInfo{
-		Version: "dev",
-	}
+// Logger returns the package-level structured logger.
+func Logger() *slog.Logger { return logger }
 
-	buildInfo, ok := debug.ReadBuildInfo()
-	if !ok {
-		return info
-	}
+// EnableDebug switches the package logger to debug level with source info.
+func EnableDebug() {
+	levelVar.Set(slog.LevelDebug)
+	logger = newLogger(true)
+	slog.SetDefault(logger)
+}
 
-	// Extract VCS information from build settings
-	for _, setting := range buildInfo.Settings {
-		switch setting.Key {
-		case "vcs.revision":
-			info.Revision = setting.Value
-			if len(info.Revision) > 12 {
-				info.Revision = info.Revision[:12]
-			}
-		case "vcs.time":
-			info.CommitTime = setting.Value
-		case "vcs.modified":
-			info.Modified = setting.Value == "true"
-		}
-	}
+// Infof emits a formatted info-level log line via slog.
+func Infof(format string, args ...any) {
+	logger.Info(fmt.Sprintf(format, args...))
+}
 
-	// Use VCS revision as version if available, otherwise check for version in main module
-	if info.Revision != "" {
-		if info.Modified {
-			info.Version = info.Revision + "-dirty"
-		} else {
-			info.Version = info.Revision
-		}
-	} else if buildInfo.Main.Version != "" && buildInfo.Main.Version != "(devel)" {
-		info.Version = buildInfo.Main.Version
-	}
+// Debugf emits a formatted debug-level log line via slog.
+func Debugf(format string, args ...any) {
+	logger.Debug(fmt.Sprintf(format, args...))
+}
 
-	return info
+// Warnf prints a warning message to stderr.
+func Warnf(format string, v ...any) {
+	fmt.Fprintf(os.Stderr, "WARNING: "+format+"\n", v...)
+}
+
+// Audit emits a structured JSON audit log entry to stderr when AuditLog is enabled.
+func Audit(scope, target, action, status string) {
+	if !AuditLog {
+		return
+	}
+	entry := map[string]string{
+		"ts":     time.Now().UTC().Format(time.RFC3339),
+		"scope":  scope,
+		"target": target,
+		"action": action,
+		"status": status,
+	}
+	b, err := json.Marshal(entry)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "audit marshal error: %v\n", err)
+		return
+	}
+	fmt.Fprintln(os.Stderr, string(b))
 }
 ````
 
@@ -2578,337 +5145,74 @@ fabric.properties
 .pem
 ````
 
-## File: main.go
-````go
-package main
-
-import "github.com/DragonSecurity/gomgr/cmd"
-
-func main() {
-	cmd.Execute()
-}
-````
-
-## File: Makefile
-````makefile
-.PHONY: help build test test-coverage test-verbose lint fmt vet security clean install-tools all check ci
-
-# Default target
-.DEFAULT_GOAL := help
-
-# Variables
-BINARY_NAME=gomgr
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-LDFLAGS=-ldflags "-s"
-BUILD_DIR=build
-COVERAGE_DIR=coverage
-
-# Go parameters
-GOCMD=go
-GOBUILD=$(GOCMD) build
-GOTEST=$(GOCMD) test
-GOVET=$(GOCMD) vet
-GOFMT=gofmt
-GOMOD=$(GOCMD) mod
-
-help: ## Display this help message
-	@echo "Available targets:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
-
-all: clean fmt vet lint test build ## Run all checks and build
-
-build: ## Build the binary
-	@echo "Building $(BINARY_NAME)..."
-	@mkdir -p $(BUILD_DIR)
-	$(GOBUILD) -trimpath $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
-	@echo "Built: $(BUILD_DIR)/$(BINARY_NAME)"
-
-install: ## Install the binary to $GOPATH/bin
-	@echo "Installing $(BINARY_NAME)..."
-	$(GOCMD) install $(LDFLAGS) .
-
-test: ## Run tests
-	@echo "Running tests..."
-	$(GOTEST) -v ./...
-
-test-coverage: ## Run tests with coverage
-	@echo "Running tests with coverage..."
-	@mkdir -p $(COVERAGE_DIR)
-	$(GOTEST) -v -covermode=atomic -coverprofile=$(COVERAGE_DIR)/coverage.out ./internal/config ./internal/sync
-	$(GOCMD) tool cover -html=$(COVERAGE_DIR)/coverage.out -o $(COVERAGE_DIR)/coverage.html
-	@echo "Coverage report: $(COVERAGE_DIR)/coverage.html"
-	@$(GOCMD) tool cover -func=$(COVERAGE_DIR)/coverage.out | tail -1
-
-test-verbose: ## Run tests with verbose output
-	@echo "Running verbose tests..."
-	$(GOTEST) -v -race ./...
-
-test-short: ## Run short tests only
-	@echo "Running short tests..."
-	$(GOTEST) -short ./...
-
-fmt: ## Format Go code
-	@echo "Formatting code..."
-	@$(GOFMT) -w -s .
-	@echo "Code formatted"
-
-fmt-check: ## Check if code is formatted
-	@echo "Checking code formatting..."
-	@test -z "$$($(GOFMT) -l .)" || (echo "Code is not formatted. Run 'make fmt'" && exit 1)
-	@echo "Code is properly formatted"
-
-vet: ## Run go vet
-	@echo "Running go vet..."
-	$(GOVET) ./...
-	@echo "go vet passed"
-
-lint: ## Run golangci-lint (requires golangci-lint to be installed)
-	@echo "Running golangci-lint..."
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run --timeout 5m ./...; \
-		echo "Linting passed"; \
-	elif [ -x "$(shell go env GOPATH)/bin/golangci-lint" ]; then \
-		$(shell go env GOPATH)/bin/golangci-lint run --timeout 5m ./...; \
-		echo "Linting passed"; \
-	else \
-		echo "golangci-lint not found. Install it with: make install-tools"; \
-		exit 1; \
-	fi
-
-security: ## Run security checks with gosec (requires gosec to be installed)
-	@echo "Running security checks..."
-	@if command -v gosec >/dev/null 2>&1; then \
-		gosec -quiet ./...; \
-		echo "Security check passed"; \
-	elif [ -x "$(shell go env GOPATH)/bin/gosec" ]; then \
-		$(shell go env GOPATH)/bin/gosec -quiet ./...; \
-		echo "Security check passed"; \
-	else \
-		echo "gosec not found. Install it with: make install-tools"; \
-		exit 1; \
-	fi
-
-mod-tidy: ## Tidy go modules
-	@echo "Tidying go modules..."
-	$(GOMOD) tidy
-	@echo "Modules tidied"
-
-mod-verify: ## Verify go modules
-	@echo "Verifying go modules..."
-	$(GOMOD) verify
-	@echo "Modules verified"
-
-mod-download: ## Download go modules
-	@echo "Downloading go modules..."
-	$(GOMOD) download
-	@echo "Modules downloaded"
-
-clean: ## Clean build artifacts
-	@echo "Cleaning..."
-	@rm -rf $(BUILD_DIR) $(COVERAGE_DIR)
-	@rm -f $(BINARY_NAME)
-	@echo "Cleaned"
-
-install-tools: ## Install development tools (golangci-lint, gosec)
-	@echo "Installing development tools..."
-	@echo "Installing golangci-lint..."
-	@if ! command -v golangci-lint >/dev/null 2>&1; then \
-		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
-	else \
-		echo "golangci-lint already installed"; \
-	fi
-	@echo "Installing gosec..."
-	@if ! command -v gosec >/dev/null 2>&1; then \
-		go install github.com/securego/gosec/v2/cmd/gosec@latest; \
-	else \
-		echo "gosec already installed"; \
-	fi
-	@echo "All tools installed"
-
-check: fmt-check vet test ## Run basic checks (format, vet, test)
-
-check-all: fmt-check vet lint security test ## Run all checks including lint and security
-
-ci: clean check build ## Run CI pipeline (clean, run basic checks, build)
-
-version: ## Display version information
-	@echo "Version: $(VERSION)"
-
-.PHONY: mod-tidy mod-verify mod-download version
-````
-
-## File: config/example/teams/example-team.yaml
+## File: .golangci.yml
 ````yaml
-name: Platform Team
-description: Core platform engineers
-privacy: closed
-parents: []
-maintainers:
-  - octocat
-repositories:
-  # Simple permission string (backward compatible)
-  infra: maintain
-  
-  # Template repository - can be reused by other repos
-  template-go-api:
-    permission: push
-    template: true
-    topics:
-      - backend
-      - api
-      - go-template
-  
-  # Advanced config with topics and pinning
-  api:
-    permission: push
-    topics:
-      - backend
-      - api
-      - project-platform
-  
-  # Repository using template (inherits permission and topics)
-  my-api:
-    from: template-go-api
-    topics:
-      - my-project
-      # Will inherit: backend, api, go-template from template
-  
-  # Repository with pinning
-  platform-index:
-    permission: admin
-    topics:
-      - project-platform
-      - documentation
-    pinned: true
-  
-  # Simple read-only access
-  web: pull
-````
+version: "2"
 
-## File: examples/config/app.yaml
-````yaml
-org: KaMuses
-# GitHub App auth (preferred):
-app_id: 1719369
-private_key: ./dsec-gom.2026-02-20.private-key.pem
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+  go: '1.26'
 
-dry_warnings:
-  warn_unmanaged_teams: true
-  warn_members_without_any_team: true
-  warn_unmanaged_repos: true
-  warn_unmanaged_custom_roles: true  # warn about custom roles not defined in org.yaml
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/DragonSecurity/gomgr
 
-remove_members_without_team: true   # remove org members not in any team
-delete_unconfigured_teams: true     # delete teams not defined in YAML
-delete_unmanaged_repos: true        # delete repos not defined in any team (DESTRUCTIVE!)
-delete_unmanaged_custom_roles: false # delete custom roles not defined in org.yaml
-create_repo: true                   # create repos if missing when referenced by teams
-add_renovate_config: true           # create .github/renovate.json in repos
-add_default_readme: false           # create default README.md in repos (optional)
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - ineffassign
+    - gocyclo
+    - misspell
+    - unconvert
+    - goconst
+    - revive
+    - gosec
+  settings:
+    gocyclo:
+      min-complexity: 45
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    misspell:
+      locale: US
+    revive:
+      confidence: 0.8
+      rules:
+        - name: package-comments
+          disabled: true
+        - name: exported
+          disabled: true
+    gosec:
+      excludes:
+        - G304 # Audit use of file path - we need this for config files
+        - G301 # Directory permissions 0755 are fine for config dirs
+        - G306 # File permissions 0644 are fine for config files
+        - G101 # False positives on test PEM fixtures
+        - G703 # Path traversal via taint analysis - config paths come from user
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gocyclo
+          - errcheck
+          - gosec
+          - goconst
 
-renovate_config: | 
-  { 
-    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-    "extends": ["github>DragonSecurity/renovate-presets"]
-  }
-````
-
-## File: internal/config/loader.go
-````go
-package config
-
-import (
-	"errors"
-	"os"
-	"path/filepath"
-	"strings"
-
-	"gopkg.in/yaml.v3"
-)
-
-func Load(dir string) (*Root, error) {
-	r := &Root{}
-	// app.yaml
-	if err := readYAML(filepath.Join(dir, "app.yaml"), &r.App); err != nil {
-		return nil, err
-	}
-	// org.yaml
-	if err := readYAML(filepath.Join(dir, "org.yaml"), &r.Org); err != nil {
-		return nil, err
-	}
-	// teams/*.yaml
-	teamDir := filepath.Join(dir, "teams")
-	entries, _ := os.ReadDir(teamDir)
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
-			continue // ignore non-YAML files like .DS_Store, README, etc.
-		}
-		var t TeamConfig
-		if err := readYAML(filepath.Join(teamDir, e.Name()), &t); err != nil {
-			return nil, err
-		}
-		r.Team = append(r.Team, t)
-	}
-	if r.App.Org == "" {
-		return nil, errors.New("app.org is required")
-	}
-	return r, nil
-}
-
-func readYAML(path string, out any) error {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	return yaml.Unmarshal(b, out)
-}
-
-func BootstrapTeamYAML(path string, name string) error {
-	t := TeamConfig{
-		Name:         name,
-		Maintainers:  []string{},
-		Members:      []string{},
-		Repositories: map[string]any{},
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	b, err := yaml.Marshal(t)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, b, 0o644)
-}
-````
-
-## File: internal/gh/rate.go
-````go
-package gh
-
-import (
-	"context"
-	"log"
-	"time"
-
-	"github.com/google/go-github/v83/github"
-)
-
-func RespectRate(ctx context.Context, c *github.Client) error {
-	r, _, err := c.RateLimits(ctx)
-	if err != nil {
-		return nil
-	}
-	if core := r.GetCore(); core.Remaining < 50 {
-		sleep := time.Until(core.Reset.Time)
-		log.Printf("rate-limit: sleeping until %s", core.Reset.Time)
-		time.Sleep(sleep + time.Second)
-	}
-	return nil
-}
+output:
+  formats:
+    text:
+      print-issued-lines: true
+      print-linter-name: true
 ````
 
 ## File: AGENTS.md
@@ -3127,37 +5431,190 @@ When contributing new agent capabilities:
 See [LICENSE](./LICENSE.md).
 ````
 
-## File: cmd/version.go
+## File: Makefile
+````makefile
+.PHONY: help build test test-coverage test-verbose lint fmt vet security clean install-tools all check ci
+
+# Default target
+.DEFAULT_GOAL := help
+
+# Variables
+BINARY_NAME=gomgr
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS=-ldflags "-s"
+BUILD_DIR=build
+COVERAGE_DIR=coverage
+
+# Go parameters
+GOCMD=go
+GOBUILD=$(GOCMD) build
+GOTEST=$(GOCMD) test
+GOVET=$(GOCMD) vet
+GOFMT=gofmt
+GOMOD=$(GOCMD) mod
+
+help: ## Display this help message
+	@echo "Available targets:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+all: clean fmt vet lint test build ## Run all checks and build
+
+build: ## Build the binary
+	@echo "Building $(BINARY_NAME)..."
+	@mkdir -p $(BUILD_DIR)
+	$(GOBUILD) -trimpath $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
+	@echo "Built: $(BUILD_DIR)/$(BINARY_NAME)"
+
+install: ## Install the binary to $GOPATH/bin
+	@echo "Installing $(BINARY_NAME)..."
+	$(GOCMD) install $(LDFLAGS) .
+
+test: ## Run tests
+	@echo "Running tests..."
+	$(GOTEST) -v ./...
+
+test-coverage: ## Run tests with coverage
+	@echo "Running tests with coverage..."
+	@mkdir -p $(COVERAGE_DIR)
+	$(GOTEST) -v -covermode=atomic -coverprofile=$(COVERAGE_DIR)/coverage.out ./internal/config ./internal/sync ./internal/util ./internal/gh
+	$(GOCMD) tool cover -html=$(COVERAGE_DIR)/coverage.out -o $(COVERAGE_DIR)/coverage.html
+	@echo "Coverage report: $(COVERAGE_DIR)/coverage.html"
+	@$(GOCMD) tool cover -func=$(COVERAGE_DIR)/coverage.out | tail -1
+
+test-verbose: ## Run tests with verbose output
+	@echo "Running verbose tests..."
+	$(GOTEST) -v -race ./...
+
+test-short: ## Run short tests only
+	@echo "Running short tests..."
+	$(GOTEST) -short ./...
+
+fmt: ## Format Go code
+	@echo "Formatting code..."
+	@$(GOFMT) -w -s .
+	@echo "Code formatted"
+
+fmt-check: ## Check if code is formatted
+	@echo "Checking code formatting..."
+	@test -z "$$($(GOFMT) -l .)" || (echo "Code is not formatted. Run 'make fmt'" && exit 1)
+	@echo "Code is properly formatted"
+
+vet: ## Run go vet
+	@echo "Running go vet..."
+	$(GOVET) ./...
+	@echo "go vet passed"
+
+lint: ## Run golangci-lint (requires golangci-lint to be installed)
+	@echo "Running golangci-lint..."
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run --timeout 5m ./...; \
+		echo "Linting passed"; \
+	elif [ -x "$(shell go env GOPATH)/bin/golangci-lint" ]; then \
+		$(shell go env GOPATH)/bin/golangci-lint run --timeout 5m ./...; \
+		echo "Linting passed"; \
+	else \
+		echo "golangci-lint not found. Install it with: make install-tools"; \
+		exit 1; \
+	fi
+
+security: ## Run security checks with gosec (requires gosec to be installed)
+	@echo "Running security checks..."
+	@if command -v gosec >/dev/null 2>&1; then \
+		gosec -quiet ./...; \
+		echo "Security check passed"; \
+	elif [ -x "$(shell go env GOPATH)/bin/gosec" ]; then \
+		$(shell go env GOPATH)/bin/gosec -quiet ./...; \
+		echo "Security check passed"; \
+	else \
+		echo "gosec not found. Install it with: make install-tools"; \
+		exit 1; \
+	fi
+
+mod-tidy: ## Tidy go modules
+	@echo "Tidying go modules..."
+	$(GOMOD) tidy
+	@echo "Modules tidied"
+
+mod-verify: ## Verify go modules
+	@echo "Verifying go modules..."
+	$(GOMOD) verify
+	@echo "Modules verified"
+
+mod-download: ## Download go modules
+	@echo "Downloading go modules..."
+	$(GOMOD) download
+	@echo "Modules downloaded"
+
+clean: ## Clean build artifacts
+	@echo "Cleaning..."
+	@rm -rf $(BUILD_DIR) $(COVERAGE_DIR)
+	@rm -f $(BINARY_NAME)
+	@echo "Cleaned"
+
+install-tools: ## Install development tools (golangci-lint, gosec)
+	@echo "Installing development tools..."
+	@echo "Installing golangci-lint..."
+	@if ! command -v golangci-lint >/dev/null 2>&1; then \
+		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
+	else \
+		echo "golangci-lint already installed"; \
+	fi
+	@echo "Installing gosec..."
+	@if ! command -v gosec >/dev/null 2>&1; then \
+		go install github.com/securego/gosec/v2/cmd/gosec@latest; \
+	else \
+		echo "gosec already installed"; \
+	fi
+	@echo "All tools installed"
+
+check: fmt-check vet test ## Run basic checks (format, vet, test)
+
+check-all: fmt-check vet lint security test ## Run all checks including lint and security
+
+ci: clean check build ## Run CI pipeline (clean, run basic checks, build)
+
+version: ## Display version information
+	@echo "Version: $(VERSION)"
+
+.PHONY: mod-tidy mod-verify mod-download version
+````
+
+## File: cmd/setup_team.go
 ````go
 package cmd
 
 import (
-	"fmt"
+	"path/filepath"
+	"strings"
 
-	"github.com/DragonSecurity/gomgr/internal/version"
 	"github.com/spf13/cobra"
+
+	"github.com/DragonSecurity/gomgr/internal/config"
 )
 
-var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Print the version number",
-	Run: func(cmd *cobra.Command, args []string) {
-		info := version.GetBuildInfo()
-		fmt.Println("Version:", info.Version)
+var teamName string
+var outFile string
 
-		if info.Revision != "" {
-			fmt.Printf("Revision: %s\n", info.Revision)
-			fmt.Printf("Modified: %v\n", info.Modified)
+var setupTeamCmd = &cobra.Command{
+	Use:   "setup-team",
+	Short: "Bootstrap a team YAML file for a given team name",
+	Example: `  gomgr setup-team -c ./config -n "Backend"
+  gomgr setup-team -n "Frontend" -f ./teams/frontend.yaml`,
+	RunE: func(_ *cobra.Command, _ []string) error {
+		slug := strings.ToLower(strings.ReplaceAll(teamName, " ", "-"))
+		path := outFile
+		if path == "" {
+			path = filepath.Join(cfgDir, "teams", slug+".yaml")
 		}
-
-		if info.CommitTime != "" {
-			fmt.Printf("LastCommit: %s\n", info.CommitTime)
-		}
+		return config.BootstrapTeamYAML(path, teamName)
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(versionCmd)
+	setupTeamCmd.Flags().StringVarP(&teamName, "name", "n", "", "Team display name (required)")
+	_ = setupTeamCmd.MarkFlagRequired("name")
+	setupTeamCmd.Flags().StringVarP(&outFile, "file", "f", "", "Force output file path")
+	rootCmd.AddCommand(setupTeamCmd)
 }
 ````
 
@@ -3187,9 +5644,461 @@ renovate_config: |
   }
 ````
 
+## File: internal/config/loader.go
+````go
+package config
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+func Load(dir string) (*Root, error) {
+	r := &Root{}
+	// app.yaml
+	if err := readYAML(filepath.Join(dir, "app.yaml"), &r.App); err != nil {
+		return nil, err
+	}
+	// org.yaml
+	if err := readYAML(filepath.Join(dir, "org.yaml"), &r.Org); err != nil {
+		return nil, err
+	}
+	// teams/*.yaml
+	teamDir := filepath.Join(dir, "teams")
+	entries, err := os.ReadDir(teamDir)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read teams directory %s: %w", teamDir, err)
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			continue // ignore non-YAML files like .DS_Store, README, etc.
+		}
+		var t TeamConfig
+		if err := readYAML(filepath.Join(teamDir, e.Name()), &t); err != nil {
+			return nil, err
+		}
+		r.Team = append(r.Team, t)
+	}
+	if r.App.Org == "" {
+		return nil, errors.New("app.org is required")
+	}
+	if err := r.Validate(); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+func readYAML(path string, out any) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read config file %s: %w", path, err)
+	}
+	if err := yaml.Unmarshal(b, out); err != nil {
+		return fmt.Errorf("parse YAML in %s: %w", path, err)
+	}
+	return nil
+}
+
+// Validate checks that the loaded configuration is semantically correct.
+func (r *Root) Validate() error {
+	validPrivacy := map[string]bool{"": true, "closed": true, "secret": true}
+	validBaseRole := map[string]bool{"read": true, "triage": true, "write": true, "maintain": true, "admin": true}
+
+	for _, t := range r.Team {
+		if t.Name == "" {
+			return fmt.Errorf("team name must not be empty")
+		}
+		if !validPrivacy[t.Privacy] {
+			return fmt.Errorf("team %q has invalid privacy %q (must be closed or secret)", t.Name, t.Privacy)
+		}
+		for repo := range t.Repositories {
+			if err := validateRepoName(repo); err != nil {
+				return fmt.Errorf("team %q: %w", t.Name, err)
+			}
+		}
+		for _, u := range t.Maintainers {
+			if err := validateUsername(u); err != nil {
+				return fmt.Errorf("team %q maintainer: %w", t.Name, err)
+			}
+		}
+		for _, u := range t.Members {
+			if err := validateUsername(u); err != nil {
+				return fmt.Errorf("team %q member: %w", t.Name, err)
+			}
+		}
+	}
+	for _, cr := range r.Org.CustomRoles {
+		if cr.Name == "" {
+			return fmt.Errorf("custom role name must not be empty")
+		}
+		if !validBaseRole[cr.BaseRole] {
+			return fmt.Errorf("custom role %q has invalid base_role %q (must be read|triage|write|maintain|admin)", cr.Name, cr.BaseRole)
+		}
+	}
+	for _, u := range r.Org.Owners {
+		if err := validateUsername(u); err != nil {
+			return fmt.Errorf("org owner: %w", err)
+		}
+	}
+	return nil
+}
+
+var validRepoName = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+
+func validateRepoName(name string) error {
+	if len(name) == 0 || len(name) > 100 {
+		return fmt.Errorf("repo name must be 1-100 characters: %q", name)
+	}
+	if !validRepoName.MatchString(name) {
+		return fmt.Errorf("repo name contains invalid characters: %q", name)
+	}
+	if name == "." || name == ".." {
+		return fmt.Errorf("repo name cannot be %q", name)
+	}
+	return nil
+}
+
+var validUsername = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$`)
+
+func validateUsername(name string) error {
+	if len(name) == 0 || len(name) > 39 {
+		return fmt.Errorf("username must be 1-39 characters: %q", name)
+	}
+	if !validUsername.MatchString(name) {
+		return fmt.Errorf("username contains invalid characters: %q", name)
+	}
+	if strings.Contains(name, "--") {
+		return fmt.Errorf("username cannot contain consecutive hyphens: %q", name)
+	}
+	return nil
+}
+
+func BootstrapTeamYAML(path string, name string) error {
+	t := TeamConfig{
+		Name:         name,
+		Maintainers:  []string{},
+		Members:      []string{},
+		Repositories: map[string]any{},
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	b, err := yaml.Marshal(t)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0o644)
+}
+````
+
+## File: internal/sync/custom_roles.go
+````go
+package sync
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/google/go-github/v84/github"
+
+	"github.com/DragonSecurity/gomgr/internal/config"
+	"github.com/DragonSecurity/gomgr/internal/gh"
+	"github.com/DragonSecurity/gomgr/internal/util"
+)
+
+// customRoleChange represents a custom role modification
+type customRoleChange struct {
+	Org         string
+	ID          int64
+	Name        string
+	Description string
+	BaseRole    string
+	Permissions []string
+}
+
+// planCustomRoles determines what custom repository role changes are needed
+func planCustomRoles(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) ([]util.Change, error) {
+	var out []util.Change
+	org := st.Org
+
+	if len(cfg.Org.CustomRoles) == 0 {
+		// No custom roles configured
+		return out, nil
+	}
+
+	// Fetch existing custom roles from GitHub
+	existingRolesResp, _, err := c.REST.Organizations.ListCustomRepoRoles(ctx, org)
+	if err != nil {
+		// If the org doesn't have custom roles enabled (not Enterprise Cloud),
+		// return an error with helpful context
+		return out, fmt.Errorf("list custom repo roles: %w (note: custom roles require GitHub Enterprise Cloud)", err)
+	}
+
+	// Build map of existing roles by name (lowercase for case-insensitive comparison)
+	existingByName := make(map[string]*github.CustomRepoRoles)
+	for _, role := range existingRolesResp.CustomRepoRoles {
+		if role.Name != nil {
+			existingByName[strings.ToLower(*role.Name)] = role
+		}
+	}
+
+	// Track state
+	st.CurrentCustomRoles = len(existingRolesResp.CustomRepoRoles)
+	st.DesiredCustomRoles = len(cfg.Org.CustomRoles)
+
+	// Plan changes for each desired role
+	for _, desiredRole := range cfg.Org.CustomRoles {
+		roleName := desiredRole.Name
+		roleNameLower := strings.ToLower(roleName)
+
+		existingRole, exists := existingByName[roleNameLower]
+
+		if !exists {
+			// Create new role
+			out = append(out, util.Change{
+				Scope:  "custom-role",
+				Target: roleName,
+				Action: "create",
+				Details: customRoleChange{
+					Org:         org,
+					Name:        roleName,
+					Description: desiredRole.Description,
+					BaseRole:    desiredRole.BaseRole,
+					Permissions: desiredRole.Permissions,
+				},
+			})
+		} else {
+			// Check if update is needed
+			needsUpdate := false
+
+			// Check description changes
+			existingDesc := ""
+			if existingRole.Description != nil {
+				existingDesc = *existingRole.Description
+			}
+			if existingDesc != desiredRole.Description {
+				needsUpdate = true
+			}
+
+			// Check base role changes
+			if existingRole.BaseRole != nil && *existingRole.BaseRole != desiredRole.BaseRole {
+				needsUpdate = true
+			}
+
+			// Check permission changes
+			if !permissionsEqual(existingRole.Permissions, desiredRole.Permissions) {
+				needsUpdate = true
+			}
+
+			if needsUpdate {
+				out = append(out, util.Change{
+					Scope:  "custom-role",
+					Target: roleName,
+					Action: "update",
+					Details: customRoleChange{
+						Org:         org,
+						ID:          existingRole.GetID(),
+						Name:        roleName,
+						Description: desiredRole.Description,
+						BaseRole:    desiredRole.BaseRole,
+						Permissions: desiredRole.Permissions,
+					},
+				})
+			}
+		}
+	}
+
+	return out, nil
+}
+
+// planCustomRoleCleanups determines which custom roles should be deleted
+func planCustomRoleCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) ([]util.Change, []string, error) {
+	var out []util.Change
+	var warnings []string
+	org := st.Org
+
+	if !cfg.App.DeleteUnmanagedCustomRoles && !cfg.App.DryWarnings.WarnUnmanagedCustomRoles {
+		return out, warnings, nil
+	}
+
+	// Fetch existing custom roles
+	existingRolesResp, _, err := c.REST.Organizations.ListCustomRepoRoles(ctx, org)
+	if err != nil {
+		// If custom roles aren't available, skip cleanup
+		return out, warnings, nil
+	}
+
+	// Build set of desired role names (case-insensitive)
+	desiredNames := make(map[string]bool)
+	for _, role := range cfg.Org.CustomRoles {
+		desiredNames[strings.ToLower(role.Name)] = true
+	}
+
+	// Find unmanaged roles
+	var unmanagedRoles []string
+	for _, role := range existingRolesResp.CustomRepoRoles {
+		if role.Name == nil {
+			continue
+		}
+		roleName := *role.Name
+		if !desiredNames[strings.ToLower(roleName)] {
+			unmanagedRoles = append(unmanagedRoles, roleName)
+			if cfg.App.DeleteUnmanagedCustomRoles {
+				out = append(out, util.Change{
+					Scope:  "custom-role",
+					Target: roleName,
+					Action: "delete",
+					Details: customRoleChange{
+						Org:  org,
+						ID:   role.GetID(),
+						Name: roleName,
+					},
+				})
+			}
+		}
+	}
+
+	if cfg.App.DryWarnings.WarnUnmanagedCustomRoles && len(unmanagedRoles) > 0 {
+		warnings = append(warnings, fmt.Sprintf("Found %d unmanaged custom repository roles: %v", len(unmanagedRoles), unmanagedRoles))
+	}
+
+	return out, warnings, nil
+}
+
+// applyCustomRoleChanges handles creating, updating, and deleting custom roles
+func applyCustomRoleChanges(ctx context.Context, c *gh.Client, changes []util.Change) error {
+	for _, ch := range changes {
+		if !strings.HasPrefix(ch.Scope, "custom-role") {
+			continue
+		}
+
+		util.Infof("custom-role:%s %s", ch.Action, ch.Target)
+
+		if err := gh.RespectRate(ctx, c.REST); err != nil {
+			util.Warnf("rate limit check failed: %v", err)
+		}
+
+		d, ok := ch.Details.(customRoleChange)
+		if !ok {
+			return fmt.Errorf("invalid details for custom-role change")
+		}
+
+		switch ch.Scope + ":" + ch.Action {
+		case "custom-role:create":
+			opts := &github.CreateOrUpdateCustomRepoRoleOptions{
+				Name:        github.Ptr(d.Name),
+				BaseRole:    github.Ptr(d.BaseRole),
+				Permissions: d.Permissions,
+			}
+			if d.Description != "" {
+				opts.Description = github.Ptr(d.Description)
+			}
+
+			_, _, err := c.REST.Organizations.CreateCustomRepoRole(ctx, d.Org, opts)
+			if err != nil {
+				util.Audit(ch.Scope, ch.Target, ch.Action, "error")
+				return fmt.Errorf("create custom role %q: %w", d.Name, err)
+			}
+
+		case "custom-role:update":
+			opts := &github.CreateOrUpdateCustomRepoRoleOptions{
+				Name:        github.Ptr(d.Name),
+				BaseRole:    github.Ptr(d.BaseRole),
+				Permissions: d.Permissions,
+			}
+			if d.Description != "" {
+				opts.Description = github.Ptr(d.Description)
+			}
+
+			_, _, err := c.REST.Organizations.UpdateCustomRepoRole(ctx, d.Org, d.ID, opts)
+			if err != nil {
+				util.Audit(ch.Scope, ch.Target, ch.Action, "error")
+				return fmt.Errorf("update custom role %q (ID %d): %w", d.Name, d.ID, err)
+			}
+
+		case "custom-role:delete":
+			_, err := c.REST.Organizations.DeleteCustomRepoRole(ctx, d.Org, d.ID)
+			if err != nil {
+				util.Audit(ch.Scope, ch.Target, ch.Action, "error")
+				return fmt.Errorf("delete custom role %q (ID %d): %w", d.Name, d.ID, err)
+			}
+		}
+
+		util.Audit(ch.Scope, ch.Target, ch.Action, "ok")
+	}
+
+	return nil
+}
+
+// permissionsEqual checks if two permission lists are equivalent
+func permissionsEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	aSet := make(map[string]bool)
+	for _, p := range a {
+		aSet[p] = true
+	}
+	for _, p := range b {
+		if !aSet[p] {
+			return false
+		}
+	}
+	return true
+}
+````
+
+## File: cmd/version.go
+````go
+package cmd
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+
+	"github.com/DragonSecurity/gomgr/internal/version"
+)
+
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print the version number",
+	Run: func(_ *cobra.Command, _ []string) {
+		info := version.GetBuildInfo()
+		fmt.Println("Version:", info.Version)
+
+		if info.Revision != "" {
+			fmt.Printf("Revision: %s\n", info.Revision)
+			fmt.Printf("Modified: %v\n", info.Modified)
+		}
+
+		if info.CommitTime != "" {
+			fmt.Printf("LastCommit: %s\n", info.CommitTime)
+		}
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(versionCmd)
+}
+````
+
 ## File: internal/config/types.go
 ````go
 package config
+
+import "strings"
 
 type AppConfig struct {
 	AppID      int64  `yaml:"app_id,omitempty"`
@@ -3258,6 +6167,49 @@ type Root struct {
 	Org  OrgConfig    `yaml:"org"`
 	Team []TeamConfig `yaml:"teams"`
 }
+
+// ResolvedSlug returns the team's slug, deriving it from the name if not explicitly set.
+func (t TeamConfig) ResolvedSlug() string {
+	if t.Slug != "" {
+		return t.Slug
+	}
+	return strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
+}
+````
+
+## File: internal/gh/rate.go
+````go
+package gh
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/google/go-github/v84/github"
+
+	"github.com/DragonSecurity/gomgr/internal/util"
+)
+
+func RespectRate(ctx context.Context, c *github.Client) error {
+	r, _, err := c.RateLimit.Get(ctx)
+	if err != nil {
+		return fmt.Errorf("rate limit check: %w", err)
+	}
+	if r == nil {
+		return nil
+	}
+	if core := r.GetCore(); core.Remaining < 50 {
+		sleep := time.Until(core.Reset.Time) + time.Second
+		util.Infof("rate-limit: sleeping %s until %s", sleep, core.Reset.Time)
+		select {
+		case <-time.After(sleep):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
 ````
 
 ## File: internal/sync/teams_test.go
@@ -3265,10 +6217,17 @@ type Root struct {
 package sync
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/v83/github"
+	"github.com/google/go-github/v84/github"
+
+	"github.com/DragonSecurity/gomgr/internal/config"
+	"github.com/DragonSecurity/gomgr/internal/util"
 )
 
 func TestParseRepoConfig(t *testing.T) {
@@ -3996,6 +6955,293 @@ func TestContainsErrorMessage(t *testing.T) {
 		})
 	}
 }
+
+// ---- Planning Function Tests ----
+
+func TestPlanTeams(t *testing.T) {
+	cfg := &config.Root{
+		App: config.AppConfig{Org: "myorg"},
+		Team: []config.TeamConfig{
+			{Name: "Backend", Slug: "backend", Description: "Backend team", Privacy: "closed"},
+			{Name: "Frontend", Slug: "frontend", Description: "New desc", Privacy: "closed"},
+			{Name: "Infra", Slug: "infra"},
+		},
+	}
+	st := &State{
+		Org: "myorg",
+		ActualTeams: []*github.Team{
+			{ID: github.Ptr(int64(1)), Slug: github.Ptr("backend"), Name: github.Ptr("Backend"), Description: github.Ptr("Backend team"), Privacy: github.Ptr("closed")},
+			{ID: github.Ptr(int64(2)), Slug: github.Ptr("frontend"), Name: github.Ptr("Frontend"), Description: github.Ptr("Old desc"), Privacy: github.Ptr("closed")},
+		},
+	}
+
+	changes, desired, err := planTeams(context.Background(), nil, cfg, st)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(desired) != 3 {
+		t.Errorf("expected 3 desired teams, got %d", len(desired))
+	}
+
+	var creates, updates int
+	for _, ch := range changes {
+		switch ch.Action {
+		case "create":
+			creates++
+			if ch.Target != "infra" {
+				t.Errorf("expected create for infra, got %s", ch.Target)
+			}
+		case "update":
+			updates++
+			if ch.Target != "frontend" {
+				t.Errorf("expected update for frontend, got %s", ch.Target)
+			}
+		}
+	}
+	if creates != 1 {
+		t.Errorf("expected 1 create, got %d", creates)
+	}
+	if updates != 1 {
+		t.Errorf("expected 1 update, got %d", updates)
+	}
+}
+
+func TestPlanTeamMembership(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/orgs/myorg/teams/backend/members" && r.URL.Query().Get("role") == "maintainer":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"login": "alice"},
+			})
+		case r.URL.Path == "/orgs/myorg/teams/backend/members" && r.URL.Query().Get("role") == "member":
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"login": "bob"},
+			})
+		case r.URL.Path == "/users/alice" || r.URL.Path == "/users/bob" || r.URL.Path == "/users/charlie":
+			_ = json.NewEncoder(w).Encode(map[string]any{"login": strings.TrimPrefix(r.URL.Path, "/users/")})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	st := &State{Org: "myorg"}
+	desiredBySlug := map[string]config.TeamConfig{
+		"backend": {
+			Name:        "Backend",
+			Slug:        "backend",
+			Maintainers: []string{"alice"},
+			Members:     []string{"charlie"}, // bob removed, charlie added
+		},
+	}
+
+	changes, err := planTeamMembership(context.Background(), c, st, desiredBySlug)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should have a change for charlie (new member)
+	found := false
+	for _, ch := range changes {
+		if ch.Scope == "team-member" && ch.Action == "ensure" {
+			d := ch.Details.(teamMemberChange)
+			if d.User == "charlie" && d.Role == "member" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("expected team-member:ensure change for charlie")
+	}
+}
+
+func TestPlanRepoPerms(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/orgs/myorg/teams/") && strings.HasSuffix(r.URL.Path, "/repos"):
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	cfg := &config.Root{
+		App: config.AppConfig{Org: "myorg", CreateRepo: true},
+		Team: []config.TeamConfig{
+			{
+				Name: "Backend",
+				Slug: "backend",
+				Repositories: map[string]any{
+					"api": map[string]any{
+						"permission": "push",
+						"topics":     []any{"backend", "go"},
+					},
+					"new-service": "maintain",
+				},
+			},
+		},
+	}
+	st := &State{
+		Org: "myorg",
+		ActualRepos: []*github.Repository{
+			{Name: github.Ptr("api"), Topics: []string{"backend"}},
+		},
+	}
+
+	changes, err := planRepoPerms(context.Background(), c, cfg, st)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var repoEnsures, teamRepoGrants, topicChanges int
+	for _, ch := range changes {
+		switch ch.Scope + ":" + ch.Action {
+		case "repo:ensure":
+			repoEnsures++
+		case "team-repo:grant":
+			teamRepoGrants++
+		case "repo-topics:ensure":
+			topicChanges++
+		}
+	}
+	if repoEnsures != 1 {
+		t.Errorf("expected 1 repo:ensure (new-service), got %d", repoEnsures)
+	}
+	if teamRepoGrants != 2 {
+		t.Errorf("expected 2 team-repo:grant, got %d", teamRepoGrants)
+	}
+	if topicChanges != 1 {
+		t.Errorf("expected 1 repo-topics:ensure, got %d", topicChanges)
+	}
+}
+
+func TestPlanCleanups(t *testing.T) {
+	cfg := &config.Root{
+		App: config.AppConfig{
+			Org:                     "myorg",
+			DeleteUnconfiguredTeams: true,
+			DeleteUnmanagedRepos:    true,
+		},
+	}
+	desired := map[string]config.TeamConfig{
+		"backend": {Name: "Backend", Slug: "backend"},
+	}
+	st := &State{
+		Org:          "myorg",
+		ManagedRepos: map[string]bool{"api": true},
+		ActualTeams: []*github.Team{
+			{ID: github.Ptr(int64(1)), Slug: github.Ptr("backend")},
+			{ID: github.Ptr(int64(2)), Slug: github.Ptr("old-team")},
+		},
+		ActualRepos: []*github.Repository{
+			{Name: github.Ptr("api")},
+			{Name: github.Ptr("legacy-app")},
+		},
+	}
+
+	changes, _, err := planCleanups(context.Background(), nil, cfg, st, desired)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var teamDeletes, repoDeletes int
+	for _, ch := range changes {
+		switch ch.Scope + ":" + ch.Action {
+		case "team:delete":
+			teamDeletes++
+			if ch.Target != "old-team" {
+				t.Errorf("expected delete for old-team, got %s", ch.Target)
+			}
+		case "repo:delete":
+			repoDeletes++
+			if ch.Target != "legacy-app" {
+				t.Errorf("expected delete for legacy-app, got %s", ch.Target)
+			}
+		}
+	}
+	if teamDeletes != 1 {
+		t.Errorf("expected 1 team:delete, got %d", teamDeletes)
+	}
+	if repoDeletes != 1 {
+		t.Errorf("expected 1 repo:delete, got %d", repoDeletes)
+	}
+}
+
+func TestApplyChanges_ContextCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+
+	changes := []util.Change{
+		{Scope: "team", Target: "backend", Action: "create", Details: map[string]any{"org": "myorg", "name": "Backend"}},
+	}
+
+	err := applyChanges(ctx, nil, changes)
+	if err == nil {
+		t.Fatal("expected error for canceled context")
+	}
+	if err != context.Canceled {
+		t.Errorf("expected context.Canceled, got: %v", err)
+	}
+}
+
+func TestPlanCustomRoles(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/orgs/myorg/custom-repository-roles" && r.Method == "GET" {
+			resp := map[string]any{
+				"total_count": 1,
+				"custom_roles": []map[string]any{
+					{
+						"id":          1,
+						"name":        "deployer",
+						"description": "Old desc",
+						"base_role":   "read",
+						"permissions": []string{"manage_actions"},
+					},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	cfg := &config.Root{
+		App: config.AppConfig{Org: "myorg"},
+		Org: config.OrgConfig{
+			CustomRoles: []config.CustomRoleConfig{
+				{Name: "deployer", Description: "Updated desc", BaseRole: "read", Permissions: []string{"manage_actions"}},
+				{Name: "release-manager", Description: "New role", BaseRole: "write", Permissions: []string{"create_releases"}},
+			},
+		},
+	}
+	st := &State{Org: "myorg"}
+
+	changes, err := planCustomRoles(context.Background(), c, cfg, st)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var creates, updates int
+	for _, ch := range changes {
+		switch ch.Action {
+		case "create":
+			creates++
+		case "update":
+			updates++
+		}
+	}
+	if creates != 1 {
+		t.Errorf("expected 1 custom-role:create, got %d", creates)
+	}
+	if updates != 1 {
+		t.Errorf("expected 1 custom-role:update, got %d", updates)
+	}
+}
 ````
 
 ## File: cmd/sync.go
@@ -4004,26 +7250,36 @@ package cmd
 
 import (
 	"context"
-	"log"
+	"fmt"
+
+	"github.com/spf13/cobra"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
 	insync "github.com/DragonSecurity/gomgr/internal/sync"
 	"github.com/DragonSecurity/gomgr/internal/util"
-	"github.com/spf13/cobra"
 )
 
 var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Synchronize org state to match YAML configuration",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
+	Example: `  gomgr sync -c ./config
+  gomgr sync -c ./config --dry
+  gomgr sync -c ./config --timeout 5m --audit-log`,
+	RunE: func(_ *cobra.Command, _ []string) error {
+		if cfgDir == "" {
+			return fmt.Errorf("--config/-c flag is required")
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
 		if debug {
 			util.EnableDebug()
 		}
+		util.AuditLog = auditLog
 
 		cfg, err := config.Load(cfgDir)
-
 		if err != nil {
 			return err
 		}
@@ -4033,7 +7289,7 @@ var syncCmd = &cobra.Command{
 			return err
 		}
 		if appInfo != "" {
-			log.Printf("auth: %s", appInfo)
+			util.Infof("auth: %s", appInfo)
 		}
 
 		plan, err := insync.BuildPlan(ctx, client, cfg)
@@ -4041,11 +7297,13 @@ var syncCmd = &cobra.Command{
 			return err
 		}
 
-		util.PrintPlan(plan)
+		if err := util.PrintPlan(plan); err != nil {
+			return fmt.Errorf("print plan: %w", err)
+		}
 
 		if dryRun {
 			util.PrintSummary(plan)
-			log.Println("dry-run: no changes applied")
+			util.Infof("dry-run: no changes applied")
 			return nil
 		}
 		return insync.Apply(ctx, client, plan)
@@ -4053,285 +7311,7 @@ var syncCmd = &cobra.Command{
 }
 
 func init() {
-	syncCmd.PersistentFlags().StringVarP(&cfgDir, "config", "c", "", "Path to config directory (required)")
-	_ = syncCmd.MarkPersistentFlagRequired("config")
 	rootCmd.AddCommand(syncCmd)
-}
-````
-
-## File: internal/gh/client.go
-````go
-package gh
-
-import (
-	"bytes"
-	"context"
-	"crypto/x509"
-	"encoding/json"
-	"encoding/pem"
-	"errors"
-	"fmt"
-	"io"
-	"net/http"
-	"os"
-	"strconv"
-	"strings"
-	"time"
-
-	"github.com/DragonSecurity/gomgr/internal/config"
-	"github.com/bradleyfalzon/ghinstallation/v2"
-	"github.com/google/go-github/v83/github"
-	"golang.org/x/oauth2"
-)
-
-type Client struct {
-	REST       *github.Client
-	httpClient *http.Client
-}
-
-func NewClientFromEnv(ctx context.Context, app config.AppConfig) (*Client, string, error) {
-	// PAT
-	if tok := os.Getenv("GITHUB_TOKEN"); tok != "" {
-		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: tok})
-		tc := oauth2.NewClient(ctx, ts)
-		return &Client{REST: github.NewClient(tc), httpClient: tc}, "PAT", nil
-	}
-	// App
-	appID := app.AppID
-	if v := os.Getenv("GITHUB_APP_ID"); v != "" && appID == 0 {
-		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
-			appID = id
-		}
-	}
-	key := firstNonEmpty(app.PrivateKey, os.Getenv("GITHUB_APP_PRIVATE_KEY"))
-	if appID == 0 || key == "" {
-		return nil, "", errors.New("no auth found: set GITHUB_TOKEN or app_id+private_key")
-	}
-	pemBytes, err := maybeReadPEM(key)
-	if err != nil {
-		return nil, "", err
-	}
-	atr, err := ghinstallation.NewAppsTransport(http.DefaultTransport, appID, pemBytes)
-	if err != nil {
-		return nil, "", fmt.Errorf("app transport: %w", err)
-	}
-	tmp := github.NewClient(&http.Client{Transport: atr})
-	inst, _, err := tmp.Apps.FindOrganizationInstallation(ctx, app.Org)
-	if err != nil {
-		return nil, "", fmt.Errorf("find installation for org %q: %w", app.Org, err)
-	}
-	itr := ghinstallation.NewFromAppsTransport(atr, inst.GetID())
-	httpClient := &http.Client{Transport: itr, Timeout: 30 * time.Second}
-	return &Client{REST: github.NewClient(httpClient), httpClient: httpClient}, "Github App", nil
-}
-
-func maybeReadPEM(s string) ([]byte, error) {
-	if strings.Contains(s, "BEGIN") {
-		return []byte(s), nil
-	}
-	b, err := os.ReadFile(s)
-	if err != nil {
-		return nil, err
-	}
-	block, _ := pem.Decode(b)
-	if block == nil {
-		return nil, fmt.Errorf("invalid PEM at %s", s)
-	}
-	if _, err := x509.ParsePKCS1PrivateKey(block.Bytes); err != nil {
-		_, _ = x509.ParsePKCS8PrivateKey(block.Bytes)
-	}
-	return b, nil
-}
-
-func firstNonEmpty(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
-}
-
-// DoGraphQL executes a GraphQL query or mutation
-func (c *Client) DoGraphQL(ctx context.Context, query string, variables map[string]any, result any) error {
-	if c == nil || c.httpClient == nil {
-		return fmt.Errorf("graphql client httpClient is nil")
-	}
-	if strings.TrimSpace(query) == "" {
-		return fmt.Errorf("graphql query must not be empty")
-	}
-	if ctx == nil {
-		return fmt.Errorf("context must not be nil")
-	}
-
-	reqBody := map[string]any{
-		"query": query,
-	}
-	if len(variables) > 0 {
-		reqBody["variables"] = variables
-	}
-
-	body, err := json.Marshal(reqBody)
-	if err != nil {
-		return fmt.Errorf("marshal graphql request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.github.com/graphql", bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("create graphql request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("execute graphql request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("graphql request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	// Parse response to check for GraphQL errors
-	var gqlResp struct {
-		Data   json.RawMessage `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-			Path    []any  `json:"path,omitempty"`
-		} `json:"errors"`
-	}
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("read graphql response: %w", err)
-	}
-
-	if err := json.Unmarshal(respBody, &gqlResp); err != nil {
-		return fmt.Errorf("decode graphql response: %w", err)
-	}
-
-	// Check for GraphQL errors
-	if len(gqlResp.Errors) > 0 {
-		errMsg := gqlResp.Errors[0].Message
-		return fmt.Errorf("graphql error: %s", errMsg)
-	}
-
-	if result != nil && len(gqlResp.Data) > 0 {
-		if err := json.Unmarshal(gqlResp.Data, result); err != nil {
-			return fmt.Errorf("decode graphql data: %w", err)
-		}
-	}
-
-	return nil
-}
-````
-
-## File: internal/sync/orchestrator.go
-````go
-package sync
-
-import (
-	"context"
-
-	"github.com/DragonSecurity/gomgr/internal/config"
-	"github.com/DragonSecurity/gomgr/internal/gh"
-	"github.com/DragonSecurity/gomgr/internal/util"
-)
-
-type State struct {
-	Org          string
-	ManagedRepos map[string]bool
-
-	// Current state from GitHub
-	CurrentTeams       int
-	CurrentTeamMembers int
-	CurrentRepos       int
-	CurrentRepoPerms   int
-	CurrentCustomRoles int
-
-	// Desired state from config
-	DesiredTeams       int
-	DesiredTeamMembers int
-	DesiredRepos       int
-	DesiredRepoPerms   int
-	DesiredCustomRoles int
-}
-
-func BuildPlan(ctx context.Context, c *gh.Client, cfg *config.Root) (util.Plan, error) {
-	st := &State{Org: cfg.App.Org}
-	var plan util.Plan
-
-	// Owners (stub - optional)
-	// ownerChanges, err := planOwners(ctx, c, cfg, st)
-	// if err != nil { return plan, err }
-
-	// Custom roles must be created before teams/repos use them
-	customRoleChanges, err := planCustomRoles(ctx, c, cfg, st)
-	if err != nil {
-		return plan, err
-	}
-
-	teamChanges, desiredBySlug, err := planTeams(ctx, c, cfg, st)
-	if err != nil {
-		return plan, err
-	}
-
-	memChanges, err := planTeamMembership(ctx, c, cfg, st, desiredBySlug)
-	if err != nil {
-		return plan, err
-	}
-
-	repoChanges, err := planRepoPerms(ctx, c, cfg, st)
-	if err != nil {
-		return plan, err
-	}
-
-	cleanupChanges, warnings, err := planCleanups(ctx, c, cfg, st, desiredBySlug)
-	if err != nil {
-		return plan, err
-	}
-
-	customRoleCleanups, roleWarnings, err := planCustomRoleCleanups(ctx, c, cfg, st)
-	if err != nil {
-		return plan, err
-	}
-
-	plan.Changes = append(plan.Changes, customRoleChanges...)
-	plan.Changes = append(plan.Changes, teamChanges...)
-	plan.Changes = append(plan.Changes, memChanges...)
-	plan.Changes = append(plan.Changes, repoChanges...)
-	plan.Changes = append(plan.Changes, cleanupChanges...)
-	plan.Changes = append(plan.Changes, customRoleCleanups...)
-	plan.Warnings = append(warnings, roleWarnings...)
-
-	// Populate stats
-	plan.Stats = &util.StateStats{
-		Teams: util.StatePair{
-			Current: st.CurrentTeams,
-			Desired: st.DesiredTeams,
-		},
-		TeamMembers: util.StatePair{
-			Current: st.CurrentTeamMembers,
-			Desired: st.DesiredTeamMembers,
-		},
-		Repositories: util.StatePair{
-			Current: st.CurrentRepos,
-			Desired: st.DesiredRepos,
-		},
-		RepoPermissions: util.StatePair{
-			Current: st.CurrentRepoPerms,
-			Desired: st.DesiredRepoPerms,
-		},
-		CustomRoles: util.StatePair{
-			Current: st.CurrentCustomRoles,
-			Desired: st.DesiredCustomRoles,
-		},
-	}
-
-	return plan, nil
-}
-
-func Apply(ctx context.Context, c *gh.Client, plan util.Plan) error {
-	return applyChanges(ctx, c, plan.Changes)
 }
 ````
 
@@ -4404,6 +7384,508 @@ jobs:
         env:
           GITHUB_APP_PRIVATE_KEY: ${{ secrets.DSEC_USER_MANAGEMENT_APP_PRIVATE_KEY }}
           GITHUB_APP_ID: "1719369"
+````
+
+## File: internal/sync/orchestrator.go
+````go
+package sync
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/google/go-github/v84/github"
+
+	"github.com/DragonSecurity/gomgr/internal/config"
+	"github.com/DragonSecurity/gomgr/internal/gh"
+	"github.com/DragonSecurity/gomgr/internal/util"
+)
+
+type State struct {
+	Org          string
+	ManagedRepos map[string]bool
+
+	// Cached API results to avoid duplicate calls
+	ActualTeams []*github.Team
+	ActualRepos []*github.Repository
+
+	// Current state from GitHub
+	CurrentTeams       int
+	CurrentTeamMembers int
+	CurrentRepos       int
+	CurrentRepoPerms   int
+	CurrentCustomRoles int
+
+	// Desired state from config
+	DesiredTeams       int
+	DesiredTeamMembers int
+	DesiredRepos       int
+	DesiredRepoPerms   int
+	DesiredCustomRoles int
+}
+
+func BuildPlan(ctx context.Context, c *gh.Client, cfg *config.Root) (util.Plan, error) {
+	st := &State{Org: cfg.App.Org}
+	var plan util.Plan
+
+	// Prefetch teams and repos once to avoid duplicate API calls
+	if err := prefetchState(ctx, c, st); err != nil {
+		return plan, fmt.Errorf("prefetch state: %w", err)
+	}
+
+	// Custom roles must be created before teams/repos use them
+	customRoleChanges, err := planCustomRoles(ctx, c, cfg, st)
+	if err != nil {
+		return plan, fmt.Errorf("plan custom roles: %w", err)
+	}
+
+	teamChanges, desiredBySlug, err := planTeams(ctx, c, cfg, st)
+	if err != nil {
+		return plan, fmt.Errorf("plan teams: %w", err)
+	}
+
+	memChanges, err := planTeamMembership(ctx, c, st, desiredBySlug)
+	if err != nil {
+		return plan, fmt.Errorf("plan team membership: %w", err)
+	}
+
+	repoChanges, err := planRepoPerms(ctx, c, cfg, st)
+	if err != nil {
+		return plan, fmt.Errorf("plan repo permissions: %w", err)
+	}
+
+	cleanupChanges, warnings, err := planCleanups(ctx, c, cfg, st, desiredBySlug)
+	if err != nil {
+		return plan, fmt.Errorf("plan cleanups: %w", err)
+	}
+
+	customRoleCleanups, roleWarnings, err := planCustomRoleCleanups(ctx, c, cfg, st)
+	if err != nil {
+		return plan, fmt.Errorf("plan custom role cleanups: %w", err)
+	}
+
+	plan.Changes = append(plan.Changes, customRoleChanges...)
+	plan.Changes = append(plan.Changes, teamChanges...)
+	plan.Changes = append(plan.Changes, memChanges...)
+	plan.Changes = append(plan.Changes, repoChanges...)
+	plan.Changes = append(plan.Changes, cleanupChanges...)
+	plan.Changes = append(plan.Changes, customRoleCleanups...)
+	plan.Warnings = append(warnings, roleWarnings...)
+
+	// Populate stats
+	plan.Stats = &util.StateStats{
+		Teams: util.StatePair{
+			Current: st.CurrentTeams,
+			Desired: st.DesiredTeams,
+		},
+		TeamMembers: util.StatePair{
+			Current: st.CurrentTeamMembers,
+			Desired: st.DesiredTeamMembers,
+		},
+		Repositories: util.StatePair{
+			Current: st.CurrentRepos,
+			Desired: st.DesiredRepos,
+		},
+		RepoPermissions: util.StatePair{
+			Current: st.CurrentRepoPerms,
+			Desired: st.DesiredRepoPerms,
+		},
+		CustomRoles: util.StatePair{
+			Current: st.CurrentCustomRoles,
+			Desired: st.DesiredCustomRoles,
+		},
+	}
+
+	return plan, nil
+}
+
+// prefetchState fetches teams and repos from GitHub once, caching them in State
+// so that both planning and cleanup phases can reuse the data.
+func prefetchState(ctx context.Context, c *gh.Client, st *State) error {
+	if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+		ts, resp, err := c.REST.Teams.ListTeams(ctx, st.Org, opts)
+		if err != nil {
+			return nil, err
+		}
+		st.ActualTeams = append(st.ActualTeams, ts...)
+		return resp, nil
+	}); err != nil {
+		return fmt.Errorf("list teams: %w", err)
+	}
+
+	repoOpt := &github.RepositoryListByOrgOptions{
+		ListOptions: github.ListOptions{PerPage: defaultPerPage},
+		Type:        "all",
+	}
+	if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+		repoOpt.ListOptions = *opts
+		repos, resp, err := c.REST.Repositories.ListByOrg(ctx, st.Org, repoOpt)
+		if err != nil {
+			return nil, err
+		}
+		st.ActualRepos = append(st.ActualRepos, repos...)
+		return resp, nil
+	}); err != nil {
+		return fmt.Errorf("list repos: %w", err)
+	}
+
+	return nil
+}
+
+func Apply(ctx context.Context, c *gh.Client, plan util.Plan) error {
+	return applyChanges(ctx, c, plan.Changes)
+}
+````
+
+## File: .github/workflows/ci.yaml
+````yaml
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        go-version: ['1.26.2']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Cache Go modules
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: make mod-download
+
+      - name: Verify dependencies
+        run: make mod-verify
+
+      - name: Run tests
+        run: make test-coverage
+
+      - name: Upload coverage to artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: coverage-report
+          path: coverage/
+          if-no-files-found: error
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: '1.26.2'
+
+      - name: Cache Go modules
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Check formatting
+        run: make fmt-check
+
+      - name: Run go vet
+        run: make vet
+
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.1.0
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Run golangci-lint
+        run: make lint
+
+  security:
+    name: Security
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: '1.26.2'
+
+      - name: Cache Go modules
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: Run security checks
+        run: make security
+
+  build:
+    name: Build
+    runs-on: ubuntu-24.04
+    needs: [test, lint, security]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: '1.26.2'
+
+      - name: Cache Go modules
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Build
+        run: make build
+
+      - name: Upload binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: gomgr-binary
+          path: build/gomgr
+          if-no-files-found: error
+````
+
+## File: internal/gh/client.go
+````go
+package gh
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"encoding/pem"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/bradleyfalzon/ghinstallation/v2"
+	"github.com/google/go-github/v84/github"
+	"golang.org/x/oauth2"
+
+	"github.com/DragonSecurity/gomgr/internal/config"
+)
+
+type Client struct {
+	REST       *github.Client
+	httpClient *http.Client
+	// GraphQLURL is the endpoint used by DoGraphQL. Empty means GitHub's public
+	// GraphQL API. Tests may override it to point at a local server.
+	GraphQLURL string
+}
+
+const defaultMaxRetries = 3
+const defaultGraphQLURL = "https://api.github.com/graphql"
+
+func NewClientFromEnv(ctx context.Context, app config.AppConfig) (*Client, string, error) {
+	// PAT
+	if tok := os.Getenv("GITHUB_TOKEN"); tok != "" {
+		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: tok})
+		tc := oauth2.NewClient(ctx, ts)
+		tc.Transport = newRetryTransport(tc.Transport, defaultMaxRetries)
+		return &Client{REST: github.NewClient(tc), httpClient: tc}, "PAT", nil
+	}
+	// App
+	appID := app.AppID
+	if v := os.Getenv("GITHUB_APP_ID"); v != "" && appID == 0 {
+		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
+			appID = id
+		}
+	}
+	key := firstNonEmpty(app.PrivateKey, os.Getenv("GITHUB_APP_PRIVATE_KEY"))
+	if appID == 0 || key == "" {
+		return nil, "", errors.New("no auth found: set GITHUB_TOKEN or app_id+private_key")
+	}
+	pemBytes, err := maybeReadPEM(key)
+	if err != nil {
+		return nil, "", err
+	}
+	atr, err := ghinstallation.NewAppsTransport(http.DefaultTransport, appID, pemBytes)
+	if err != nil {
+		return nil, "", fmt.Errorf("app transport: %w", err)
+	}
+	tmp := github.NewClient(&http.Client{Transport: atr})
+	inst, _, err := tmp.Apps.FindOrganizationInstallation(ctx, app.Org)
+	if err != nil {
+		return nil, "", fmt.Errorf("find installation for org %q: %w", app.Org, err)
+	}
+	itr := ghinstallation.NewFromAppsTransport(atr, inst.GetID())
+	httpClient := &http.Client{Transport: newRetryTransport(itr, defaultMaxRetries), Timeout: 30 * time.Second}
+	return &Client{REST: github.NewClient(httpClient), httpClient: httpClient}, "Github App", nil
+}
+
+func maybeReadPEM(s string) ([]byte, error) {
+	var (
+		data   []byte
+		source string
+	)
+	if strings.Contains(s, "BEGIN") {
+		data = []byte(s)
+		source = "inline key"
+	} else {
+		b, err := os.ReadFile(s)
+		if err != nil {
+			return nil, err
+		}
+		data = b
+		source = s
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, fmt.Errorf("invalid PEM at %s", source)
+	}
+	if !isPrivateKeyBlockType(block.Type) {
+		return nil, fmt.Errorf("invalid PEM at %s: expected a private key block, got %q", source, block.Type)
+	}
+	return data, nil
+}
+
+func isPrivateKeyBlockType(t string) bool {
+	switch t {
+	case "RSA PRIVATE KEY", "PRIVATE KEY", "EC PRIVATE KEY":
+		return true
+	}
+	return false
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+// DoGraphQL executes a GraphQL query or mutation
+func (c *Client) DoGraphQL(ctx context.Context, query string, variables map[string]any, result any) error {
+	if c == nil || c.httpClient == nil {
+		return fmt.Errorf("graphql client httpClient is nil")
+	}
+	if strings.TrimSpace(query) == "" {
+		return fmt.Errorf("graphql query must not be empty")
+	}
+	if ctx == nil {
+		return fmt.Errorf("context must not be nil")
+	}
+
+	reqBody := map[string]any{
+		"query": query,
+	}
+	if len(variables) > 0 {
+		reqBody["variables"] = variables
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("marshal graphql request: %w", err)
+	}
+
+	url := c.GraphQLURL
+	if url == "" {
+		url = defaultGraphQLURL
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create graphql request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("execute graphql request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("graphql request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse response to check for GraphQL errors
+	var gqlResp struct {
+		Data   json.RawMessage `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+			Path    []any  `json:"path,omitempty"`
+		} `json:"errors"`
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read graphql response: %w", err)
+	}
+
+	if err := json.Unmarshal(respBody, &gqlResp); err != nil {
+		return fmt.Errorf("decode graphql response: %w", err)
+	}
+
+	// Check for GraphQL errors
+	if len(gqlResp.Errors) > 0 {
+		msgs := make([]string, len(gqlResp.Errors))
+		for i, e := range gqlResp.Errors {
+			msgs[i] = e.Message
+		}
+		return fmt.Errorf("graphql error: %s", strings.Join(msgs, "; "))
+	}
+
+	if result != nil && len(gqlResp.Data) > 0 {
+		if err := json.Unmarshal(gqlResp.Data, result); err != nil {
+			return fmt.Errorf("decode graphql data: %w", err)
+		}
+	}
+
+	return nil
+}
 ````
 
 ## File: README.md
@@ -5118,11 +8600,54 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/google/go-github/v84/github"
+
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
 	"github.com/DragonSecurity/gomgr/internal/templates"
 	"github.com/DragonSecurity/gomgr/internal/util"
-	"github.com/google/go-github/v83/github"
+)
+
+const defaultPerPage = 100
+
+var validTopicRe = regexp.MustCompile(`^[a-z0-9-]+$`)
+
+const (
+	roleMaintainer = "maintainer"
+	roleMember     = "member"
+)
+
+// Repository permission levels used across planning and apply.
+const (
+	permPull     = "pull"
+	permTriage   = "triage"
+	permPush     = "push"
+	permMaintain = "maintain"
+	permAdmin    = "admin"
+)
+
+const (
+	precedenceCustomRoleCreate   = 5
+	precedenceCustomRoleUpdate   = 5
+	precedenceTeamCreate         = 10
+	precedenceTeamUpdate         = 15
+	precedenceRepoEnsure         = 10
+	precedenceTeamRepoGrant      = 20
+	precedenceTeamMemberEnsure   = 30
+	precedenceRepoFileEnsure     = 40
+	precedenceRepoTopicsEnsure   = 45
+	precedenceRepoTemplateEnsure = 46
+	precedenceRepoPinEnsure      = 47
+	precedenceOrgMemberRemove    = 85
+	precedenceTeamDelete         = 90
+	precedenceRepoDelete         = 90
+	precedenceCustomRoleDelete   = 95
+)
+
+const (
+	errTermSHA            = "sha"
+	errTermSHANotSupplied = "wasn't supplied"
+	errTermRefExists      = "reference already exists"
 )
 
 type teamMemberChange struct {
@@ -5155,11 +8680,26 @@ func validateTopic(topic string) error {
 		return fmt.Errorf("topic cannot start with hyphen: %q", topic)
 	}
 	// Match lowercase alphanumeric and hyphens only
-	validTopic := regexp.MustCompile(`^[a-z0-9-]+$`)
-	if !validTopic.MatchString(topic) {
+	if !validTopicRe.MatchString(topic) {
 		return fmt.Errorf("topic contains invalid characters (must be lowercase alphanumeric with hyphens): %q", topic)
 	}
 	return nil
+}
+
+// normalizeYAMLMap converts both map[string]any and map[any]any (from YAML) to map[string]any.
+func normalizeYAMLMap(v any) (map[string]any, bool) {
+	switch m := v.(type) {
+	case map[string]any:
+		return m, true
+	case map[any]any:
+		result := make(map[string]any, len(m))
+		for k, val := range m {
+			result[fmt.Sprint(k)] = val
+		}
+		return result, true
+	default:
+		return nil, false
+	}
 }
 
 // parseRepoConfig parses a repository value which can be either:
@@ -5175,59 +8715,35 @@ func parseRepoConfig(val any) (repoSettings, error) {
 			return settings, fmt.Errorf("permission cannot be empty string")
 		}
 		settings.permission = v
-	case map[string]any:
-		// Advanced case: RepoConfig structure
-		if perm, ok := v["permission"].(string); ok {
+	default:
+		m, ok := normalizeYAMLMap(val)
+		if !ok {
+			return settings, nil
+		}
+		if perm, ok := m["permission"].(string); ok {
 			if perm == "" {
 				return settings, fmt.Errorf("permission cannot be empty string")
 			}
 			settings.permission = perm
-		} else if _, hasPermission := v["permission"]; hasPermission {
-			return settings, fmt.Errorf("permission must be a string, got %T", v["permission"])
+		} else if _, hasPermission := m["permission"]; hasPermission {
+			return settings, fmt.Errorf("permission must be a string, got %T", m["permission"])
 		}
 		// Permission is optional if using advanced config for topics/pinning only
 
-		if topics, ok := v["topics"].([]any); ok {
+		if topics, ok := m["topics"].([]any); ok {
 			for _, t := range topics {
 				if tStr, ok := t.(string); ok {
 					settings.topics = append(settings.topics, tStr)
 				}
 			}
 		}
-		if pinned, ok := v["pinned"].(bool); ok {
+		if pinned, ok := m["pinned"].(bool); ok {
 			settings.pinned = pinned
 		}
-		if template, ok := v["template"].(bool); ok {
+		if template, ok := m["template"].(bool); ok {
 			settings.template = template
 		}
-		if from, ok := v["from"].(string); ok {
-			settings.from = from
-		}
-	case map[any]any:
-		// YAML might unmarshal as map[any]any
-		if perm, ok := v["permission"].(string); ok {
-			if perm == "" {
-				return settings, fmt.Errorf("permission cannot be empty string")
-			}
-			settings.permission = perm
-		} else if _, hasPermission := v["permission"]; hasPermission {
-			return settings, fmt.Errorf("permission must be a string, got %T", v["permission"])
-		}
-
-		if topics, ok := v["topics"].([]any); ok {
-			for _, t := range topics {
-				if tStr, ok := t.(string); ok {
-					settings.topics = append(settings.topics, tStr)
-				}
-			}
-		}
-		if pinned, ok := v["pinned"].(bool); ok {
-			settings.pinned = pinned
-		}
-		if template, ok := v["template"].(bool); ok {
-			settings.template = template
-		}
-		if from, ok := v["from"].(string); ok {
+		if from, ok := m["from"].(string); ok {
 			settings.from = from
 		}
 	}
@@ -5235,25 +8751,26 @@ func parseRepoConfig(val any) (repoSettings, error) {
 	return settings, nil
 }
 
+// parseTemplateRef splits a template reference into org and repo parts.
+// Supports "repo-name" (uses defaultOrg) or "org/repo-name".
+func parseTemplateRef(ref, defaultOrg string) (org, repo string) {
+	if strings.Contains(ref, "/") {
+		parts := strings.SplitN(ref, "/", 2)
+		return parts[0], parts[1]
+	}
+	return defaultOrg, ref
+}
+
 // resolveTemplate resolves template inheritance for a repository configuration.
 // If the repo has a "from" field, it looks up the template repository and merges settings.
 // Topics are combined (union), template flag is not inherited, and permission can be overridden.
-func resolveTemplate(repoName string, settings repoSettings, allRepos map[string]repoSettings, defaultOrg string) (repoSettings, error) {
+func resolveTemplate(_ string, settings repoSettings, allRepos map[string]repoSettings, defaultOrg string) (repoSettings, error) {
 	if settings.from == "" {
 		return settings, nil
 	}
 
 	// Parse template reference (supports "repo-name" or "org/repo-name")
-	templateOrg := defaultOrg
-	templateRepo := settings.from
-	if strings.Contains(settings.from, "/") {
-		parts := strings.SplitN(settings.from, "/", 2)
-		if len(parts) != 2 {
-			return settings, fmt.Errorf("invalid template reference format: %q (expected 'repo' or 'org/repo')", settings.from)
-		}
-		templateOrg = parts[0]
-		templateRepo = parts[1]
-	}
+	templateOrg, templateRepo := parseTemplateRef(settings.from, defaultOrg)
 
 	// Only support same-org templates for now
 	if templateOrg != defaultOrg {
@@ -5305,18 +8822,31 @@ func resolveTemplate(repoName string, settings repoSettings, allRepos map[string
 	return result, nil
 }
 
+// paginate calls fn repeatedly, advancing through pages until there are no more.
+func paginate(fn func(opts *github.ListOptions) (*github.Response, error)) error {
+	opts := &github.ListOptions{PerPage: defaultPerPage}
+	for {
+		resp, err := fn(opts)
+		if err != nil {
+			return err
+		}
+		if resp == nil || resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	return nil
+}
+
 // ---- planning ----
 
-func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) ([]util.Change, map[string]config.TeamConfig, error) {
+func planTeams(_ context.Context, _ *gh.Client, cfg *config.Root, st *State) ([]util.Change, map[string]config.TeamConfig, error) {
 	var out []util.Change
 	desired := map[string]config.TeamConfig{}
 
 	// build desired map
 	for _, t := range cfg.Team {
-		slug := t.Slug
-		if slug == "" && t.Name != "" {
-			slug = strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
-		}
+		slug := t.ResolvedSlug()
 		if slug == "" {
 			continue
 		}
@@ -5324,27 +8854,14 @@ func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) (
 		desired[slug] = t
 	}
 
-	// list actual teams
-	var actual []*github.Team
-	opt := &github.ListOptions{PerPage: 100}
-	for {
-		ts, resp, err := c.REST.Teams.ListTeams(ctx, st.Org, opt)
-		if err != nil {
-			return nil, nil, err
-		}
-		actual = append(actual, ts...)
-		if resp.NextPage == 0 {
-			break
-		}
-		opt.Page = resp.NextPage
-	}
+	// use prefetched teams
 	actualBySlug := map[string]*github.Team{}
-	for _, t := range actual {
+	for _, t := range st.ActualTeams {
 		actualBySlug[t.GetSlug()] = t
 	}
 
 	// Track state
-	st.CurrentTeams = len(actual)
+	st.CurrentTeams = len(st.ActualTeams)
 	st.DesiredTeams = len(desired)
 
 	for slug, want := range desired {
@@ -5362,71 +8879,111 @@ func planTeams(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) (
 			})
 			continue
 		}
-		// TODO: compare & update description/privacy/parents as needed
+		// Compare & update description/privacy
+		existing := actualBySlug[slug]
+		needsUpdate := false
+		updateDetails := map[string]any{
+			"org":  st.Org,
+			"slug": slug,
+			"name": want.Name,
+		}
+		if want.Description != existing.GetDescription() {
+			needsUpdate = true
+			updateDetails["description"] = want.Description
+		}
+		if want.Privacy != "" && want.Privacy != existing.GetPrivacy() {
+			needsUpdate = true
+			updateDetails["privacy"] = want.Privacy
+		}
+		if needsUpdate {
+			out = append(out, util.Change{
+				Scope:   "team",
+				Target:  slug,
+				Action:  "update",
+				Details: updateDetails,
+			})
+		}
 	}
 	return out, desired, nil
 }
 
-func planTeamMembership(ctx context.Context, c *gh.Client, cfg *config.Root, st *State, desiredBySlug map[string]config.TeamConfig) ([]util.Change, error) {
+func planTeamMembership(ctx context.Context, c *gh.Client, st *State, desiredBySlug map[string]config.TeamConfig) ([]util.Change, error) {
 	var out []util.Change
 	org := st.Org
 
 	totalCurrentMembers := 0
 	totalDesiredMembers := 0
 
+	validatedUsers := map[string]bool{}
+
 	for slug, want := range desiredBySlug {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		// actual role map
 		got := map[string]string{}
 		// maintainers
-		mopts := &github.TeamListTeamMembersOptions{Role: "maintainer", ListOptions: github.ListOptions{PerPage: 100}}
-		for {
+		mopts := &github.TeamListTeamMembersOptions{Role: roleMaintainer, ListOptions: github.ListOptions{PerPage: defaultPerPage}}
+		if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+			mopts.ListOptions = *opts
 			users, resp, err := c.REST.Teams.ListTeamMembersBySlug(ctx, org, slug, mopts)
 			if err != nil {
 				var ghErr *github.ErrorResponse
 				if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusNotFound {
-					break
+					return &github.Response{}, nil
 				}
 				return nil, err
 			}
 			for _, u := range users {
-				got[strings.ToLower(u.GetLogin())] = "maintainer"
+				got[strings.ToLower(u.GetLogin())] = roleMaintainer
 			}
-			if resp.NextPage == 0 {
-				break
-			}
-			mopts.Page = resp.NextPage
+			return resp, nil
+		}); err != nil {
+			return nil, err
 		}
 		// members
-		opts := &github.TeamListTeamMembersOptions{Role: "member", ListOptions: github.ListOptions{PerPage: 100}}
-		for {
-			users, resp, err := c.REST.Teams.ListTeamMembersBySlug(ctx, org, slug, opts)
+		memOpts := &github.TeamListTeamMembersOptions{Role: roleMember, ListOptions: github.ListOptions{PerPage: defaultPerPage}}
+		if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+			memOpts.ListOptions = *opts
+			users, resp, err := c.REST.Teams.ListTeamMembersBySlug(ctx, org, slug, memOpts)
 			if err != nil {
 				var ghErr *github.ErrorResponse
 				if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusNotFound {
-					break
+					return &github.Response{}, nil
 				}
 				return nil, err
 			}
 			for _, u := range users {
 				if _, ok := got[strings.ToLower(u.GetLogin())]; !ok {
-					got[strings.ToLower(u.GetLogin())] = "member"
+					got[strings.ToLower(u.GetLogin())] = roleMember
 				}
 			}
-			if resp.NextPage == 0 {
-				break
-			}
-			opts.Page = resp.NextPage
+			return resp, nil
+		}); err != nil {
+			return nil, err
 		}
 
 		// desired role map
 		wantRole := map[string]string{}
 		for _, u := range want.Maintainers {
-			wantRole[strings.ToLower(u)] = "maintainer"
+			wantRole[strings.ToLower(u)] = roleMaintainer
 		}
 		for _, u := range want.Members {
 			if _, ok := wantRole[strings.ToLower(u)]; !ok {
-				wantRole[strings.ToLower(u)] = "member"
+				wantRole[strings.ToLower(u)] = roleMember
 			}
+		}
+
+		// Validate that all desired users exist on GitHub
+		for user := range wantRole {
+			if validatedUsers[user] {
+				continue
+			}
+			_, _, err := c.REST.Users.Get(ctx, user)
+			if err != nil {
+				return nil, fmt.Errorf("user %q in team %q not found on GitHub: %w", user, slug, err)
+			}
+			validatedUsers[user] = true
 		}
 
 		// Track member counts
@@ -5454,77 +9011,131 @@ func planTeamMembership(ctx context.Context, c *gh.Client, cfg *config.Root, st 
 	return out, nil
 }
 
-func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) ([]util.Change, error) {
-	var out []util.Change
-	org := st.Org
-
-	existing := map[string]bool{}
-	existingRepos := map[string]*github.Repository{}
-	opt := &github.RepositoryListByOrgOptions{ListOptions: github.ListOptions{PerPage: 100}, Type: "all"}
-	for {
-		repos, resp, err := c.REST.Repositories.ListByOrg(ctx, org, opt)
-		if err != nil {
-			return nil, err
-		}
-		for _, r := range repos {
-			repoName := strings.ToLower(r.GetName())
-			existing[repoName] = true
-			existingRepos[repoName] = r
-		}
-		if resp.NextPage == 0 {
-			break
-		}
-		opt.Page = resp.NextPage
-	}
-
-	// Track which repos are managed
-	managedRepos := map[string]bool{}
-
-	// Map to track desired topics and pinned state per repo
-	desiredTopics := map[string][]string{}
-	desiredPinned := map[string]bool{}
-	desiredTemplates := map[string]bool{}
-
-	// First pass: collect all repository settings
-	allRepoSettings := map[string]repoSettings{}
-	repoToTeams := map[string][]string{} // track which teams reference each repo
+// collectRepoSettings gathers and validates all repository settings from config.
+func collectRepoSettings(cfg *config.Root, _ string) (allSettings map[string]repoSettings, managedRepos map[string]bool, err error) {
+	allSettings = map[string]repoSettings{}
+	managedRepos = map[string]bool{}
 
 	for _, t := range cfg.Team {
-		slug := t.Slug
-		if slug == "" {
-			slug = strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
-		}
+		slug := t.ResolvedSlug()
 		for repo, val := range t.Repositories {
 			r := strings.ToLower(repo)
 			managedRepos[r] = true
 
 			settings, err := parseRepoConfig(val)
 			if err != nil {
-				return nil, fmt.Errorf("invalid config for repo %s in team %s: %w", repo, slug, err)
+				return nil, nil, fmt.Errorf("invalid config for repo %s in team %s: %w", repo, slug, err)
 			}
-
-			// Store settings for later template resolution
-			allRepoSettings[r] = settings
-			repoToTeams[r] = append(repoToTeams[r], slug)
+			allSettings[r] = settings
 		}
 	}
+	return allSettings, managedRepos, nil
+}
 
-	// Second pass: resolve templates
-	resolvedSettings := make(map[string]repoSettings)
-	for repo, settings := range allRepoSettings {
-		resolved, err := resolveTemplate(repo, settings, allRepoSettings, org)
+// resolveAllTemplates resolves template inheritance for all repository settings.
+func resolveAllTemplates(allSettings map[string]repoSettings, org string) (map[string]repoSettings, error) {
+	resolved := make(map[string]repoSettings, len(allSettings))
+	for repo, settings := range allSettings {
+		r, err := resolveTemplate(repo, settings, allSettings, org)
 		if err != nil {
 			return nil, fmt.Errorf("error resolving template for repo %s: %w", repo, err)
 		}
-		resolvedSettings[repo] = resolved
+		resolved[repo] = r
+	}
+	return resolved, nil
+}
+
+// teamRepoPermKey is "team-slug/repo-name" (lowercase).
+type teamRepoPermKey = string
+
+// fetchCurrentPermissions fetches the current team-repo permission grants from GitHub.
+// Returns the total count and a map of "team/repo" -> permission string.
+func fetchCurrentPermissions(ctx context.Context, c *gh.Client, cfg *config.Root, org string) (int, map[teamRepoPermKey]string, error) {
+	count := 0
+	permMap := map[teamRepoPermKey]string{}
+	for _, t := range cfg.Team {
+		if ctx.Err() != nil {
+			return 0, nil, ctx.Err()
+		}
+		teamSlug := t.ResolvedSlug()
+		if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+			teamRepos, resp, err := c.REST.Teams.ListTeamReposBySlug(ctx, org, teamSlug, opts)
+			if err != nil {
+				var ghErr *github.ErrorResponse
+				if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusNotFound {
+					return &github.Response{}, nil
+				}
+				return nil, err
+			}
+			count += len(teamRepos)
+			for _, repo := range teamRepos {
+				repoName := strings.ToLower(repo.GetName())
+				perm := extractRepoPerm(repo)
+				permMap[teamSlug+"/"+repoName] = perm
+			}
+			return resp, nil
+		}); err != nil {
+			return 0, nil, fmt.Errorf("fetch permissions for team %s: %w", teamSlug, err)
+		}
+	}
+	return count, permMap, nil
+}
+
+// extractRepoPerm returns the highest permission level granted to a team for a repo.
+func extractRepoPerm(repo *github.Repository) string {
+	p := repo.Permissions
+	if p == nil {
+		return ""
+	}
+	switch {
+	case p.Admin != nil && *p.Admin:
+		return permAdmin
+	case p.Maintain != nil && *p.Maintain:
+		return permMaintain
+	case p.Push != nil && *p.Push:
+		return permPush
+	case p.Triage != nil && *p.Triage:
+		return permTriage
+	case p.Pull != nil && *p.Pull:
+		return permPull
+	default:
+		return ""
+	}
+}
+
+func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *State) ([]util.Change, error) {
+	var out []util.Change
+	org := st.Org
+
+	// use prefetched repos
+	existing := map[string]bool{}
+	existingRepos := map[string]*github.Repository{}
+	for _, r := range st.ActualRepos {
+		repoName := strings.ToLower(r.GetName())
+		existing[repoName] = true
+		existingRepos[repoName] = r
 	}
 
-	// Third pass: process repositories with resolved settings
+	allRepoSettings, managedRepos, err := collectRepoSettings(cfg, org)
+	if err != nil {
+		return nil, err
+	}
+
+	resolvedSettings, err := resolveAllTemplates(allRepoSettings, org)
+	if err != nil {
+		return nil, err
+	}
+
+	desiredTopics := map[string][]string{}
+	desiredPinned := map[string]bool{}
+	desiredTemplates := map[string]bool{}
+	emittedFiles := map[string]bool{} // tracks repo-level file changes to avoid duplicates
+
 	for _, t := range cfg.Team {
-		slug := t.Slug
-		if slug == "" {
-			slug = strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
+		slug := t.ResolvedSlug()
 		for repo := range t.Repositories {
 			r := strings.ToLower(repo)
 			settings := resolvedSettings[r]
@@ -5535,7 +9146,6 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 					"name":    repo,
 					"private": true,
 				}
-				// Include template information if present
 				if settings.from != "" {
 					details["from"] = settings.from
 				}
@@ -5551,7 +9161,6 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 				existing[r] = true
 			}
 
-			// Mark repository as template if configured
 			if settings.template {
 				desiredTemplates[r] = true
 			}
@@ -5568,7 +9177,6 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 				},
 			})
 
-			// Aggregate topics from all teams (union)
 			if len(settings.topics) > 0 {
 				existingTopics := desiredTopics[r]
 				topicSet := map[string]bool{}
@@ -5576,7 +9184,6 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 					topicSet[topic] = true
 				}
 				for _, topic := range settings.topics {
-					// Validate topic before adding
 					if err := validateTopic(topic); err != nil {
 						return nil, fmt.Errorf("invalid topic for repo %s: %w", repo, err)
 					}
@@ -5588,12 +9195,12 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 				desiredTopics[r] = existingTopics
 			}
 
-			// Pinned state: if any team wants it pinned, pin it
 			if settings.pinned {
 				desiredPinned[r] = true
 			}
 
-			if cfg.App.AddDefaultReadme {
+			// Emit file changes only once per repo (skip if already emitted from another team)
+			if cfg.App.AddDefaultReadme && !emittedFiles[r+":README.md"] {
 				readmeContent, err := templates.GenerateReadme(org, repo)
 				if err != nil {
 					return nil, fmt.Errorf("failed to generate README for %s: %w", repo, err)
@@ -5611,8 +9218,9 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 						"branch":  "main",
 					},
 				})
+				emittedFiles[r+":README.md"] = true
 			}
-			if cfg.App.AddRenovateConfig && cfg.App.RenovateConfig != "" {
+			if cfg.App.AddRenovateConfig && cfg.App.RenovateConfig != "" && !emittedFiles[r+":renovate"] {
 				out = append(out, util.Change{
 					Scope:  "repo-file",
 					Target: r + ":.github/renovate.json",
@@ -5626,61 +9234,51 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 						"branch":  "main",
 					},
 				})
+				emittedFiles[r+":renovate"] = true
 			}
 		}
 	}
 
-	// Plan topic updates for managed repos - only if different from current state
+	// Plan topic updates
 	for repo, topics := range desiredTopics {
-		if len(topics) > 0 {
-			// GitHub allows max 20 topics per repo
-			if len(topics) > 20 {
-				return nil, fmt.Errorf("repo %s has %d topics (max 20 allowed)", repo, len(topics))
-			}
-
-			// Check if topics differ from current state
-			needsUpdate := false
-			if existingRepo, ok := existingRepos[repo]; ok {
-				currentTopics := existingRepo.Topics
-				if len(currentTopics) != len(topics) {
-					needsUpdate = true
-				} else {
-					// Compare topics (order-independent)
-					currentSet := make(map[string]bool)
-					for _, t := range currentTopics {
-						currentSet[t] = true
-					}
-					for _, t := range topics {
-						if !currentSet[t] {
-							needsUpdate = true
-							break
-						}
+		if len(topics) > 20 {
+			return nil, fmt.Errorf("repo %s has %d topics (max 20 allowed)", repo, len(topics))
+		}
+		needsUpdate := false
+		if existingRepo, ok := existingRepos[repo]; ok {
+			currentTopics := existingRepo.Topics
+			if len(currentTopics) != len(topics) {
+				needsUpdate = true
+			} else {
+				currentSet := make(map[string]bool)
+				for _, t := range currentTopics {
+					currentSet[t] = true
+				}
+				for _, t := range topics {
+					if !currentSet[t] {
+						needsUpdate = true
+						break
 					}
 				}
-			} else {
-				// Repo doesn't exist yet, will be created
-				needsUpdate = true
 			}
-
-			if needsUpdate {
-				out = append(out, util.Change{
-					Scope:  "repo-topics",
-					Target: repo,
-					Action: "ensure",
-					Details: map[string]any{
-						"org":    org,
-						"repo":   repo,
-						"topics": topics,
-					},
-				})
-			}
+		} else {
+			needsUpdate = true
+		}
+		if needsUpdate {
+			out = append(out, util.Change{
+				Scope:  "repo-topics",
+				Target: repo,
+				Action: "ensure",
+				Details: map[string]any{
+					"org":    org,
+					"repo":   repo,
+					"topics": topics,
+				},
+			})
 		}
 	}
 
-	// Plan pinning changes - check current pinning state
-	// Note: GitHub REST API doesn't provide pinning status directly
-	// We'll generate changes for all repos marked as pinned
-	// A future enhancement could use GraphQL to query current pinning state
+	// Plan pinning changes
 	for repo, shouldPin := range desiredPinned {
 		if shouldPin {
 			out = append(out, util.Change{
@@ -5699,17 +9297,14 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 	// Plan template marking changes
 	for repo, shouldBeTemplate := range desiredTemplates {
 		if shouldBeTemplate {
-			// Check if repo needs to be marked as template
 			needsUpdate := false
 			if existingRepo, ok := existingRepos[repo]; ok {
 				if !existingRepo.GetIsTemplate() {
 					needsUpdate = true
 				}
 			} else {
-				// Repo will be created, needs template marking
 				needsUpdate = true
 			}
-
 			if needsUpdate {
 				out = append(out, util.Change{
 					Scope:  "repo-template",
@@ -5725,177 +9320,173 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 		}
 	}
 
-	// Store managed repos in state for cleanup phase
 	st.ManagedRepos = managedRepos
-
-	// Track repository counts
 	st.CurrentRepos = len(existing)
 	st.DesiredRepos = len(managedRepos)
 
-	// Count permissions (team-repo grants)
-	// Note: This requires additional API calls to get accurate current state.
-	// These calls are intentional for precise state tracking and run only during
-	// dry-run planning. The overhead is acceptable for the visibility benefit.
-	currentPermsCount := 0
-	desiredPermsCount := 0
-
-	// Count current permissions from GitHub
-	for _, t := range cfg.Team {
-		teamSlug := t.Slug
-		if teamSlug == "" {
-			teamSlug = strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
-		}
-		// List team repos to count current permissions
-		repoOpts := &github.ListOptions{PerPage: 100}
-		for {
-			teamRepos, resp, err := c.REST.Teams.ListTeamReposBySlug(ctx, org, teamSlug, repoOpts)
-			if err != nil {
-				// If team doesn't exist yet, skip counting
-				var ghErr *github.ErrorResponse
-				if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusNotFound {
-					break
-				}
-				// Ignore other errors for counting purposes
-				break
-			}
-			currentPermsCount += len(teamRepos)
-			if resp.NextPage == 0 {
-				break
-			}
-			repoOpts.Page = resp.NextPage
-		}
+	currentPerms, currentPermMap, err := fetchCurrentPermissions(ctx, c, cfg, org)
+	if err != nil {
+		return nil, fmt.Errorf("fetch current permissions: %w", err)
 	}
-
-	// Count desired permissions
+	st.CurrentRepoPerms = currentPerms
+	desiredPermsCount := 0
 	for _, t := range cfg.Team {
 		desiredPermsCount += len(t.Repositories)
 	}
-
-	st.CurrentRepoPerms = currentPermsCount
 	st.DesiredRepoPerms = desiredPermsCount
 
+	// Filter out no-op grants where the permission already matches
+	filtered := out[:0]
+	for _, ch := range out {
+		if ch.Scope == "team-repo" && ch.Action == "grant" {
+			d := ch.Details.(map[string]any)
+			slug := d["slug"].(string)
+			repo := strings.ToLower(d["repo"].(string))
+			desired := normalizePermission(d["permission"].(string))
+			current := currentPermMap[slug+"/"+repo]
+			if current == desired {
+				continue // skip, already has correct permission
+			}
+		}
+		filtered = append(filtered, ch)
+	}
+
+	return filtered, nil
+}
+
+// planTeamCleanups generates delete changes for teams not in the desired set.
+func planTeamCleanups(st *State, org string, desired map[string]config.TeamConfig) ([]util.Change, error) {
+	var out []util.Change
+	for _, at := range st.ActualTeams {
+		if _, ok := desired[at.GetSlug()]; !ok {
+			out = append(out, util.Change{Scope: "team", Target: at.GetSlug(), Action: "delete", Details: map[string]any{"org": org, "slug": at.GetSlug()}})
+		}
+	}
 	return out, nil
+}
+
+// planMemberCleanups generates remove changes for org members not in any team.
+func planMemberCleanups(ctx context.Context, c *gh.Client, org string) ([]util.Change, error) {
+	var out []util.Change
+	memOpt := &github.ListMembersOptions{
+		Role:        roleMember,
+		ListOptions: github.ListOptions{PerPage: defaultPerPage},
+	}
+	var members []*github.User
+	if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+		memOpt.ListOptions = *opts
+		us, resp, err := c.REST.Organizations.ListMembers(ctx, org, memOpt)
+		if err != nil {
+			return nil, err
+		}
+		members = append(members, us...)
+		return resp, nil
+	}); err != nil {
+		return nil, err
+	}
+	inAnyTeam := map[string]bool{}
+	var allTeams []*github.Team
+	if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+		ts, resp, err := c.REST.Teams.ListTeams(ctx, org, opts)
+		if err != nil {
+			return nil, err
+		}
+		allTeams = append(allTeams, ts...)
+		return resp, nil
+	}); err != nil {
+		return nil, err
+	}
+	for _, t := range allTeams {
+		tmOpt := &github.TeamListTeamMembersOptions{Role: "all", ListOptions: github.ListOptions{PerPage: defaultPerPage}}
+		if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+			tmOpt.ListOptions = *opts
+			us, resp, err := c.REST.Teams.ListTeamMembersBySlug(ctx, org, t.GetSlug(), tmOpt)
+			if err != nil {
+				return nil, err
+			}
+			for _, u := range us {
+				inAnyTeam[strings.ToLower(u.GetLogin())] = true
+			}
+			return resp, nil
+		}); err != nil {
+			return nil, err
+		}
+	}
+	for _, u := range members {
+		login := strings.ToLower(u.GetLogin())
+		if !inAnyTeam[login] {
+			out = append(out, util.Change{Scope: "org-member", Target: login, Action: "remove", Details: map[string]any{"org": org, "user": login}})
+		}
+	}
+	return out, nil
+}
+
+// planRepoCleanups generates delete/warning changes for unmanaged repositories.
+func planRepoCleanups(cfg *config.Root, st *State) ([]util.Change, []string, error) {
+	var out []util.Change
+	var warnings []string
+	org := st.Org
+	var unmanagedRepos []string
+	for _, repo := range st.ActualRepos {
+		repoName := strings.ToLower(repo.GetName())
+		if !st.ManagedRepos[repoName] {
+			unmanagedRepos = append(unmanagedRepos, repo.GetName())
+			if cfg.App.DeleteUnmanagedRepos {
+				out = append(out, util.Change{
+					Scope:  "repo",
+					Target: repoName,
+					Action: "delete",
+					Details: map[string]any{
+						"org":  org,
+						"repo": repo.GetName(),
+					},
+				})
+			}
+		}
+	}
+	if cfg.App.DryWarnings.WarnUnmanagedRepos && len(unmanagedRepos) > 0 {
+		warnings = append(warnings, fmt.Sprintf("Found %d unmanaged repositories: %v", len(unmanagedRepos), unmanagedRepos))
+	}
+	return out, warnings, nil
 }
 
 func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State, desired map[string]config.TeamConfig) ([]util.Change, []string, error) {
 	var out []util.Change
 	var warnings []string
 	org := st.Org
+
 	if cfg.App.DeleteUnconfiguredTeams {
-		var actual []*github.Team
-		opt := &github.ListOptions{PerPage: 100}
-		for {
-			ts, resp, err := c.REST.Teams.ListTeams(ctx, org, opt)
-			if err != nil {
-				return nil, nil, err
-			}
-			actual = append(actual, ts...)
-			if resp.NextPage == 0 {
-				break
-			}
-			opt.Page = resp.NextPage
+		if ctx.Err() != nil {
+			return nil, nil, ctx.Err()
 		}
-		for _, at := range actual {
-			if _, ok := desired[at.GetSlug()]; !ok {
-				out = append(out, util.Change{Scope: "team", Target: at.GetSlug(), Action: "delete", Details: map[string]any{"org": org, "slug": at.GetSlug()}})
-			}
+		changes, err := planTeamCleanups(st, org, desired)
+		if err != nil {
+			return nil, nil, err
 		}
+		out = append(out, changes...)
 	}
 
 	if cfg.App.RemoveMembersWithoutTeam {
-		// list all org members
-		memOpt := &github.ListMembersOptions{
-			Role: "member",
-			ListOptions: github.ListOptions{
-				PerPage: 100,
-			},
+		if ctx.Err() != nil {
+			return nil, nil, ctx.Err()
 		}
-		var members []*github.User
-		for {
-			us, resp, err := c.REST.Organizations.ListMembers(ctx, org, memOpt)
-			if err != nil {
-				return nil, nil, err
-			}
-			members = append(members, us...)
-			if resp.NextPage == 0 {
-				break
-			}
-			memOpt.Page = resp.NextPage
+		changes, err := planMemberCleanups(ctx, c, org)
+		if err != nil {
+			return nil, nil, err
 		}
-		// compute members who are in any team
-		inAnyTeam := map[string]bool{}
-		teamOpt := &github.ListOptions{PerPage: 100}
-		for {
-			ts, resp, err := c.REST.Teams.ListTeams(ctx, org, teamOpt)
-			if err != nil {
-				return nil, nil, err
-			}
-			for _, t := range ts {
-				page := &github.TeamListTeamMembersOptions{Role: "all", ListOptions: github.ListOptions{PerPage: 100}}
-				for {
-					us, r2, err := c.REST.Teams.ListTeamMembersBySlug(ctx, org, t.GetSlug(), page)
-					if err != nil {
-						return nil, nil, err
-					}
-					for _, u := range us {
-						inAnyTeam[strings.ToLower(u.GetLogin())] = true
-					}
-					if r2.NextPage == 0 {
-						break
-					}
-					page.Page = r2.NextPage
-				}
-			}
-			if resp.NextPage == 0 {
-				break
-			}
-			teamOpt.Page = resp.NextPage
-		}
-		for _, u := range members {
-			login := strings.ToLower(u.GetLogin())
-			if !inAnyTeam[login] {
-				out = append(out, util.Change{Scope: "org-member", Target: login, Action: "remove", Details: map[string]any{"org": org, "user": login}})
-			}
-		}
+		out = append(out, changes...)
 	}
 
-	// Warn about or delete unmanaged repositories
 	if cfg.App.DeleteUnmanagedRepos || cfg.App.DryWarnings.WarnUnmanagedRepos {
-		var actualRepos []*github.Repository
-		repoOpt := &github.RepositoryListByOrgOptions{ListOptions: github.ListOptions{PerPage: 100}, Type: "all"}
-		for {
-			repos, resp, err := c.REST.Repositories.ListByOrg(ctx, org, repoOpt)
-			if err != nil {
-				return nil, nil, err
-			}
-			actualRepos = append(actualRepos, repos...)
-			if resp.NextPage == 0 {
-				break
-			}
-			repoOpt.Page = resp.NextPage
+		if ctx.Err() != nil {
+			return nil, nil, ctx.Err()
 		}
-		var unmanagedRepos []string
-		for _, repo := range actualRepos {
-			repoName := strings.ToLower(repo.GetName())
-			if !st.ManagedRepos[repoName] {
-				unmanagedRepos = append(unmanagedRepos, repo.GetName())
-				if cfg.App.DeleteUnmanagedRepos {
-					out = append(out, util.Change{
-						Scope:  "repo",
-						Target: repoName,
-						Action: "delete",
-						Details: map[string]any{
-							"org":  org,
-							"repo": repo.GetName(),
-						},
-					})
-				}
-			}
+		changes, w, err := planRepoCleanups(cfg, st)
+		if err != nil {
+			return nil, nil, err
 		}
-		// Add warning if configured and there are unmanaged repos
-		if cfg.App.DryWarnings.WarnUnmanagedRepos && len(unmanagedRepos) > 0 {
-			warnings = append(warnings, fmt.Sprintf("Found %d unmanaged repositories: %v", len(unmanagedRepos), unmanagedRepos))
-		}
+		out = append(out, changes...)
+		warnings = append(warnings, w...)
 	}
 
 	return out, warnings, nil
@@ -5938,280 +9529,56 @@ func containsErrorMessage(ghErr *github.ErrorResponse, searchTerms ...string) bo
 // ---- apply ----
 
 func applyChanges(ctx context.Context, c *gh.Client, changes []util.Change) error {
-	precedence := map[string]int{
-		"custom-role:create":   5, // Create custom roles first, before teams/repos
-		"custom-role:update":   5,
-		"team:create":          10,
-		"repo:ensure":          10,
-		"team-repo:grant":      20,
-		"team-member:ensure":   30,
-		"repo-file:ensure":     40,
-		"repo-topics:ensure":   45,
-		"repo-template:ensure": 46,
-		"repo-pin:ensure":      47,
-		"team:delete":          90,
-		"repo:delete":          90,
-		"custom-role:delete":   95, // Delete custom roles last
-	}
+	return applyChangesWith(ctx, c, changes, defaultRegistry)
+}
 
-	sort.Slice(changes, func(i, j int) bool {
-		ai := changes[i].Scope + ":" + changes[i].Action
-		aj := changes[j].Scope + ":" + changes[j].Action
-		return precedence[ai] < precedence[aj]
+func applyChangesWith(ctx context.Context, c *gh.Client, changes []util.Change, reg *HandlerRegistry) error {
+	sort.SliceStable(changes, func(i, j int) bool {
+		return reg.Precedence(changes[i].Scope, changes[i].Action) <
+			reg.Precedence(changes[j].Scope, changes[j].Action)
 	})
 
-	// Apply custom role changes first
+	// Apply custom role changes first — they have their own dispatcher.
 	if err := applyCustomRoleChanges(ctx, c, changes); err != nil {
 		return err
 	}
 
+	// Count non-custom-role changes for progress display.
+	total := 0
 	for _, ch := range changes {
-		// Skip custom role changes - already handled above
+		if !strings.HasPrefix(ch.Scope, "custom-role") {
+			total++
+		}
+	}
+
+	applied := 0
+	for _, ch := range changes {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if strings.HasPrefix(ch.Scope, "custom-role") {
 			continue
 		}
 
-		switch ch.Scope + ":" + ch.Action {
-		case "team:create":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			name := fmt.Sprint(d["name"])
-			var privacyPtr, descPtr *string
-			if v, ok := d["privacy"]; ok && fmt.Sprint(v) != "" {
-				pv := fmt.Sprint(v)
-				privacyPtr = github.Ptr(pv)
-			}
-			if v, ok := d["description"]; ok && fmt.Sprint(v) != "" {
-				dv := fmt.Sprint(v)
-				descPtr = github.Ptr(dv)
-			}
-			newTeam := github.NewTeam{Name: name, Privacy: privacyPtr, Description: descPtr}
-			_, _, err := c.REST.Teams.CreateTeam(ctx, org, newTeam)
-			if err != nil {
-				return fmt.Errorf("create team %q: %w", name, err)
-			}
+		applied++
+		util.Infof("[%d/%d] %s:%s %s", applied, total, ch.Scope, ch.Action, ch.Target)
 
-		case "team:delete":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			slug := fmt.Sprint(d["slug"])
-			_, err := c.REST.Teams.DeleteTeamBySlug(ctx, org, slug)
-			if err != nil {
-				return fmt.Errorf("delete team %s: %w", slug, err)
-			}
-
-		case "team-member:ensure":
-			d, ok := ch.Details.(teamMemberChange)
-			if !ok {
-				return fmt.Errorf("invalid details for team-member:ensure")
-			}
-			_, _, err := c.REST.Teams.AddTeamMembershipBySlug(ctx, d.Org, d.Slug, d.User, &github.TeamAddTeamMembershipOptions{Role: d.Role})
-			if err != nil {
-				return fmt.Errorf("add %s as %s to %s: %w", d.User, d.Role, d.Slug, err)
-			}
-
-		case "repo:ensure":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			name := fmt.Sprint(d["name"])
-			private := true
-			if v, ok := d["private"]; ok {
-				private = fmt.Sprint(v) != "false"
-			}
-			isTemplate := false
-			if v, ok := d["template"]; ok {
-				isTemplate = fmt.Sprint(v) == "true"
-			}
-
-			// Check if this repo should be created from a template
-			if fromTemplate, ok := d["from"]; ok && fromTemplate != "" {
-				templateRef := fmt.Sprint(fromTemplate)
-				// Parse template reference (supports "repo-name" or "org/repo-name")
-				templateOrg := org
-				templateRepo := templateRef
-				if strings.Contains(templateRef, "/") {
-					parts := strings.SplitN(templateRef, "/", 2)
-					if len(parts) == 2 {
-						templateOrg = parts[0]
-						templateRepo = parts[1]
-					}
-				}
-
-				// Create repository from template
-				_, _, err := c.REST.Repositories.CreateFromTemplate(ctx, templateOrg, templateRepo, &github.TemplateRepoRequest{
-					Name:    github.Ptr(name),
-					Owner:   github.Ptr(org),
-					Private: github.Ptr(private),
-				})
-				if err != nil {
-					var ghErr *github.ErrorResponse
-					if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == 422 {
-						// already exists race
-					} else {
-						return fmt.Errorf("create repo %s/%s from template %s/%s: %w", org, name, templateOrg, templateRepo, err)
-					}
-				}
-			} else {
-				// Create regular repository
-				_, _, err := c.REST.Repositories.Create(ctx, org, &github.Repository{
-					Name:                github.Ptr(name),
-					Private:             github.Ptr(private),
-					IsTemplate:          github.Ptr(isTemplate),
-					AllowAutoMerge:      github.Ptr(true),
-					AllowMergeCommit:    github.Ptr(false),
-					DeleteBranchOnMerge: github.Ptr(true),
-					HasIssues:           github.Ptr(true),
-				})
-				if err != nil {
-					var ghErr *github.ErrorResponse
-					if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == 422 {
-						// already exists race
-					} else {
-						return fmt.Errorf("create repo %s/%s: %w", org, name, err)
-					}
-				}
-			}
-
-		case "team-repo:grant":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			slug := fmt.Sprint(d["slug"])
-			repo := fmt.Sprint(d["repo"])
-			perm := normalizePermission(fmt.Sprint(d["permission"]))
-			_, err := c.REST.Teams.AddTeamRepoBySlug(ctx, org, slug, org, repo, &github.TeamAddTeamRepoOptions{Permission: perm})
-			if err != nil {
-				return fmt.Errorf("grant %s on %s/%s to %s: %w", perm, org, repo, slug, err)
-			}
-
-		case "repo-file:ensure":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			repo := fmt.Sprint(d["repo"])
-			path := fmt.Sprint(d["path"])
-			content := []byte(fmt.Sprint(d["content"]))
-			message := fmt.Sprint(d["message"])
-			branch := fmt.Sprint(d["branch"])
-			file, _, resp, err := c.REST.Repositories.GetContents(ctx, org, repo, path, &github.RepositoryContentGetOptions{Ref: branch})
-			if err != nil && (resp == nil || resp.StatusCode != http.StatusNotFound) {
-				return fmt.Errorf("check %s/%s:%s: %w", org, repo, path, err)
-			}
-			if file == nil {
-				_, _, err := c.REST.Repositories.CreateFile(ctx, org, repo, path, &github.RepositoryContentFileOptions{
-					Message: github.Ptr(message),
-					Content: content,
-					Branch:  github.Ptr(branch),
-				})
-				if err != nil {
-					// Handle race condition: If repository was created from template,
-					// files may exist even though GetContents returned nil.
-					// This can happen due to timing - template files are copied asynchronously.
-					// GitHub returns 422 with "sha wasn't supplied" or 409 with "reference already exists"
-					// when trying to create a file that already exists.
-					var ghErr *github.ErrorResponse
-					if errors.As(err, &ghErr) && ghErr.Response != nil {
-						// Check if this is a race condition error
-						isRaceCondition := (ghErr.Response.StatusCode == 422 && containsErrorMessage(ghErr, "sha", "wasn't supplied")) ||
-							(ghErr.Response.StatusCode == 409 && containsErrorMessage(ghErr, "reference already exists"))
-
-						if !isRaceCondition {
-							return fmt.Errorf("create file %s in %s/%s: %w", path, org, repo, err)
-						}
-						// File already exists (likely from template), which is what we want - skip error
-					} else {
-						return fmt.Errorf("create file %s in %s/%s: %w", path, org, repo, err)
-					}
-				}
-			} else {
-				// optional: update if differs (skipped for now)
-			}
-
-		case "repo-topics:ensure":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			repo := fmt.Sprint(d["repo"])
-
-			// Handle topics - may come as []string or []any from planning
-			var topicsRaw []string
-			if v, ok := d["topics"]; ok {
-				switch topics := v.(type) {
-				case []string:
-					topicsRaw = topics
-				case []any:
-					for _, t := range topics {
-						if tStr, ok := t.(string); ok {
-							topicsRaw = append(topicsRaw, tStr)
-						}
-					}
-				default:
-					return fmt.Errorf("invalid type for topics for %s/%s: %T", org, repo, v)
-				}
-			}
-
-			_, _, err := c.REST.Repositories.ReplaceAllTopics(ctx, org, repo, topicsRaw)
-			if err != nil {
-				return fmt.Errorf("set topics on %s/%s: %w", org, repo, err)
-			}
-
-		case "repo-template:ensure":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			repo := fmt.Sprint(d["repo"])
-
-			// Mark repository as a template
-			_, _, err := c.REST.Repositories.Edit(ctx, org, repo, &github.Repository{
-				IsTemplate: github.Ptr(true),
-			})
-			if err != nil {
-				return fmt.Errorf("mark repo %s/%s as template: %w", org, repo, err)
-			}
-
-		case "repo-pin:ensure":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			repo := fmt.Sprint(d["repo"])
-
-			// Note: GitHub's GraphQL API does not support pinning repositories to organization profiles.
-			// The pinRepository mutation only works for user profiles, not organizations.
-			// This is a known limitation of the GitHub API.
-			// See: https://github.com/orgs/community/discussions/184845
-			util.Warnf("Skipping pin for %s/%s: GitHub API does not support pinning to organization profiles", org, repo)
-
-		case "repo:delete":
-			d, _ := ch.Details.(map[string]any)
-			org := fmt.Sprint(d["org"])
-			repo := fmt.Sprint(d["repo"])
-			_, err := c.REST.Repositories.Delete(ctx, org, repo)
-			if err != nil {
-				return fmt.Errorf("delete repo %s/%s: %w", org, repo, err)
-			}
-
-		default:
-			// no-op for unhandled changes
+		if err := gh.RespectRate(ctx, c.REST); err != nil {
+			util.Warnf("rate limit check failed: %v", err)
 		}
+
+		handler, ok := reg.Lookup(ch.Scope, ch.Action)
+		if !ok {
+			util.Warnf("no handler for change %s:%s on %s", ch.Scope, ch.Action, ch.Target)
+			continue
+		}
+		if err := handler.Apply(ctx, c, ch); err != nil {
+			util.Audit(ch.Scope, ch.Target, ch.Action, "error")
+			return err
+		}
+		util.Audit(ch.Scope, ch.Target, ch.Action, "ok")
 	}
 	return nil
-}
-
-func normalizePermission(p string) string {
-	// Use lowercase comparison to match built-in roles case-insensitively
-	switch strings.ToLower(p) {
-	case "read", "pull":
-		return "pull"
-	case "triage":
-		return "triage"
-	case "write", "push":
-		return "push"
-	case "maintain":
-		return "maintain"
-	case "admin":
-		return "admin"
-	default:
-		// For custom repository roles (GitHub Enterprise Cloud), pass through the role name as-is
-		// preserving the original case since custom role names may be case-sensitive
-		// Custom roles must be created in the GitHub organization before use
-		// Examples: "actions-manager", "release-manager", "runner-admin"
-		return p
-	}
 }
 ````
 
@@ -6243,9 +9610,9 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: "1.26.0"
+          go-version: "1.26.2"
 
       - name: Set VERSION
         run: echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_ENV
@@ -6275,7 +9642,7 @@ jobs:
           fi
 
       - name: Upload artifact
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: "artifacts_${{ matrix.goos }}_${{ matrix.goarch }}"
           path: |
@@ -6289,7 +9656,7 @@ jobs:
     needs: build
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: dist
 
@@ -6300,7 +9667,7 @@ jobs:
           ls -la
 
       - name: Create Release
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
         with:
           draft: false
           prerelease: false
@@ -6316,21 +9683,20 @@ jobs:
 ````
 module github.com/DragonSecurity/gomgr
 
-go 1.26.0
+go 1.26.2
 
 require (
-	github.com/bradleyfalzon/ghinstallation/v2 v2.17.0
-	github.com/google/go-github/v83 v83.0.0
+	github.com/bradleyfalzon/ghinstallation/v2 v2.18.0
+	github.com/google/go-github/v84 v84.0.0
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/oauth2 v0.35.0
+	github.com/spf13/pflag v1.0.10
+	golang.org/x/oauth2 v0.36.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
-	github.com/google/go-github/v75 v75.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
 )
 ````

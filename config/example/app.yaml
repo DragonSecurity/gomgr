@@ -2,7 +2,7 @@ org: KaMuses
 # PAT path: set env GITHUB_TOKEN
 # GitHub App path:
 app_id: 1719369
-private_key: ./dsec-gom.2025-10-02.private-key.pem
+private_key: ./dsec-gom.2026-02-20.private-key.pem
 dry_warnings:
   warn_unmanaged_teams: true
   warn_members_without_any_team: true

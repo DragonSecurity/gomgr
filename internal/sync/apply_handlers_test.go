@@ -2,10 +2,13 @@ package sync
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/go-github/v84/github"
 
@@ -234,6 +237,264 @@ func TestApplyRepoFileEnsure_RaceCondition(t *testing.T) {
 				t.Errorf("applyRepoFileEnsure() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+// codeownersFileResponse builds the JSON shape GetContents returns for a
+// single existing file (base64-encoded content + sha).
+func codeownersFileResponse(t *testing.T, path, sha, body string) []byte {
+	t.Helper()
+	resp := map[string]any{
+		"name":     "CODEOWNERS",
+		"path":     path,
+		"sha":      sha,
+		"size":     len(body),
+		"type":     "file",
+		"encoding": "base64",
+		"content":  base64.StdEncoding.EncodeToString([]byte(body)),
+	}
+	b, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return b
+}
+
+func TestApplyRepoFileEnsure_ReconcileSkipsWhenContentMatches(t *testing.T) {
+	const path = ".github/CODEOWNERS"
+	const body = "* @octocat\n"
+	var putCalled bool
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.Path == "/repos/myorg/api/contents/.github/CODEOWNERS" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(codeownersFileResponse(t, path, "abc123", body))
+			return
+		}
+		if r.Method == "PUT" {
+			putCalled = true
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	ch := util.Change{
+		Scope:  "repo-file",
+		Target: "api:.github/CODEOWNERS",
+		Action: "ensure",
+		Details: map[string]any{
+			"org":       "myorg",
+			"repo":      "api",
+			"path":      path,
+			"content":   body,
+			"message":   "chore: sync CODEOWNERS",
+			"branch":    "main",
+			"reconcile": true,
+		},
+	}
+
+	if err := applyRepoFileEnsure(context.Background(), c, ch); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if putCalled {
+		t.Error("expected no PUT (content matches) but UpdateFile was invoked")
+	}
+}
+
+func TestApplyRepoFileEnsure_ReconcileUpdatesWhenContentDrifts(t *testing.T) {
+	const path = ".github/CODEOWNERS"
+	const existing = "* @old-owner\n"
+	const desired = "* @new-owner\n"
+
+	var (
+		putCalled bool
+		putBody   map[string]any
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.Path == "/repos/myorg/api/contents/.github/CODEOWNERS" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(codeownersFileResponse(t, path, "sha-of-existing", existing))
+			return
+		}
+		if r.Method == "PUT" && r.URL.Path == "/repos/myorg/api/contents/.github/CODEOWNERS" {
+			putCalled = true
+			_ = json.NewDecoder(r.Body).Decode(&putBody)
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	ch := util.Change{
+		Scope:  "repo-file",
+		Target: "api:.github/CODEOWNERS",
+		Action: "ensure",
+		Details: map[string]any{
+			"org":       "myorg",
+			"repo":      "api",
+			"path":      path,
+			"content":   desired,
+			"message":   "chore: sync CODEOWNERS",
+			"branch":    "main",
+			"reconcile": true,
+		},
+	}
+
+	if err := applyRepoFileEnsure(context.Background(), c, ch); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !putCalled {
+		t.Fatal("expected UpdateFile to be invoked for drifted content")
+	}
+	if putBody["sha"] != "sha-of-existing" {
+		t.Errorf("expected SHA of existing file in update payload, got %v", putBody["sha"])
+	}
+	decoded, err := base64.StdEncoding.DecodeString(putBody["content"].(string))
+	if err != nil {
+		t.Fatalf("decode update payload: %v", err)
+	}
+	if string(decoded) != desired {
+		t.Errorf("expected update payload content %q, got %q", desired, string(decoded))
+	}
+}
+
+func TestApplyRepoFileDelete_NoopWhenAbsent(t *testing.T) {
+	var deleteCalled bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]any{"message": "Not Found"})
+			return
+		}
+		if r.Method == "DELETE" {
+			deleteCalled = true
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	ch := util.Change{
+		Scope:  "repo-file",
+		Target: "api:.github/CODEOWNERS",
+		Action: "delete",
+		Details: map[string]any{
+			"org":     "myorg",
+			"repo":    "api",
+			"path":    ".github/CODEOWNERS",
+			"message": "chore: remove stale CODEOWNERS",
+			"branch":  "main",
+		},
+	}
+
+	if err := applyRepoFileDelete(context.Background(), c, ch); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if deleteCalled {
+		t.Error("expected no DELETE when file is absent, but DeleteFile was invoked")
+	}
+}
+
+func TestApplyRepoFileDelete_DeletesWhenPresent(t *testing.T) {
+	const path = ".github/CODEOWNERS"
+	var (
+		deleteCalled bool
+		deleteBody   map[string]any
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.Path == "/repos/myorg/api/contents/.github/CODEOWNERS" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(codeownersFileResponse(t, path, "sha-of-stale", "* @old-owner\n"))
+			return
+		}
+		if r.Method == "DELETE" && r.URL.Path == "/repos/myorg/api/contents/.github/CODEOWNERS" {
+			deleteCalled = true
+			_ = json.NewDecoder(r.Body).Decode(&deleteBody)
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	ch := util.Change{
+		Scope:  "repo-file",
+		Target: "api:.github/CODEOWNERS",
+		Action: "delete",
+		Details: map[string]any{
+			"org":     "myorg",
+			"repo":    "api",
+			"path":    path,
+			"message": "chore: remove stale CODEOWNERS",
+			"branch":  "main",
+		},
+	}
+
+	if err := applyRepoFileDelete(context.Background(), c, ch); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deleteCalled {
+		t.Fatal("expected DeleteFile to be invoked")
+	}
+	if deleteBody["sha"] != "sha-of-stale" {
+		t.Errorf("expected SHA of existing file in delete payload, got %v", deleteBody["sha"])
+	}
+}
+
+func TestApplyRepoFileEnsure_NoReconcileLeavesExistingAlone(t *testing.T) {
+	const path = "README.md"
+	var putCalled bool
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.Path == "/repos/myorg/api/contents/README.md" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(codeownersFileResponse(t, path, "sha-readme", "# hand-edited readme\n"))
+			return
+		}
+		if r.Method == "PUT" {
+			putCalled = true
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	ch := util.Change{
+		Scope:  "repo-file",
+		Target: "api:README.md",
+		Action: "ensure",
+		Details: map[string]any{
+			"org":     "myorg",
+			"repo":    "api",
+			"path":    path,
+			"content": "# template default\n",
+			"message": "chore: add readme",
+			"branch":  "main",
+			// reconcile not set → defaults to false
+		},
+	}
+
+	if err := applyRepoFileEnsure(context.Background(), c, ch); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if putCalled {
+		t.Error("expected reconcile=false to leave the hand-edited file alone, but UpdateFile was invoked")
 	}
 }
 
@@ -527,6 +788,124 @@ func TestApplyTeamRepoGrant(t *testing.T) {
 	}
 	if gotPath != "/orgs/myorg/teams/backend/repos/myorg/api" {
 		t.Errorf("expected PUT to team repos path, got %s", gotPath)
+	}
+}
+
+// shortenTeamRepoGrantRetries swaps the grant backoff for near-zero delays so
+// retry tests stay fast, restoring the original schedule afterward.
+func shortenTeamRepoGrantRetries(t *testing.T) {
+	t.Helper()
+	orig := teamRepoGrantRetryDelays
+	teamRepoGrantRetryDelays = []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond, time.Millisecond}
+	t.Cleanup(func() { teamRepoGrantRetryDelays = orig })
+}
+
+func TestApplyTeamRepoGrant_RetriesOn404(t *testing.T) {
+	shortenTeamRepoGrantRetries(t)
+
+	var calls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PUT" && r.URL.Path == "/orgs/myorg/teams/admins/repos/myorg/houston" {
+			// Simulate eventual consistency: the freshly created repo is not
+			// visible for the first two grant attempts, then succeeds.
+			if atomic.AddInt32(&calls, 1) <= 2 {
+				w.WriteHeader(http.StatusNotFound)
+				_ = json.NewEncoder(w).Encode(map[string]any{"message": "Not Found"})
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	ch := util.Change{
+		Scope:  "team-repo",
+		Target: "admins/houston",
+		Action: "grant",
+		Details: map[string]any{
+			"org":        "myorg",
+			"slug":       "admins",
+			"repo":       "houston",
+			"permission": "admin",
+		},
+	}
+
+	if err := applyTeamRepoGrant(context.Background(), c, ch); err != nil {
+		t.Fatalf("expected success after retries, got: %v", err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 3 {
+		t.Errorf("expected 3 grant attempts (2 x 404 + success), got %d", got)
+	}
+}
+
+func TestApplyTeamRepoGrant_ExhaustsRetries(t *testing.T) {
+	shortenTeamRepoGrantRetries(t)
+
+	var calls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{"message": "Not Found"})
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	ch := util.Change{
+		Scope:  "team-repo",
+		Target: "admins/houston",
+		Action: "grant",
+		Details: map[string]any{
+			"org":        "myorg",
+			"slug":       "admins",
+			"repo":       "houston",
+			"permission": "admin",
+		},
+	}
+
+	err := applyTeamRepoGrant(context.Background(), c, ch)
+	if err == nil {
+		t.Fatal("expected error after exhausting retries")
+	}
+	if want := len(teamRepoGrantRetryDelays) + 1; int(atomic.LoadInt32(&calls)) != want {
+		t.Errorf("expected %d grant attempts, got %d", want, atomic.LoadInt32(&calls))
+	}
+	if !containsSubstr(err.Error(), "grant") {
+		t.Errorf("expected 'grant' in error, got: %v", err)
+	}
+}
+
+func TestApplyTeamRepoGrant_NoRetryOnNon404(t *testing.T) {
+	shortenTeamRepoGrantRetries(t)
+
+	var calls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = json.NewEncoder(w).Encode(map[string]any{"message": "Validation Failed"})
+	}))
+	defer server.Close()
+
+	c := newTestClient(t, server)
+	ch := util.Change{
+		Scope:  "team-repo",
+		Target: "admins/houston",
+		Action: "grant",
+		Details: map[string]any{
+			"org":        "myorg",
+			"slug":       "admins",
+			"repo":       "houston",
+			"permission": "admin",
+		},
+	}
+
+	if err := applyTeamRepoGrant(context.Background(), c, ch); err == nil {
+		t.Fatal("expected error for 422 response")
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Errorf("expected exactly 1 attempt (no retry on non-404), got %d", got)
 	}
 }
 

@@ -17,6 +17,7 @@ type AppConfig struct {
 	DeleteUnconfiguredTeams    bool `yaml:"delete_unconfigured_teams"`
 	DeleteUnmanagedRepos       bool `yaml:"delete_unmanaged_repos"`
 	DeleteUnmanagedCustomRoles bool `yaml:"delete_unmanaged_custom_roles"`
+	DeleteStaleCodeowners      bool `yaml:"delete_stale_codeowners"`
 	CreateRepo                 bool `yaml:"create_repo"`
 
 	// Files declares templated files that should exist in every managed
@@ -36,12 +37,19 @@ type AppConfig struct {
 // Content is a Go text/template; Path, Message and Branch are literal strings.
 // Only restricts which repositories the file applies to (path.Match globs
 // against the repo name). An empty Only matches every managed repo.
+//
+// Reconcile controls drift handling for files that already exist. When false
+// (the default) gomgr only writes the file when it is missing, leaving any
+// hand-edited content alone. When true gomgr compares the rendered content to
+// what is on the default branch and pushes an update commit if they differ —
+// useful for config-derived files like CODEOWNERS that should track the YAML.
 type FileSpec struct {
-	Path    string   `yaml:"path"`
-	Content string   `yaml:"content"`
-	Message string   `yaml:"message,omitempty"`
-	Branch  string   `yaml:"branch,omitempty"`
-	Only    []string `yaml:"only,omitempty"`
+	Path      string   `yaml:"path"`
+	Content   string   `yaml:"content"`
+	Message   string   `yaml:"message,omitempty"`
+	Branch    string   `yaml:"branch,omitempty"`
+	Only      []string `yaml:"only,omitempty"`
+	Reconcile bool     `yaml:"reconcile,omitempty"`
 }
 
 type OrgConfig struct {

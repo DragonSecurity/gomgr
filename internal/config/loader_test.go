@@ -184,3 +184,29 @@ func writeFile(t *testing.T, path, content string) {
 		t.Fatalf("failed to write %s: %v", path, err)
 	}
 }
+
+func TestValidateCodeOwner(t *testing.T) {
+	tests := []struct {
+		name    string
+		in      string
+		wantErr bool
+	}{
+		{"bare username", "octocat", false},
+		{"prefixed user", "@octocat", false},
+		{"team ref", "@my-org/platform-team", false},
+		{"empty", "", true},
+		{"whitespace inside", "@octo cat", true},
+		{"only at sign", "@", true},
+		{"team ref empty slug", "@my-org/", true},
+		{"team ref bad slug", "@my-org/bad slug", true},
+		{"consecutive hyphens", "bad--user", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateCodeOwner(tt.in)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateCodeOwner(%q) err=%v, wantErr=%v", tt.in, err, tt.wantErr)
+			}
+		})
+	}
+}

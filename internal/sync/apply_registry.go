@@ -92,6 +92,7 @@ func buildDefaultRegistry() *HandlerRegistry {
 	r.Register("repo-pin", "ensure", precedenceRepoPinEnsure, HandlerFunc(applyRepoPinEnsure))
 
 	// Cleanup phase (high precedence = runs last).
+	r.Register("repo-file", "delete", precedenceRepoFileDelete, HandlerFunc(applyRepoFileDelete))
 	r.Register("org-member", "remove", precedenceOrgMemberRemove, HandlerFunc(applyOrgMemberRemove))
 	r.Register("team", "delete", precedenceTeamDelete, HandlerFunc(applyTeamDelete))
 	r.Register("repo", "delete", precedenceRepoDelete, HandlerFunc(applyRepoDelete))

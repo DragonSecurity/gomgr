@@ -3,19 +3,26 @@ description: Core platform engineers
 privacy: closed
 parents: []
 maintainers:
-  - octocat
+  - allanice001
 repositories:
   # Simple permission string (backward compatible)
   infra: maintain
   
   # Template repository - can be reused by other repos
   template-go-api:
-    permission: push
+    permission: admin
     template: true
     topics:
       - backend
       - api
       - go-template
+    codeowners:
+      - allanice001
+    contributors:
+      permissions: push
+      members:
+        - "@DragonSecurity/development-team"
+        - octocat
   
   # Advanced config with topics and pinning
   api:
@@ -24,6 +31,9 @@ repositories:
       - backend
       - api
       - project-platform
+    codeowners:
+      - allanice001
+      - "@DragonSecurity/platform-team"
   
   # Repository using template (inherits permission and topics)
   my-api:

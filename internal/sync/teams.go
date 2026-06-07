@@ -46,6 +46,7 @@ const (
 	precedenceRepoTopicsEnsure   = 45
 	precedenceRepoTemplateEnsure = 46
 	precedenceRepoPinEnsure      = 47
+	precedenceRepoFileDelete     = 80
 	precedenceOrgMemberRemove    = 85
 	precedenceTeamDelete         = 90
 	precedenceRepoDelete         = 90
@@ -72,6 +73,7 @@ type repoSettings struct {
 	template   bool
 	from       string
 	visibility string // "", "public", "private", or "internal"
+	codeowners []string
 }
 
 var validVisibilities = map[string]bool{
@@ -170,6 +172,24 @@ func parseRepoConfig(val any) (repoSettings, error) {
 		} else if _, has := m["visibility"]; has {
 			return settings, fmt.Errorf("visibility must be a string, got %T", m["visibility"])
 		}
+
+		if raw, has := m["codeowners"]; has {
+			items, ok := raw.([]any)
+			if !ok {
+				return settings, fmt.Errorf("codeowners must be a list, got %T", raw)
+			}
+			for _, item := range items {
+				coStr, ok := item.(string)
+				if !ok {
+					return settings, fmt.Errorf("codeowners entries must be strings, got %T", item)
+				}
+				coStr = strings.TrimSpace(coStr)
+				if err := config.ValidateCodeOwner(coStr); err != nil {
+					return settings, err
+				}
+				settings.codeowners = append(settings.codeowners, coStr)
+			}
+		}
 	}
 
 	return settings, nil
@@ -236,6 +256,20 @@ func resolveTemplate(_ string, settings repoSettings, allRepos map[string]repoSe
 		if !topicSet[topic] {
 			topicSet[topic] = true
 			result.topics = append(result.topics, topic)
+		}
+	}
+
+	// Merge codeowners (union): template codeowners + repo-specific codeowners
+	result.codeowners = nil
+	ownerSet := make(map[string]bool)
+	for _, co := range templateSettings.codeowners {
+		ownerSet[co] = true
+		result.codeowners = append(result.codeowners, co)
+	}
+	for _, co := range settings.codeowners {
+		if !ownerSet[co] {
+			ownerSet[co] = true
+			result.codeowners = append(result.codeowners, co)
 		}
 	}
 
@@ -551,10 +585,17 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 	}
 
 	fileSpecs := materializeFileSpecs(cfg.App)
+	userFilePaths := map[string]bool{}
+	for _, fs := range fileSpecs {
+		userFilePaths[fs.Path] = true
+	}
 
 	desiredTopics := map[string][]string{}
 	desiredPinned := map[string]bool{}
 	desiredTemplates := map[string]bool{}
+	desiredOwners := map[string][]string{}
+	ownerSeen := map[string]map[string]bool{}
+	repoNames := map[string]string{}
 	emittedFiles := map[string]bool{} // tracks repo-level file changes to avoid duplicates
 
 	for _, t := range cfg.Team {
@@ -629,6 +670,22 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 				desiredPinned[r] = true
 			}
 
+			if len(settings.codeowners) > 0 {
+				if _, ok := repoNames[r]; !ok {
+					repoNames[r] = repo
+				}
+				if ownerSeen[r] == nil {
+					ownerSeen[r] = map[string]bool{}
+				}
+				for _, co := range settings.codeowners {
+					if ownerSeen[r][co] {
+						continue
+					}
+					ownerSeen[r][co] = true
+					desiredOwners[r] = append(desiredOwners[r], co)
+				}
+			}
+
 			// Emit file changes only once per repo (skip if already emitted from another team)
 			fileChanges, err := planRepoFiles(org, repo, r, fileSpecs, emittedFiles)
 			if err != nil {
@@ -636,6 +693,11 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 			}
 			out = append(out, fileChanges...)
 		}
+	}
+
+	out = append(out, planCodeowners(org, desiredOwners, repoNames, userFilePaths, emittedFiles)...)
+	if cfg.App.DeleteStaleCodeowners {
+		out = append(out, planCodeownersDeletions(org, managedRepos, repoNames, desiredOwners, userFilePaths, emittedFiles)...)
 	}
 
 	// Plan topic updates

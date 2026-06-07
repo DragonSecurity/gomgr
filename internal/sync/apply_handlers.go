@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/go-github/v84/github"
 
@@ -181,6 +182,20 @@ func applyRepoEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
 	return nil
 }
 
+// teamRepoGrantRetryDelays controls the backoff between retries when granting a
+// team access to a repository returns 404. A repo created earlier in the same
+// sync run may not yet be visible to the team-grant endpoint because of GitHub's
+// eventual consistency, so we retry a bounded number of times. The generic retry
+// transport intentionally never retries 404s (they are usually real), so the
+// retry has to live here where the "repo was just created" context is known.
+// Declared as a var so tests can shorten or disable the waits.
+var teamRepoGrantRetryDelays = []time.Duration{
+	500 * time.Millisecond,
+	1 * time.Second,
+	2 * time.Second,
+	4 * time.Second,
+}
+
 func applyTeamRepoGrant(ctx context.Context, c *gh.Client, ch util.Change) error {
 	d, err := extractDetails(ch)
 	if err != nil {
@@ -190,11 +205,32 @@ func applyTeamRepoGrant(ctx context.Context, c *gh.Client, ch util.Change) error
 	slug := detailString(d, "slug")
 	repo := detailString(d, "repo")
 	perm := normalizePermission(detailString(d, "permission"))
-	_, err = c.REST.Teams.AddTeamRepoBySlug(ctx, org, slug, org, repo, &github.TeamAddTeamRepoOptions{Permission: perm})
-	if err != nil {
-		return fmt.Errorf("grant %q on %s/%s to %q: %w", perm, org, repo, slug, err)
+
+	attempts := len(teamRepoGrantRetryDelays) + 1
+	for attempt := 0; attempt < attempts; attempt++ {
+		_, err = c.REST.Teams.AddTeamRepoBySlug(ctx, org, slug, org, repo, &github.TeamAddTeamRepoOptions{Permission: perm})
+		if err == nil {
+			return nil
+		}
+		// Only a 404 is worth retrying, and only if attempts remain: it signals
+		// the newly created repo (or team) has not propagated yet. Any other
+		// error is surfaced immediately.
+		if !isNotFound(err) || attempt == attempts-1 {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(teamRepoGrantRetryDelays[attempt]):
+		}
 	}
-	return nil
+	return fmt.Errorf("grant %q on %s/%s to %q: %w", perm, org, repo, slug, err)
+}
+
+// isNotFound reports whether err is a GitHub 404 response.
+func isNotFound(err error) bool {
+	var ghErr *github.ErrorResponse
+	return errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusNotFound
 }
 
 func applyRepoFileEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
@@ -208,6 +244,7 @@ func applyRepoFileEnsure(ctx context.Context, c *gh.Client, ch util.Change) erro
 	content := []byte(detailString(d, "content"))
 	message := detailString(d, "message")
 	branch := detailString(d, "branch")
+	reconcile := detailBool(d, "reconcile")
 	file, _, resp, err := c.REST.Repositories.GetContents(ctx, org, repo, path, &github.RepositoryContentGetOptions{Ref: branch})
 	if err != nil && (resp == nil || resp.StatusCode != http.StatusNotFound) {
 		return fmt.Errorf("check %s/%s:%s: %w", org, repo, path, err)
@@ -234,6 +271,54 @@ func applyRepoFileEnsure(ctx context.Context, c *gh.Client, ch util.Change) erro
 				return fmt.Errorf("create file %s in %s/%s: %w", path, org, repo, err)
 			}
 		}
+		return nil
+	}
+	if !reconcile {
+		return nil
+	}
+	current, err := file.GetContent()
+	if err != nil {
+		return fmt.Errorf("decode existing %s in %s/%s: %w", path, org, repo, err)
+	}
+	if current == string(content) {
+		return nil
+	}
+	_, _, err = c.REST.Repositories.UpdateFile(ctx, org, repo, path, &github.RepositoryContentFileOptions{
+		Message: github.Ptr(message),
+		Content: content,
+		Branch:  github.Ptr(branch),
+		SHA:     github.Ptr(file.GetSHA()),
+	})
+	if err != nil {
+		return fmt.Errorf("update file %s in %s/%s: %w", path, org, repo, err)
+	}
+	return nil
+}
+
+func applyRepoFileDelete(ctx context.Context, c *gh.Client, ch util.Change) error {
+	d, err := extractDetails(ch)
+	if err != nil {
+		return err
+	}
+	org := detailString(d, "org")
+	repo := detailString(d, "repo")
+	path := detailString(d, "path")
+	message := detailString(d, "message")
+	branch := detailString(d, "branch")
+	file, _, resp, err := c.REST.Repositories.GetContents(ctx, org, repo, path, &github.RepositoryContentGetOptions{Ref: branch})
+	if err != nil && (resp == nil || resp.StatusCode != http.StatusNotFound) {
+		return fmt.Errorf("check %s/%s:%s: %w", org, repo, path, err)
+	}
+	if file == nil {
+		return nil
+	}
+	_, _, err = c.REST.Repositories.DeleteFile(ctx, org, repo, path, &github.RepositoryContentFileOptions{
+		Message: github.Ptr(message),
+		Branch:  github.Ptr(branch),
+		SHA:     github.Ptr(file.GetSHA()),
+	})
+	if err != nil {
+		return fmt.Errorf("delete file %s in %s/%s: %w", path, org, repo, err)
 	}
 	return nil
 }
