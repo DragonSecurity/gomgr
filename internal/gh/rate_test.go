@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v84/github"
+	"github.com/google/go-github/v88/github"
 )
 
 func TestRespectRate_Healthy(t *testing.T) {
@@ -28,11 +28,13 @@ func TestRespectRate_Healthy(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := github.NewClient(nil)
 	url := server.URL + "/"
-	client.BaseURL, _ = client.BaseURL.Parse(url)
+	client, err := github.NewClient(github.WithURLs(&url, &url))
+	if err != nil {
+		t.Fatalf("new github client: %v", err)
+	}
 
-	err := RespectRate(context.Background(), client)
+	err = RespectRate(context.Background(), client)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -45,11 +47,13 @@ func TestRespectRate_APIError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := github.NewClient(nil)
 	url := server.URL + "/"
-	client.BaseURL, _ = client.BaseURL.Parse(url)
+	client, err := github.NewClient(github.WithURLs(&url, &url))
+	if err != nil {
+		t.Fatalf("new github client: %v", err)
+	}
 
-	err := RespectRate(context.Background(), client)
+	err = RespectRate(context.Background(), client)
 	if err == nil {
 		t.Fatal("expected error for 500 response")
 	}

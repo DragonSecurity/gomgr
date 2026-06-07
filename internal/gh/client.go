@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/bradleyfalzon/ghinstallation/v2"
-	"github.com/google/go-github/v84/github"
+	"github.com/google/go-github/v88/github"
 	"golang.org/x/oauth2"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
@@ -38,7 +38,11 @@ func NewClientFromEnv(ctx context.Context, app config.AppConfig) (*Client, strin
 		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: tok})
 		tc := oauth2.NewClient(ctx, ts)
 		tc.Transport = newRetryTransport(tc.Transport, defaultMaxRetries)
-		return &Client{REST: github.NewClient(tc), httpClient: tc}, "PAT", nil
+		rest, err := github.NewClient(github.WithHTTPClient(tc))
+		if err != nil {
+			return nil, "", fmt.Errorf("new github client: %w", err)
+		}
+		return &Client{REST: rest, httpClient: tc}, "PAT", nil
 	}
 	// App
 	appID := app.AppID
@@ -59,14 +63,21 @@ func NewClientFromEnv(ctx context.Context, app config.AppConfig) (*Client, strin
 	if err != nil {
 		return nil, "", fmt.Errorf("app transport: %w", err)
 	}
-	tmp := github.NewClient(&http.Client{Transport: atr})
-	inst, _, err := tmp.Apps.FindOrganizationInstallation(ctx, app.Org)
+	tmp, err := github.NewClient(github.WithHTTPClient(&http.Client{Transport: atr}))
+	if err != nil {
+		return nil, "", fmt.Errorf("new github client: %w", err)
+	}
+	inst, _, err := tmp.Apps.GetOrganizationInstallation(ctx, app.Org)
 	if err != nil {
 		return nil, "", fmt.Errorf("find installation for org %q: %w", app.Org, err)
 	}
 	itr := ghinstallation.NewFromAppsTransport(atr, inst.GetID())
 	httpClient := &http.Client{Transport: newRetryTransport(itr, defaultMaxRetries), Timeout: 30 * time.Second}
-	return &Client{REST: github.NewClient(httpClient), httpClient: httpClient}, "Github App", nil
+	rest, err := github.NewClient(github.WithHTTPClient(httpClient))
+	if err != nil {
+		return nil, "", fmt.Errorf("new github client: %w", err)
+	}
+	return &Client{REST: rest, httpClient: httpClient}, "Github App", nil
 }
 
 func maybeReadPEM(s string) ([]byte, error) {

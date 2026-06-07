@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v84/github"
+	"github.com/google/go-github/v88/github"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
@@ -20,9 +20,11 @@ import (
 // newTestClient creates a gh.Client backed by the given httptest.Server.
 func newTestClient(t *testing.T, server *httptest.Server) *gh.Client {
 	t.Helper()
-	client := github.NewClient(nil)
 	url := server.URL + "/"
-	client.BaseURL, _ = client.BaseURL.Parse(url)
+	client, err := github.NewClient(github.WithURLs(&url, &url))
+	if err != nil {
+		t.Fatalf("new github client: %v", err)
+	}
 	return &gh.Client{REST: client}
 }
 
