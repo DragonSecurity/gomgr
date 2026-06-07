@@ -163,6 +163,64 @@ func TestApplyRepoEnsure(t *testing.T) {
 			t.Error("expected template creation request to be made")
 		}
 	})
+
+	t.Run("422 name already exists is swallowed", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "POST" && r.URL.Path == "/orgs/myorg/repos" {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"message": "Repository creation failed.",
+					"errors": []map[string]any{
+						{"resource": "Repository", "code": "custom", "field": "name", "message": "name already exists on this account"},
+					},
+				})
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		c := newTestClient(t, server)
+		ch := util.Change{
+			Scope: "repo", Target: "api", Action: "ensure",
+			Details: map[string]any{"org": "myorg", "name": "api", "private": true},
+		}
+
+		if err := applyRepoEnsure(context.Background(), c, ch); err != nil {
+			t.Fatalf("expected 'already exists' 422 to be swallowed, got: %v", err)
+		}
+	})
+
+	t.Run("422 other validation error surfaces", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "POST" && r.URL.Path == "/orgs/myorg/repos" {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"message": "Repository creation failed.",
+					"errors": []map[string]any{
+						{"resource": "Repository", "code": "custom", "field": "name", "message": "name is reserved"},
+					},
+				})
+				return
+			}
+			http.NotFound(w, r)
+		}))
+		defer server.Close()
+
+		c := newTestClient(t, server)
+		ch := util.Change{
+			Scope: "repo", Target: "houston", Action: "ensure",
+			Details: map[string]any{"org": "myorg", "name": "houston", "private": true},
+		}
+
+		err := applyRepoEnsure(context.Background(), c, ch)
+		if err == nil {
+			t.Fatal("expected non-'already exists' 422 to surface as an error, got nil")
+		}
+		if !containsSubstr(err.Error(), "create repo") {
+			t.Errorf("expected 'create repo' in error, got: %v", err)
+		}
+	})
 }
 
 func TestApplyRepoFileEnsure_RaceCondition(t *testing.T) {

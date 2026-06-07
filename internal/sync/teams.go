@@ -57,6 +57,7 @@ const (
 	errTermSHA            = "sha"
 	errTermSHANotSupplied = "wasn't supplied"
 	errTermRefExists      = "reference already exists"
+	errTermNameExists     = "already exists"
 )
 
 type teamMemberChange struct {

@@ -151,8 +151,7 @@ func applyRepoEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
 			Private: github.Ptr(private),
 		})
 		if err != nil {
-			var ghErr *github.ErrorResponse
-			if !errors.As(err, &ghErr) || ghErr.Response == nil || ghErr.Response.StatusCode != 422 {
+			if !isRepoAlreadyExists(err) {
 				return fmt.Errorf("create repo %s/%s from template %s/%s: %w", org, name, templateOrg, templateRepo, err)
 			}
 			// already exists race — ignore
@@ -172,8 +171,7 @@ func applyRepoEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
 		}
 		_, _, err := c.REST.Repositories.Create(ctx, org, repo)
 		if err != nil {
-			var ghErr *github.ErrorResponse
-			if !errors.As(err, &ghErr) || ghErr.Response == nil || ghErr.Response.StatusCode != 422 {
+			if !isRepoAlreadyExists(err) {
 				return fmt.Errorf("create repo %s/%s: %w", org, name, err)
 			}
 			// already exists race — ignore
@@ -231,6 +229,20 @@ func applyTeamRepoGrant(ctx context.Context, c *gh.Client, ch util.Change) error
 func isNotFound(err error) bool {
 	var ghErr *github.ErrorResponse
 	return errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusNotFound
+}
+
+// isRepoAlreadyExists reports whether err is a GitHub 422 indicating the
+// repository name is already taken. GitHub returns 422 for many other create
+// failures too (invalid name, org policy, disabled repo creation), so we must
+// match on the message rather than swallowing every 422 — otherwise a genuine
+// create failure is reported as success and later repo-scoped changes fail with
+// a confusing 404 against a repo that was never created.
+func isRepoAlreadyExists(err error) bool {
+	var ghErr *github.ErrorResponse
+	if !errors.As(err, &ghErr) || ghErr.Response == nil || ghErr.Response.StatusCode != http.StatusUnprocessableEntity {
+		return false
+	}
+	return containsErrorMessage(ghErr, errTermNameExists)
 }
 
 func applyRepoFileEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
