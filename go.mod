@@ -5,6 +5,7 @@ go 1.26.4
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.19.0
 	github.com/google/go-github/v88 v88.0.0
+	github.com/google/go-github/v89 v89.0.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	golang.org/x/oauth2 v0.36.0
