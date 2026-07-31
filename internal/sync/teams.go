@@ -688,7 +688,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 			}
 
 			// Emit file changes only once per repo (skip if already emitted from another team)
-			fileChanges, err := planRepoFiles(org, repo, r, fileSpecs, emittedFiles)
+			fileChanges, err := planRepoFiles(org, repo, r, fileSpecs, cfg.App.SignOff, emittedFiles)
 			if err != nil {
 				return nil, err
 			}
@@ -696,9 +696,9 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 		}
 	}
 
-	out = append(out, planCodeowners(org, desiredOwners, repoNames, userFilePaths, emittedFiles)...)
+	out = append(out, planCodeowners(org, desiredOwners, repoNames, userFilePaths, cfg.App.SignOff, emittedFiles)...)
 	if cfg.App.DeleteStaleCodeowners {
-		out = append(out, planCodeownersDeletions(org, managedRepos, repoNames, desiredOwners, userFilePaths, emittedFiles)...)
+		out = append(out, planCodeownersDeletions(org, managedRepos, repoNames, desiredOwners, userFilePaths, cfg.App.SignOff, emittedFiles)...)
 	}
 
 	// Plan topic updates

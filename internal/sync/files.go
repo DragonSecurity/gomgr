@@ -17,6 +17,25 @@ const defaultFileBranch = "main"
 // the file stays out of the repo root.
 const codeownersPath = ".github/CODEOWNERS"
 
+// signOffPrefix is the trailer key DCO tooling and commit_message_pattern
+// rulesets look for.
+const signOffPrefix = "Signed-off-by:"
+
+// withSignOff appends a Signed-off-by trailer to a commit message so the
+// commit satisfies DCO rulesets. It is a no-op when signOff is empty or when
+// the message already carries a trailer — user-supplied app.files[].message
+// values may sign themselves off, and double trailers are not harmful but are
+// noise in the log.
+//
+// The trailer is separated by a blank line so it forms a proper git trailer
+// block rather than being folded into the subject or body.
+func withSignOff(message, signOff string) string {
+	if signOff == "" || strings.Contains(message, signOffPrefix) {
+		return message
+	}
+	return strings.TrimRight(message, "\n") + "\n\n" + signOffPrefix + " " + signOff
+}
+
 // materializeFileSpecs merges user-declared app.files with any legacy
 // convenience flags (AddDefaultReadme, AddRenovateConfig) so downstream code
 // only has to iterate a single list. Legacy entries are prepended; if a user
@@ -56,7 +75,11 @@ func materializeFileSpecs(app config.AppConfig) []config.FileSpec {
 // Only filter) and returns a list of repo-file:ensure changes. emittedFiles is
 // updated in place so the same path is only emitted once per repo, even when
 // multiple teams reference the same repository.
-func planRepoFiles(org, repo, repoKey string, specs []config.FileSpec, emittedFiles map[string]bool) ([]util.Change, error) {
+//
+// signOff, when non-empty, is appended to every commit message as a
+// Signed-off-by trailer. It is applied here rather than at apply time so a dry
+// run shows the message that will actually be committed.
+func planRepoFiles(org, repo, repoKey string, specs []config.FileSpec, signOff string, emittedFiles map[string]bool) ([]util.Change, error) {
 	var out []util.Change
 	for _, spec := range specs {
 		if !templates.MatchesRepo(spec, repo) {
@@ -76,6 +99,7 @@ func planRepoFiles(org, repo, repoKey string, specs []config.FileSpec, emittedFi
 		if message == "" {
 			message = fmt.Sprintf("chore: add %s", spec.Path)
 		}
+		message = withSignOff(message, signOff)
 		branch := spec.Branch
 		if branch == "" {
 			branch = defaultFileBranch
@@ -136,7 +160,7 @@ func renderCodeowners(owners []string) string {
 //
 // ownersByRepo is keyed by lower-cased repo name; repoNames maps that key
 // back to the canonical name for the apply payload.
-func planCodeowners(org string, ownersByRepo map[string][]string, repoNames map[string]string, userFilePaths map[string]bool, emittedFiles map[string]bool) []util.Change {
+func planCodeowners(org string, ownersByRepo map[string][]string, repoNames map[string]string, userFilePaths map[string]bool, signOff string, emittedFiles map[string]bool) []util.Change {
 	if userFilePaths[codeownersPath] {
 		return nil
 	}
@@ -170,7 +194,7 @@ func planCodeowners(org string, ownersByRepo map[string][]string, repoNames map[
 				"repo":      repoName,
 				"path":      codeownersPath,
 				"content":   content,
-				"message":   "chore: sync CODEOWNERS",
+				"message":   withSignOff("chore: sync CODEOWNERS", signOff),
 				"branch":    defaultFileBranch,
 				"reconcile": true,
 			},
@@ -188,7 +212,7 @@ func planCodeowners(org string, ownersByRepo map[string][]string, repoNames map[
 // The apply handler is idempotent — a delete against a repo with no
 // .github/CODEOWNERS no-ops — so this can safely fire for repos that never
 // had the file.
-func planCodeownersDeletions(org string, managedRepos map[string]bool, repoNames map[string]string, ownersByRepo map[string][]string, userFilePaths map[string]bool, emittedFiles map[string]bool) []util.Change {
+func planCodeownersDeletions(org string, managedRepos map[string]bool, repoNames map[string]string, ownersByRepo map[string][]string, userFilePaths map[string]bool, signOff string, emittedFiles map[string]bool) []util.Change {
 	if userFilePaths[codeownersPath] {
 		return nil
 	}
@@ -219,7 +243,7 @@ func planCodeownersDeletions(org string, managedRepos map[string]bool, repoNames
 				"org":     org,
 				"repo":    repoName,
 				"path":    codeownersPath,
-				"message": "chore: remove stale CODEOWNERS",
+				"message": withSignOff("chore: remove stale CODEOWNERS", signOff),
 				"branch":  defaultFileBranch,
 			},
 		})
