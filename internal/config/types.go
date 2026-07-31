@@ -20,6 +20,17 @@ type AppConfig struct {
 	DeleteStaleCodeowners      bool `yaml:"delete_stale_codeowners"`
 	CreateRepo                 bool `yaml:"create_repo"`
 
+	// SignOff is the identity used for the Signed-off-by trailer appended to
+	// every commit gomgr writes, in "Name <email>" form. Set it when the org
+	// enforces DCO — a ruleset with a commit_message_pattern rule requiring
+	// "Signed-off-by:" rejects gomgr's file-sync pushes otherwise, because
+	// those commits go straight to the default branch and never pass through
+	// a pull request where a DCO check could run.
+	//
+	// Empty (the default) appends nothing, preserving prior behavior for orgs
+	// that do not require sign-off.
+	SignOff string `yaml:"sign_off,omitempty"`
+
 	// Files declares templated files that should exist in every managed
 	// repository. Each entry's Content is rendered through text/template with
 	// {Org, Repo} context. Only (optional) limits which repos an entry applies

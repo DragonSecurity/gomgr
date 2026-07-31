@@ -134,6 +134,13 @@ delete_unmanaged_repos: false       # delete repos not defined in any team (DEST
 delete_unmanaged_custom_roles: false # delete custom roles not in org.yaml (DESTRUCTIVE!)
 create_repo: true                   # create repos if missing when referenced by teams
 
+# Sign every commit gomgr writes with a Signed-off-by trailer. Required when
+# the org enforces DCO via a ruleset `commit_message_pattern` rule — gomgr
+# commits straight to the default branch, so no pull-request DCO check ever
+# runs on them and an unsigned message is rejected at push time.
+# Empty (the default) appends nothing.
+sign_off: "my-app[bot] <12345+my-app[bot]@users.noreply.github.com>"
+
 # Legacy convenience flags — still honoured, but `files:` is the preferred
 # way to declare per-repo content. Legacy flags are materialised into
 # FileSpec entries at load time.

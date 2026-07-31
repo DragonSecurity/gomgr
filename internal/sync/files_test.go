@@ -49,6 +49,103 @@ func TestMaterializeFileSpecs_UserOverridesLegacy(t *testing.T) {
 	}
 }
 
+const testSignOff = "dsec-gom[bot] <224359171+dsec-gom[bot]@users.noreply.github.com>"
+
+func TestWithSignOff(t *testing.T) {
+	cases := []struct {
+		name    string
+		message string
+		signOff string
+		want    string
+	}{
+		{
+			name:    "empty signOff leaves the message untouched",
+			message: "chore: add LICENSE",
+			signOff: "",
+			want:    "chore: add LICENSE",
+		},
+		{
+			name:    "trailer is separated by a blank line",
+			message: "chore: add LICENSE",
+			signOff: testSignOff,
+			want:    "chore: add LICENSE\n\nSigned-off-by: " + testSignOff,
+		},
+		{
+			name:    "already signed off is left alone",
+			message: "chore: add LICENSE\n\nSigned-off-by: Someone <someone@example.com>",
+			signOff: testSignOff,
+			want:    "chore: add LICENSE\n\nSigned-off-by: Someone <someone@example.com>",
+		},
+		{
+			name:    "trailing newlines are collapsed before the trailer",
+			message: "chore: add LICENSE\n\n",
+			signOff: testSignOff,
+			want:    "chore: add LICENSE\n\nSigned-off-by: " + testSignOff,
+		},
+		{
+			name:    "multi-line body keeps its body",
+			message: "chore: add LICENSE\n\nBecause the auditors asked.",
+			signOff: testSignOff,
+			want:    "chore: add LICENSE\n\nBecause the auditors asked.\n\nSigned-off-by: " + testSignOff,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := withSignOff(tc.message, tc.signOff); got != tc.want {
+				t.Errorf("withSignOff(%q, %q) = %q, want %q", tc.message, tc.signOff, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestPlanRepoFiles_SignsOffCustomAndDefaultMessages(t *testing.T) {
+	specs := []config.FileSpec{
+		{Path: "README.md", Content: "hi", Message: "chore: readme"},
+		{Path: "LICENSE", Content: "MIT\n"},
+	}
+
+	changes, err := planRepoFiles("Acme", "widgets", "widgets", specs, testSignOff, map[string]bool{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(changes) != 2 {
+		t.Fatalf("expected 2 changes, got %d", len(changes))
+	}
+
+	want := "chore: readme\n\nSigned-off-by: " + testSignOff
+	if got := changes[0].Details.(map[string]any)["message"]; got != want {
+		t.Errorf("custom message: got %q, want %q", got, want)
+	}
+	want = "chore: add LICENSE\n\nSigned-off-by: " + testSignOff
+	if got := changes[1].Details.(map[string]any)["message"]; got != want {
+		t.Errorf("default message: got %q, want %q", got, want)
+	}
+}
+
+func TestPlanCodeowners_SignsOffSyncAndDeleteMessages(t *testing.T) {
+	owners := map[string][]string{"widgets": {"@acme/platform"}}
+	names := map[string]string{"widgets": "widgets"}
+
+	changes := planCodeowners("acme", owners, names, map[string]bool{}, testSignOff, map[string]bool{})
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 codeowners change, got %d", len(changes))
+	}
+	want := "chore: sync CODEOWNERS\n\nSigned-off-by: " + testSignOff
+	if got := changes[0].Details.(map[string]any)["message"]; got != want {
+		t.Errorf("sync message: got %q, want %q", got, want)
+	}
+
+	managed := map[string]bool{"widgets": true}
+	deletions := planCodeownersDeletions("acme", managed, names, map[string][]string{}, map[string]bool{}, testSignOff, map[string]bool{})
+	if len(deletions) != 1 {
+		t.Fatalf("expected 1 deletion change, got %d", len(deletions))
+	}
+	want = "chore: remove stale CODEOWNERS\n\nSigned-off-by: " + testSignOff
+	if got := deletions[0].Details.(map[string]any)["message"]; got != want {
+		t.Errorf("delete message: got %q, want %q", got, want)
+	}
+}
+
 func TestPlanRepoFiles_RendersAndDedupes(t *testing.T) {
 	specs := []config.FileSpec{
 		{Path: "README.md", Content: "# {{.Repo}} in {{.Org}}", Message: "chore: readme", Branch: "main"},
@@ -56,7 +153,7 @@ func TestPlanRepoFiles_RendersAndDedupes(t *testing.T) {
 	}
 	emitted := map[string]bool{}
 
-	changes, err := planRepoFiles("Acme", "widgets", "widgets", specs, emitted)
+	changes, err := planRepoFiles("Acme", "widgets", "widgets", specs, "", emitted)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -84,7 +181,7 @@ func TestPlanRepoFiles_RendersAndDedupes(t *testing.T) {
 	}
 
 	// Calling again should be a no-op because emitted tracks both paths now.
-	more, err := planRepoFiles("Acme", "widgets", "widgets", specs, emitted)
+	more, err := planRepoFiles("Acme", "widgets", "widgets", specs, "", emitted)
 	if err != nil {
 		t.Fatalf("unexpected error on second call: %v", err)
 	}
@@ -97,7 +194,7 @@ func TestPlanRepoFiles_OnlyGlobSkipsNonMatch(t *testing.T) {
 	specs := []config.FileSpec{
 		{Path: "LICENSE", Content: "MIT", Only: []string{"public-*"}},
 	}
-	changes, err := planRepoFiles("Acme", "internal-api", "internal-api", specs, map[string]bool{})
+	changes, err := planRepoFiles("Acme", "internal-api", "internal-api", specs, "", map[string]bool{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -105,7 +202,7 @@ func TestPlanRepoFiles_OnlyGlobSkipsNonMatch(t *testing.T) {
 		t.Errorf("expected no changes for non-matching repo, got %d", len(changes))
 	}
 
-	changes, err = planRepoFiles("Acme", "public-docs", "public-docs", specs, map[string]bool{})
+	changes, err = planRepoFiles("Acme", "public-docs", "public-docs", specs, "", map[string]bool{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -116,7 +213,7 @@ func TestPlanRepoFiles_OnlyGlobSkipsNonMatch(t *testing.T) {
 
 func TestPlanRepoFiles_BadTemplatePropagates(t *testing.T) {
 	specs := []config.FileSpec{{Path: "bad.md", Content: "{{.Missing}}"}}
-	_, err := planRepoFiles("Acme", "widgets", "widgets", specs, map[string]bool{})
+	_, err := planRepoFiles("Acme", "widgets", "widgets", specs, "", map[string]bool{})
 	if err == nil {
 		t.Fatal("expected template error")
 	}
@@ -169,7 +266,7 @@ func TestPlanCodeowners_EmitsPerRepo(t *testing.T) {
 	names := map[string]string{"api": "api", "web": "web"}
 	emitted := map[string]bool{}
 
-	changes := planCodeowners("acme", owners, names, map[string]bool{}, emitted)
+	changes := planCodeowners("acme", owners, names, map[string]bool{}, "", emitted)
 	if len(changes) != 2 {
 		t.Fatalf("expected 2 changes, got %d", len(changes))
 	}
@@ -201,7 +298,7 @@ func TestPlanCodeowners_SkipsWhenUserDeclared(t *testing.T) {
 	names := map[string]string{"api": "api"}
 	userFiles := map[string]bool{".github/CODEOWNERS": true}
 
-	changes := planCodeowners("acme", owners, names, userFiles, map[string]bool{})
+	changes := planCodeowners("acme", owners, names, userFiles, "", map[string]bool{})
 	if len(changes) != 0 {
 		t.Errorf("expected user-declared CODEOWNERS to win, got %d synthesized changes", len(changes))
 	}
@@ -213,7 +310,7 @@ func TestPlanCodeowners_SkipsRepoWithoutOwners(t *testing.T) {
 		"empty": nil,
 	}
 	names := map[string]string{"api": "api", "empty": "empty"}
-	changes := planCodeowners("acme", owners, names, map[string]bool{}, map[string]bool{})
+	changes := planCodeowners("acme", owners, names, map[string]bool{}, "", map[string]bool{})
 	if len(changes) != 1 {
 		t.Fatalf("expected 1 change (api only), got %d", len(changes))
 	}
@@ -227,7 +324,7 @@ func TestPlanCodeowners_RespectsEmittedSet(t *testing.T) {
 	names := map[string]string{"api": "api"}
 	emitted := map[string]bool{"api:.github/CODEOWNERS": true}
 
-	changes := planCodeowners("acme", owners, names, map[string]bool{}, emitted)
+	changes := planCodeowners("acme", owners, names, map[string]bool{}, "", emitted)
 	if len(changes) != 0 {
 		t.Errorf("expected no changes when already emitted, got %d", len(changes))
 	}
@@ -238,7 +335,7 @@ func TestPlanCodeownersDeletions_OnlyForReposWithoutOwners(t *testing.T) {
 	names := map[string]string{"api": "api", "web": "web", "infra": "infra"}
 	owners := map[string][]string{"api": {"octocat"}}
 
-	changes := planCodeownersDeletions("acme", managed, names, owners, map[string]bool{}, map[string]bool{})
+	changes := planCodeownersDeletions("acme", managed, names, owners, map[string]bool{}, "", map[string]bool{})
 	if len(changes) != 2 {
 		t.Fatalf("expected 2 delete changes (web, infra), got %d", len(changes))
 	}
@@ -264,7 +361,7 @@ func TestPlanCodeownersDeletions_SkipsWhenUserDeclared(t *testing.T) {
 	owners := map[string][]string{} // no owners -> would normally delete
 	userFiles := map[string]bool{".github/CODEOWNERS": true}
 
-	changes := planCodeownersDeletions("acme", managed, names, owners, userFiles, map[string]bool{})
+	changes := planCodeownersDeletions("acme", managed, names, owners, userFiles, "", map[string]bool{})
 	if len(changes) != 0 {
 		t.Errorf("expected user-declared CODEOWNERS to suppress deletion, got %d", len(changes))
 	}
@@ -275,7 +372,7 @@ func TestPlanCodeownersDeletions_RespectsEmittedSet(t *testing.T) {
 	names := map[string]string{"api": "api"}
 	emitted := map[string]bool{"api:.github/CODEOWNERS": true}
 
-	changes := planCodeownersDeletions("acme", managed, names, map[string][]string{}, map[string]bool{}, emitted)
+	changes := planCodeownersDeletions("acme", managed, names, map[string][]string{}, map[string]bool{}, "", emitted)
 	if len(changes) != 0 {
 		t.Errorf("expected no changes when already emitted (write wins), got %d", len(changes))
 	}
