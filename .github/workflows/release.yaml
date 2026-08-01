@@ -39,7 +39,11 @@ jobs:
           BIN=gomgr
           if [ "${{ matrix.goos }}" = "windows" ]; then BIN=gomgr.exe; fi
           mkdir -p build
-          go build -trimpath -ldflags "-s" -o build/$BIN ./main.go
+          # Build the package, not ./main.go: a file-list build is
+          # "command-line-arguments" and gets no VCS stamping at all.
+          go build -trimpath \
+            -ldflags "-s -X github.com/DragonSecurity/gomgr/internal/version.stamped=${VERSION}" \
+            -o build/$BIN .
 
       - name: Package
         run: |

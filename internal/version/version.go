@@ -4,6 +4,13 @@ import (
 	"runtime/debug"
 )
 
+// stamped is set at link time by the release build with
+// -ldflags "-X github.com/DragonSecurity/gomgr/internal/version.stamped=vX.Y.Z"
+// so a released binary reports its tag. Nothing else can supply it: the module
+// version recorded in the binary is only meaningful for `go install
+// module@version`, and the VCS revision is a commit hash, not a tag.
+var stamped string
+
 // BuildInfo contains version and build information
 type BuildInfo struct {
 	Version    string
@@ -36,6 +43,13 @@ func GetBuildInfo() BuildInfo {
 		case "vcs.modified":
 			info.Modified = setting.Value == "true"
 		}
+	}
+
+	// A link-time stamp is the only source that carries the release tag, so it
+	// wins over the revision and module fallbacks below.
+	if stamped != "" {
+		info.Version = stamped
+		return info
 	}
 
 	// Use VCS revision as version if available, otherwise check for version in main module
