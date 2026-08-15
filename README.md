@@ -15,6 +15,7 @@ A fast, idempotent **GitHub Organization Manager** written in Go. Define your or
 - ✅ Teams, maintainers, members (idempotent add/update)
 - ✅ Repo permission grants (pull/triage/push/maintain/admin)
 - ✅ **Rulesets**: org-wide and repo-specific guard rails (branch protection, tag protection, push rules) with built-in presets — see [Rulesets & guard rails](#rulesets--guard-rails)
+- ✅ **Adopt what's already there**: `gomgr import rulesets` turns hand-made rulesets into YAML, comments in your config left intact
 - ✅ **Custom repository roles**: fully managed - define in YAML, gomgr creates/updates them (GitHub Enterprise Cloud)
 - ✅ **Repository topics**: add topics/labels to repositories for organization
 - ✅ **Repository pinning**: pin important repositories to organization profile (⚠️ *GitHub API limitation: not currently supported for organizations - configuration accepted but manual pinning required via web UI*)
@@ -592,12 +593,84 @@ Cloud on private repositories.
 invalid enumerations, duplicate names, and rules used on the wrong target — so
 you find mistakes before GitHub answers with an opaque 422.
 
+### Adopting rulesets that already exist
+
+Most orgs do not start with gomgr. Somebody protected `main` in the web UI two
+years ago, somebody else added a tag rule, and none of it is in your YAML.
+
+```bash
+gomgr import rulesets -c <config>            # show what could be adopted
+gomgr import rulesets -c <config> --write    # splice it into the config files
+```
+
+The scan reads the organization **and every repository** — wider than `sync`,
+which only looks at repositories your teams declare, precisely because a
+ruleset on a repository nobody has adopted yet is the one you most want to know
+about.
+
+What it does:
+
+- **Skips what you already declare.** A ruleset your YAML names is gomgr's to
+  define; re-importing it would overwrite your config with the live state,
+  which is backwards.
+- **Collapses to a preset** when one describes the ruleset exactly, so you get
+  `preset: branch-protection` rather than forty lines of expanded rules.
+- **Restores names, not IDs.** Team IDs become slugs, and gomgr's own app ID
+  becomes `app: self`, so the adopted config survives a team being recreated.
+- **Drops GitHub's defaults.** `negate: false`, a `~ALL`/`~ALL` selector, and
+  the full merge-method list are what GitHub reports when nothing was chosen —
+  writing them down would state a default as a decision.
+- **Leaves your files alone otherwise.** Entries are spliced into `org.yaml`
+  and the `teams/*.yaml` file that already declares each repository. Comments,
+  blank lines and quoting elsewhere in those files are untouched, so what you
+  review is a small diff. A repository written as `infra: push` grows into a
+  settings map with its permission intact.
+- **Validates before and after.** The adopted rulesets go through the same
+  checks a hand-written config does, and the whole directory is reloaded after
+  writing — if either fails, you hear about it there and then.
+
+```console
+$ gomgr import rulesets -c . --write
+adopted 3 rulesets -> org.yaml
+adopted 1 ruleset  -> teams/platform-team.yaml
+
+4 rulesets adopted across 2 files.
+2 rulesets already declared in your configuration were left alone.
+
+1 repository holds rulesets but appears in no team file, so there is
+nowhere to write them. Add the repository to a team first:
+  - legacy-scratch
+
+Review with `git diff`, then commit and open a pull request.
+```
+
+gomgr stops at the working tree; committing and opening the pull request stays
+yours, because a guard rail landing on `main` is a decision a person should
+make. Once adopted, the rulesets are ordinary config — the next `sync` will
+keep them in step, and `warn_unmanaged_rulesets` goes quiet.
+
 ### Cleanup
 
 `warn_unmanaged_rulesets: true` reports rulesets that exist on GitHub but are
 not in your YAML. `delete_unmanaged_rulesets: true` removes them. Rulesets
 inherited from the organization or an enterprise are never touched at the
 repository scope — they are not that scope's to delete.
+
+⚠️ **Before turning `delete_unmanaged_rulesets` on, run `gomgr import
+rulesets`.** Otherwise the flag deletes exactly the hand-made guard rails the
+import would have adopted.
+
+Two more things worth knowing about how `sync` treats rulesets it did not
+create:
+
+- **A matching name is a takeover.** Rulesets are matched by name,
+  case-insensitively. If your YAML declares `protect main` and someone hand-made
+  a "Protect Main", gomgr treats them as the same ruleset and replaces the live
+  definition wholesale with yours. Different names never collide; near-identical
+  ones do.
+- **`sync` only inspects managed repositories.** Rulesets on repositories that
+  appear in no team file are invisible to `sync`, warnings included. `import` is
+  what sees those.
 
 ---
 
@@ -763,6 +836,11 @@ Use a classic PAT with scopes:
 
 - `gomgr sync -c <config> [--dry] [--debug]`  
   Plans and applies org state. With `--dry`, shows a JSON plan followed by a human-readable summary of proposed changes without applying them.
+
+- `gomgr import rulesets -c <config> [--write] [--only <glob>]`  
+  Adopts rulesets that exist on GitHub but are not in your YAML. Prints them by
+  default; `--write` splices them into your config files. See
+  [Adopting rulesets that already exist](#adopting-rulesets-that-already-exist).
 
 - `gomgr setup-team -n "Team Name" -c <config> [-f out/path.yaml]`  
   Bootstraps a team YAML.

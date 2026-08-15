@@ -56,6 +56,17 @@ The gomgr agent can:
   - Offline validation via `gomgr validate` catches bad presets, invalid
     enumerations and rules used on the wrong target before GitHub does
 
+- **Adopting Existing State (`gomgr import rulesets`)**
+  - Scans the organization and every repository — wider than `sync`, which only
+    inspects repositories a team file declares
+  - Renders rulesets nobody declared back into YAML, collapsing them to a preset
+    when one describes them exactly
+  - Restores names over IDs: team slugs, and `app: self` for gomgr's own app
+  - Splices entries into `org.yaml` and the owning `teams/*.yaml` as text, so
+    comments and formatting elsewhere in those files survive and the result is a
+    reviewable diff
+  - Leaves committing and opening the pull request to a person
+
 - **Synchronization**
   - Idempotent apply: safe to run repeatedly
   - Dry-run mode for safe planning before applying changes
