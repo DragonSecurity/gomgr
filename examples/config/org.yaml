@@ -38,3 +38,56 @@ custom_roles:
       - write_code_scanning_alerts
       - read_secret_scanning_alerts
       - write_secret_scanning_alerts
+
+# Organization-wide rulesets — the guard rails every repository inherits.
+# A `preset` supplies the target, conditions and rules; anything set alongside
+# it wins, at whole-rule granularity (naming a rule replaces the preset's
+# version of that rule rather than merging into it).
+#
+# Presets: branch-protection, strict-branch-protection, tag-protection,
+#          no-force-push, require-signed-commits, require-dco, no-committed-keys
+rulesets:
+  # The baseline: the default branch cannot be deleted or force-pushed, and
+  # changes arrive through a reviewed pull request.
+  - name: default-branch-protection
+    preset: branch-protection
+    conditions:
+      repository_name:
+        include: ["~ALL"]
+        # Sandboxes and scratch repos opt out.
+        exclude: ["sandbox-*", "scratch-*"]
+    bypass_actors:
+      # gomgr pushes templated files straight to the default branch, so its own
+      # app has to be exempt or every file sync is rejected.
+      - type: Integration
+        app: self
+        mode: always
+      # Org admins may merge without review during an incident.
+      - type: OrganizationAdmin
+        mode: always
+
+  # Published releases are immutable.
+  - name: protect-release-tags
+    preset: tag-protection
+    conditions:
+      ref_name:
+        include: ["refs/tags/v*"]
+      repository_name:
+        include: ["~ALL"]
+
+  # Roll a new guard rail out in report-only mode first: `evaluate` records what
+  # would have been blocked without blocking it.
+  - name: require-ci-green
+    target: branch
+    enforcement: evaluate
+    conditions:
+      ref_name:
+        include: ["~DEFAULT_BRANCH"]
+      repository_name:
+        include: ["~ALL"]
+    rules:
+      required_status_checks:
+        strict: true
+        checks:
+          - context: build
+          - context: test

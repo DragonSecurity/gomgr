@@ -1,6 +1,10 @@
 package config
 
-import "strings"
+import (
+	"os"
+	"strconv"
+	"strings"
+)
 
 type AppConfig struct {
 	AppID      int64  `yaml:"app_id,omitempty"`
@@ -12,11 +16,13 @@ type AppConfig struct {
 		WarnMembersWithoutAnyTeam bool `yaml:"warn_members_without_any_team"`
 		WarnUnmanagedRepos        bool `yaml:"warn_unmanaged_repos"`
 		WarnUnmanagedCustomRoles  bool `yaml:"warn_unmanaged_custom_roles"`
+		WarnUnmanagedRulesets     bool `yaml:"warn_unmanaged_rulesets"`
 	} `yaml:"dry_warnings"`
 	RemoveMembersWithoutTeam   bool `yaml:"remove_members_without_team"`
 	DeleteUnconfiguredTeams    bool `yaml:"delete_unconfigured_teams"`
 	DeleteUnmanagedRepos       bool `yaml:"delete_unmanaged_repos"`
 	DeleteUnmanagedCustomRoles bool `yaml:"delete_unmanaged_custom_roles"`
+	DeleteUnmanagedRulesets    bool `yaml:"delete_unmanaged_rulesets"`
 	DeleteStaleCodeowners      bool `yaml:"delete_stale_codeowners"`
 	CreateRepo                 bool `yaml:"create_repo"`
 
@@ -66,6 +72,13 @@ type FileSpec struct {
 type OrgConfig struct {
 	Owners      []string           `yaml:"owners"`
 	CustomRoles []CustomRoleConfig `yaml:"custom_roles,omitempty"`
+
+	// Rulesets declares organization-wide rulesets — the guard rails that
+	// apply across repositories, narrowed by their repository_name conditions.
+	// Repository-specific rulesets live on the repository entry in teams/*.yaml
+	// and stack on top of these; GitHub evaluates every ruleset that matches and
+	// enforces the strictest outcome.
+	Rulesets []RulesetConfig `yaml:"rulesets,omitempty"`
 }
 
 // CustomRoleConfig defines a custom repository role for the organization
@@ -78,9 +91,10 @@ type CustomRoleConfig struct {
 }
 
 type RepoConfig struct {
-	Permission string   `yaml:"permission,omitempty"` // pull|triage|push|maintain|admin
-	Topics     []string `yaml:"topics,omitempty"`
-	Pinned     bool     `yaml:"pinned,omitempty"`
+	Permission string          `yaml:"permission,omitempty"` // pull|triage|push|maintain|admin
+	Topics     []string        `yaml:"topics,omitempty"`
+	Pinned     bool            `yaml:"pinned,omitempty"`
+	Rulesets   []RulesetConfig `yaml:"rulesets,omitempty"`
 }
 
 type TeamConfig struct {
@@ -108,6 +122,21 @@ type Root struct {
 	App  AppConfig    `yaml:"app"`
 	Org  OrgConfig    `yaml:"org"`
 	Team []TeamConfig `yaml:"teams"`
+}
+
+// ResolvedAppID returns the GitHub App ID in effect, falling back to
+// GITHUB_APP_ID when app.yaml does not set one. It is 0 under PAT auth, where
+// there is no app.
+func (a AppConfig) ResolvedAppID() int64 {
+	if a.AppID != 0 {
+		return a.AppID
+	}
+	if v := os.Getenv("GITHUB_APP_ID"); v != "" {
+		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return id
+		}
+	}
+	return 0
 }
 
 // ResolvedSlug returns the team's slug, deriving it from the name if not explicitly set.

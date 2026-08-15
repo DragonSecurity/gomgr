@@ -90,10 +90,16 @@ func buildDefaultRegistry() *HandlerRegistry {
 	r.Register("repo-topics", "ensure", precedenceRepoTopicsEnsure, HandlerFunc(applyRepoTopicsEnsure))
 	r.Register("repo-template", "ensure", precedenceRepoTemplateEnsure, HandlerFunc(applyRepoTemplateEnsure))
 	r.Register("repo-pin", "ensure", precedenceRepoPinEnsure, HandlerFunc(applyRepoPinEnsure))
+	r.Register(scopeOrgRuleset, "create", precedenceOrgRulesetCreate, HandlerFunc(applyOrgRulesetUpsert))
+	r.Register(scopeOrgRuleset, "update", precedenceOrgRulesetUpdate, HandlerFunc(applyOrgRulesetUpsert))
+	r.Register(scopeRepoRuleset, "create", precedenceRepoRulesetCreate, HandlerFunc(applyRepoRulesetUpsert))
+	r.Register(scopeRepoRuleset, "update", precedenceRepoRulesetUpdate, HandlerFunc(applyRepoRulesetUpsert))
 
 	// Cleanup phase (high precedence = runs last).
 	r.Register("repo-file", "delete", precedenceRepoFileDelete, HandlerFunc(applyRepoFileDelete))
 	r.Register("org-member", "remove", precedenceOrgMemberRemove, HandlerFunc(applyOrgMemberRemove))
+	r.Register(scopeOrgRuleset, "delete", precedenceOrgRulesetDelete, HandlerFunc(applyOrgRulesetDelete))
+	r.Register(scopeRepoRuleset, "delete", precedenceRepoRulesetDelete, HandlerFunc(applyRepoRulesetDelete))
 	r.Register("team", "delete", precedenceTeamDelete, HandlerFunc(applyTeamDelete))
 	r.Register("repo", "delete", precedenceRepoDelete, HandlerFunc(applyRepoDelete))
 	r.Register("custom-role", "delete", precedenceCustomRoleDelete, HandlerFunc(applyCustomRoleNoop))
