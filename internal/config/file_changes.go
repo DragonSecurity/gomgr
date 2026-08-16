@@ -18,10 +18,7 @@ const (
 	FileStrategyPullRequest = "pull_request"
 )
 
-const (
-	defaultFileChangeBranch = "gomgr/sync-files"
-	defaultMergeMethod      = "squash"
-)
+const defaultFileChangeBranch = "gomgr/sync-files"
 
 // FileChangeConfig controls how the files gomgr writes reach their branch.
 //
@@ -29,6 +26,12 @@ const (
 // the organization's guard rails — it manages them — so it can work out whether
 // a direct push to a given branch would be rejected instead of asking for a
 // flag that has to be kept in step with the rulesets by hand.
+//
+// Merge behavior is deliberately absent. gomgr decides that at repository
+// creation, not per sync: applyRepoEnsure sets AllowAutoMerge true,
+// AllowMergeCommit false and DeleteBranchOnMerge true, the same way repository
+// visibility is decided there. Offering merge_method here would let a
+// configuration ask for a merge commit that gomgr itself disabled.
 type FileChangeConfig struct {
 	// Strategy is auto (default), direct, or pull_request.
 	Strategy string `yaml:"strategy,omitempty"`
@@ -36,13 +39,6 @@ type FileChangeConfig struct {
 	// is reused per repository, so a repeated sync updates the open pull
 	// request rather than opening another.
 	Branch string `yaml:"branch,omitempty"`
-	// MergeMethod is squash (default), merge, or rebase.
-	MergeMethod string `yaml:"merge_method,omitempty"`
-	// AutoMerge asks GitHub to merge the pull request once the required checks
-	// pass. Defaults to true: it keeps sync unattended without letting gomgr
-	// bypass a rule, since GitHub does the merging and only when the rules
-	// allow. Set false to leave pull requests for a human.
-	AutoMerge *bool `yaml:"auto_merge,omitempty"`
 }
 
 // ResolvedStrategy returns the configured strategy, defaulting to auto.
@@ -61,20 +57,6 @@ func (f FileChangeConfig) ResolvedBranch() string {
 	return f.Branch
 }
 
-// ResolvedMergeMethod returns the merge method, defaulting to squash.
-func (f FileChangeConfig) ResolvedMergeMethod() string {
-	if f.MergeMethod == "" {
-		return defaultMergeMethod
-	}
-	return strings.ToLower(f.MergeMethod)
-}
-
-// ShouldAutoMerge reports whether GitHub should be asked to merge the pull
-// request once its checks pass.
-func (f FileChangeConfig) ShouldAutoMerge() bool {
-	return f.AutoMerge == nil || *f.AutoMerge
-}
-
 var validFileStrategies = map[string]bool{
 	FileStrategyAuto:        true,
 	FileStrategyDirect:      true,
@@ -85,9 +67,6 @@ var validFileStrategies = map[string]bool{
 func (f FileChangeConfig) Validate() error {
 	if !validFileStrategies[f.ResolvedStrategy()] {
 		return fmt.Errorf("app.file_changes: invalid strategy %q (must be auto, direct or pull_request)", f.Strategy)
-	}
-	if !validMergeMethods[f.ResolvedMergeMethod()] {
-		return fmt.Errorf("app.file_changes: invalid merge_method %q (must be merge, squash or rebase)", f.MergeMethod)
 	}
 	if strings.HasPrefix(f.ResolvedBranch(), "refs/") {
 		return fmt.Errorf("app.file_changes: branch must be a branch name, not a ref: %q", f.Branch)

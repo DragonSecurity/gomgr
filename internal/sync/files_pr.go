@@ -25,6 +25,11 @@ const scopeRepoFilePR = "repo-file-pr"
 // become several commits on one pull request rather than one pull request each.
 // The change marked "final" is the one that turns auto-merge on, so GitHub
 // cannot merge the pull request while gomgr is still adding commits to it.
+//
+// Auto-merge is always requested; it is not a setting. gomgr already decides
+// merge behavior where it belongs — at repository creation, alongside
+// visibility — and asking GitHub to merge is what keeps sync unattended without
+// gomgr merging past a rule itself.
 func applyRepoFilePullRequest(ctx context.Context, c *gh.Client, ch util.Change) error {
 	d, err := extractDetails(ch)
 	if err != nil {
@@ -37,7 +42,6 @@ func applyRepoFilePullRequest(ctx context.Context, c *gh.Client, ch util.Change)
 	message := detailString(d, "message")
 	base := detailString(d, "branch")
 	head := detailString(d, "head_branch")
-	mergeMethod := detailString(d, "merge_method")
 
 	if err := ensureHeadBranch(ctx, c, org, repo, base, head); err != nil {
 		return err
@@ -51,8 +55,8 @@ func applyRepoFilePullRequest(ctx context.Context, c *gh.Client, ch util.Change)
 		return err
 	}
 
-	if detailBool(d, "final") && detailBool(d, "auto_merge") {
-		if err := enableAutoMerge(ctx, c, pr.GetNodeID(), mergeMethod); err != nil {
+	if detailBool(d, "final") {
+		if err := enableAutoMerge(ctx, c, pr.GetNodeID()); err != nil {
 			// Auto-merge is a repository setting and can also be refused when a
 			// branch has no required checks to wait for. Neither is a reason to
 			// fail the sync: the pull request exists and carries the change.
@@ -167,9 +171,17 @@ func splitCommitMessage(message string) (title, body string) {
 	return title, "Opened by gomgr to apply managed file content.\n\n" + strings.TrimSpace(rest) + "\n"
 }
 
+// fileChangeMergeMethod is how gomgr's own pull requests merge.
+//
+// Not configurable, and squash rather than a merge commit because gomgr
+// disables merge commits on the repositories it creates (applyRepoEnsure sets
+// AllowMergeCommit false). Offering a choice here would let a configuration ask
+// for a merge gomgr itself made impossible.
+const fileChangeMergeMethod = "SQUASH"
+
 // enableAutoMerge asks GitHub to merge the pull request once its required
 // checks pass. Auto-merge is only exposed through GraphQL.
-func enableAutoMerge(ctx context.Context, c *gh.Client, prNodeID, mergeMethod string) error {
+func enableAutoMerge(ctx context.Context, c *gh.Client, prNodeID string) error {
 	if prNodeID == "" {
 		return errors.New("pull request has no node ID")
 	}
@@ -181,7 +193,7 @@ mutation($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
 }`
 	return c.DoGraphQL(ctx, mutation, map[string]any{
 		"pullRequestId": prNodeID,
-		"mergeMethod":   strings.ToUpper(mergeMethod),
+		"mergeMethod":   fileChangeMergeMethod,
 	}, nil)
 }
 

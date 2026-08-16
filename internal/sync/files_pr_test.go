@@ -124,7 +124,7 @@ func prChange(final bool) util.Change {
 			"org": "myorg", "repo": "infra", "path": ".github/renovate.json",
 			"content": "{}\n", "message": "chore: sync Renovate config\n\nSigned-off-by: A <a@b.c>",
 			"branch": "main", "head_branch": "gomgr/sync-files",
-			"merge_method": "squash", "auto_merge": true, "final": final,
+			"final": final,
 		},
 	}
 }

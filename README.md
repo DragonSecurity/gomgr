@@ -543,6 +543,14 @@ repository's files become commits on a single head branch — and turns on
 GitHub's auto-merge so it lands when the required checks pass, and simply waits
 when they do not. gomgr never merges past a rule itself.
 
+Merge behaviour is not a setting here, because gomgr already decides it where
+it belongs: at repository creation, alongside visibility. `applyRepoEnsure`
+sets `AllowAutoMerge: true`, `AllowMergeCommit: false` and
+`DeleteBranchOnMerge: true`, so auto-merge is available, squash is the merge
+that exists, and the head branch is cleaned up afterwards. Offering a
+`merge_method` here would let a config ask for a merge commit gomgr itself
+disabled.
+
 The plan says which route each file takes:
 
 ```
@@ -555,10 +563,8 @@ Override it when you need to:
 ```yaml
 # app.yaml
 file_changes:
-  strategy: auto          # auto (default, derived from your rulesets) | direct | pull_request
-  branch: gomgr/sync-files
-  merge_method: squash    # squash (default) | merge | rebase
-  auto_merge: true        # false leaves pull requests for a human
+  strategy: auto            # auto (default, derived from your rulesets) | direct | pull_request
+  branch: gomgr/sync-files  # head branch, reused per repository
 ```
 
 gomgr only reasons about rulesets **it declares**. A hand-made ruleset it has

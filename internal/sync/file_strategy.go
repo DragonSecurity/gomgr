@@ -66,21 +66,16 @@ type fileRoute struct {
 	UsePullRequest bool
 	// Reason explains the decision, for the plan and the audit log.
 	Reason string
-	// HeadBranch, MergeMethod and AutoMerge carry the pull-request mechanics
-	// from configuration through to the handler.
-	HeadBranch  string
-	MergeMethod string
-	AutoMerge   bool
+	// HeadBranch is the branch the pull request is opened from.
+	HeadBranch string
 }
 
 // routeDecider works out, per repository and branch, whether gomgr has to go
 // through a pull request.
 type routeDecider struct {
-	strategy    string
-	appID       int64
-	headBranch  string
-	mergeMethod string
-	autoMerge   bool
+	strategy   string
+	appID      int64
+	headBranch string
 	// orgRulesets are the organization-wide rulesets from org.yaml.
 	orgRulesets []config.RulesetConfig
 	// repoRulesets maps a lowercase repository name to its own rulesets.
@@ -96,8 +91,6 @@ func newRouteDecider(cfg *config.Root, st *State, bySettings map[string]repoSett
 		strategy:      cfg.App.FileChanges.ResolvedStrategy(),
 		appID:         cfg.App.ResolvedAppID(),
 		headBranch:    cfg.App.FileChanges.ResolvedBranch(),
-		mergeMethod:   cfg.App.FileChanges.ResolvedMergeMethod(),
-		autoMerge:     cfg.App.FileChanges.ShouldAutoMerge(),
 		orgRulesets:   cfg.Org.Rulesets,
 		repoRulesets:  map[string][]config.RulesetConfig{},
 		defaultBranch: map[string]string{},
@@ -160,8 +153,6 @@ func (d *routeDecider) pullRequestRoute(reason string) fileRoute {
 		UsePullRequest: true,
 		Reason:         reason,
 		HeadBranch:     d.headBranch,
-		MergeMethod:    d.mergeMethod,
-		AutoMerge:      d.autoMerge,
 	}
 }
 
@@ -306,6 +297,4 @@ type fileRouter func(repo, branch string) (fileRoute, error)
 func (r fileRoute) decorate(details map[string]any) {
 	details["route_reason"] = r.Reason
 	details["head_branch"] = r.HeadBranch
-	details["merge_method"] = r.MergeMethod
-	details["auto_merge"] = r.AutoMerge
 }
