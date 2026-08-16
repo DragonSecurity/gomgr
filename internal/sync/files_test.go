@@ -110,7 +110,7 @@ func TestPlanRepoFiles_SignsOffCustomAndDefaultMessages(t *testing.T) {
 		{Path: "LICENSE", Content: "MIT\n"},
 	}
 
-	changes, err := planRepoFiles(context.Background(), nil, "Acme", "widgets", "widgets", specs, testSignOff, map[string]bool{})
+	changes, err := planRepoFiles(context.Background(), nil, nil, "Acme", "widgets", "widgets", specs, testSignOff, map[string]bool{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestPlanRepoFiles_RendersAndDedupes(t *testing.T) {
 	}
 	emitted := map[string]bool{}
 
-	changes, err := planRepoFiles(context.Background(), nil, "Acme", "widgets", "widgets", specs, "", emitted)
+	changes, err := planRepoFiles(context.Background(), nil, nil, "Acme", "widgets", "widgets", specs, "", emitted)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestPlanRepoFiles_RendersAndDedupes(t *testing.T) {
 	}
 
 	// Calling again should be a no-op because emitted tracks both paths now.
-	more, err := planRepoFiles(context.Background(), nil, "Acme", "widgets", "widgets", specs, "", emitted)
+	more, err := planRepoFiles(context.Background(), nil, nil, "Acme", "widgets", "widgets", specs, "", emitted)
 	if err != nil {
 		t.Fatalf("unexpected error on second call: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestPlanRepoFiles_OnlyGlobSkipsNonMatch(t *testing.T) {
 	specs := []config.FileSpec{
 		{Path: "LICENSE", Content: "MIT", Only: []string{"public-*"}},
 	}
-	changes, err := planRepoFiles(context.Background(), nil, "Acme", "internal-api", "internal-api", specs, "", map[string]bool{})
+	changes, err := planRepoFiles(context.Background(), nil, nil, "Acme", "internal-api", "internal-api", specs, "", map[string]bool{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestPlanRepoFiles_OnlyGlobSkipsNonMatch(t *testing.T) {
 		t.Errorf("expected no changes for non-matching repo, got %d", len(changes))
 	}
 
-	changes, err = planRepoFiles(context.Background(), nil, "Acme", "public-docs", "public-docs", specs, "", map[string]bool{})
+	changes, err = planRepoFiles(context.Background(), nil, nil, "Acme", "public-docs", "public-docs", specs, "", map[string]bool{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -219,7 +219,7 @@ func TestPlanRepoFiles_OnlyGlobSkipsNonMatch(t *testing.T) {
 
 func TestPlanRepoFiles_BadTemplatePropagates(t *testing.T) {
 	specs := []config.FileSpec{{Path: "bad.md", Content: "{{.Missing}}"}}
-	_, err := planRepoFiles(context.Background(), nil, "Acme", "widgets", "widgets", specs, "", map[string]bool{})
+	_, err := planRepoFiles(context.Background(), nil, nil, "Acme", "widgets", "widgets", specs, "", map[string]bool{})
 	if err == nil {
 		t.Fatal("expected template error")
 	}
@@ -439,7 +439,7 @@ func TestPlanRepoFilesSkipsFilesThatAlreadyMatch(t *testing.T) {
 
 	t.Run("identical content plans nothing", func(t *testing.T) {
 		probe := staticProbe(map[string]string{"infra:.github/renovate.json": rendered})
-		got, err := planRepoFiles(context.Background(), probe, "myorg", "infra", "infra", specs, "", map[string]bool{})
+		got, err := planRepoFiles(context.Background(), probe, nil, "myorg", "infra", "infra", specs, "", map[string]bool{})
 		if err != nil {
 			t.Fatalf("plan: %v", err)
 		}
@@ -450,7 +450,7 @@ func TestPlanRepoFilesSkipsFilesThatAlreadyMatch(t *testing.T) {
 
 	t.Run("drifted content plans a write", func(t *testing.T) {
 		probe := staticProbe(map[string]string{"infra:.github/renovate.json": "{}\n"})
-		got, err := planRepoFiles(context.Background(), probe, "myorg", "infra", "infra", specs, "", map[string]bool{})
+		got, err := planRepoFiles(context.Background(), probe, nil, "myorg", "infra", "infra", specs, "", map[string]bool{})
 		if err != nil {
 			t.Fatalf("plan: %v", err)
 		}
@@ -460,7 +460,7 @@ func TestPlanRepoFilesSkipsFilesThatAlreadyMatch(t *testing.T) {
 	})
 
 	t.Run("missing file plans a write", func(t *testing.T) {
-		got, err := planRepoFiles(context.Background(), staticProbe(nil), "myorg", "infra", "infra", specs, "", map[string]bool{})
+		got, err := planRepoFiles(context.Background(), staticProbe(nil), nil, "myorg", "infra", "infra", specs, "", map[string]bool{})
 		if err != nil {
 			t.Fatalf("plan: %v", err)
 		}
@@ -472,7 +472,7 @@ func TestPlanRepoFilesSkipsFilesThatAlreadyMatch(t *testing.T) {
 	t.Run("existing file without reconcile plans nothing", func(t *testing.T) {
 		noReconcile := []config.FileSpec{{Path: "README.md", Content: "new"}}
 		probe := staticProbe(map[string]string{"infra:README.md": "hand-edited"})
-		got, err := planRepoFiles(context.Background(), probe, "myorg", "infra", "infra", noReconcile, "", map[string]bool{})
+		got, err := planRepoFiles(context.Background(), probe, nil, "myorg", "infra", "infra", noReconcile, "", map[string]bool{})
 		if err != nil {
 			t.Fatalf("plan: %v", err)
 		}
@@ -483,7 +483,7 @@ func TestPlanRepoFilesSkipsFilesThatAlreadyMatch(t *testing.T) {
 
 	t.Run("a nil probe plans everything", func(t *testing.T) {
 		// What a repository being created in this same run gets.
-		got, err := planRepoFiles(context.Background(), nil, "myorg", "infra", "infra", specs, "", map[string]bool{})
+		got, err := planRepoFiles(context.Background(), nil, nil, "myorg", "infra", "infra", specs, "", map[string]bool{})
 		if err != nil {
 			t.Fatalf("plan: %v", err)
 		}

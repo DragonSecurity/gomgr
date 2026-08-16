@@ -37,6 +37,9 @@ type AppConfig struct {
 	// that do not require sign-off.
 	SignOff string `yaml:"sign_off,omitempty"`
 
+	// FileChanges controls how gomgr lands the files it writes.
+	FileChanges FileChangeConfig `yaml:"file_changes,omitempty"`
+
 	// Files declares templated files that should exist in every managed
 	// repository. Each entry's Content is rendered through text/template with
 	// {Org, Repo} context. Only (optional) limits which repos an entry applies

@@ -631,6 +631,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 
 	// A repository this run is about to create has nothing to read yet, so it
 	// gets no probe and every file it declares is planned as a write.
+	router := newRouteDecider(cfg, st, resolvedSettings).route
 	repoProbe := newFileProbe(c)
 	probeFor := func(repoKey string) fileProbe {
 		if !preexisting[repoKey] {
@@ -736,7 +737,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 			}
 
 			// Emit file changes only once per repo (skip if already emitted from another team)
-			fileChanges, err := planRepoFiles(ctx, probeFor(r), org, repo, r, fileSpecs, cfg.App.SignOff, emittedFiles)
+			fileChanges, err := planRepoFiles(ctx, probeFor(r), router, org, repo, r, fileSpecs, cfg.App.SignOff, emittedFiles)
 			if err != nil {
 				return nil, err
 			}
@@ -861,6 +862,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 		filtered = append(filtered, ch)
 	}
 
+	markFinalPullRequestFiles(filtered)
 	return filtered, nil
 }
 

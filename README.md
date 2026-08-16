@@ -513,6 +513,64 @@ repositories:
         preset: no-committed-keys
 ```
 
+### How gomgr's own file writes reach a protected branch
+
+gomgr writes templated files (`app.files`, CODEOWNERS, `renovate.json`) into
+every managed repository. Historically those went straight to the default
+branch, which stops working the moment you protect it.
+
+Rather than asking you to declare that, gomgr works it out from the rulesets
+**you have already declared** in `org.yaml` and `teams/*.yaml`. For each
+repository and branch it is about to write to, it asks whether a matching,
+actively-enforced ruleset would reject a direct push:
+
+| Rule | Blocks a direct push? | Why |
+| --- | --- | --- |
+| `pull_request` | **yes** | the branch only advances through a merged PR |
+| `required_status_checks` | **yes** | a check cannot have passed on a commit that does not exist yet |
+| `update` | **yes** | updates to the ref are restricted outright |
+| `required_signatures` | no | commits made through the API are signed by GitHub |
+| `commit_message_pattern` | no | `sign_off` satisfies it |
+| `deletion`, `non_fast_forward`, `required_linear_history` | no | they constrain what a commit may be, not whether it may be pushed |
+
+A ruleset in `evaluate` mode blocks nothing. And if gomgr's own app is a bypass
+actor with `mode: always`, it pushes directly regardless — being exempt is the
+point of the exemption. An actor limited to `mode: pull_request` is, by
+definition, being told to use one.
+
+When a pull request is needed, gomgr opens **one per repository** — all of that
+repository's files become commits on a single head branch — and turns on
+GitHub's auto-merge so it lands when the required checks pass, and simply waits
+when they do not. gomgr never merges past a rule itself.
+
+Merge behaviour is not a setting here, because gomgr already decides it where
+it belongs: at repository creation, alongside visibility. `applyRepoEnsure`
+sets `AllowAutoMerge: true`, `AllowMergeCommit: false` and
+`DeleteBranchOnMerge: true`, so auto-merge is available, squash is the merge
+that exists, and the head branch is cleaned up afterwards. Offering a
+`merge_method` here would let a config ask for a merge commit gomgr itself
+disabled.
+
+The plan says which route each file takes:
+
+```
++ repo-file:ensure     myorg/docs:.github/renovate.json        # direct commit
++ repo-file-pr:ensure  myorg/infra:.github/renovate.json       # via a pull request
+```
+
+Override it when you need to:
+
+```yaml
+# app.yaml
+file_changes:
+  strategy: auto            # auto (default, derived from your rulesets) | direct | pull_request
+  branch: gomgr/sync-files  # head branch, reused per repository
+```
+
+gomgr only reasons about rulesets **it declares**. A hand-made ruleset it has
+never seen is invisible to this — run `gomgr import rulesets` first so the
+config and reality agree.
+
 ### ⚠️ Do not lock gomgr out of its own repositories
 
 gomgr commits templated files (`app.files`, CODEOWNERS, `renovate.json`)

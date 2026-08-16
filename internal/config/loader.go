@@ -135,6 +135,9 @@ func (r *Root) Validate() error {
 	if err := ValidateRulesets(ScopeOrg, "org.yaml", r.Org.Rulesets); err != nil {
 		return err
 	}
+	if err := r.App.FileChanges.Validate(); err != nil {
+		return err
+	}
 	if err := validateFileSpecs(r.App.Files); err != nil {
 		return err
 	}
