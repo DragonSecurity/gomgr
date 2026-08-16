@@ -81,7 +81,12 @@ func calcBackoff(attempt int) time.Duration {
 	if exp > 30*time.Second {
 		exp = 30 * time.Second
 	}
-	jitter := time.Duration(rand.Int63n(int64(500 * time.Millisecond))) //nolint:gosec
+	// Jitter only has to spread concurrent retries apart. It is not a secret
+	// and nothing is gained by an attacker predicting it, so the weak generator
+	// is the right tool. Annotated at the call site rather than excluded
+	// repo-wide, so a future use of math/rand where randomness *is* a security
+	// property still gets caught.
+	jitter := time.Duration(rand.Int63n(int64(500 * time.Millisecond))) // #nosec G404
 	return exp + jitter
 }
 
