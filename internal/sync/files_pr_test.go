@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/go-github/v90/github"
+
 	"github.com/DragonSecurity/gomgr/internal/gh"
 	"github.com/DragonSecurity/gomgr/internal/util"
 )
@@ -275,5 +277,68 @@ func TestMarkFinalPullRequestFiles(t *testing.T) {
 	}
 	if !final(3) {
 		t.Error("a repository with one change has that change as final")
+	}
+}
+
+// TestEmptyRepositoryFallsBackToADirectWrite covers a repository gomgr created
+// moments earlier.
+//
+// A repository with no commits has no refs at all, so the git refs API answers
+// 409 "Git Repository is empty" rather than 404, and there is no base commit to
+// open a pull request against. The first write creates the default branch
+// rather than advancing it, so it goes direct — which is also the only way to
+// seed the repository at all. Observed against a live organization: apikit was
+// created and its first file write failed on exactly this.
+func TestEmptyRepositoryFallsBackToADirectWrite(t *testing.T) {
+	var wroteTo string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/git/ref/"):
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{"message": "Git Repository is empty."})
+		case strings.Contains(r.URL.Path, "/contents/"):
+			if r.Method == http.MethodGet {
+				http.NotFound(w, r)
+				return
+			}
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			wroteTo, _ = body["branch"].(string)
+			_ = json.NewEncoder(w).Encode(map[string]any{"content": map[string]any{}})
+		case strings.HasSuffix(r.URL.Path, "/pulls"):
+			t.Error("an empty repository has no base commit; no pull request should be attempted")
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{})
+		}
+	}))
+	defer server.Close()
+
+	if err := applyRepoFilePullRequest(context.Background(), newTestClient(t, server), prChange(true)); err != nil {
+		t.Fatalf("an empty repository must be seeded, not failed: %v", err)
+	}
+	if wroteTo != "main" {
+		t.Errorf("wrote to %q, want the base branch so the default branch is created", wroteTo)
+	}
+}
+
+func TestIsRepositoryEmpty(t *testing.T) {
+	empty := &github.ErrorResponse{
+		Response: &http.Response{StatusCode: http.StatusConflict},
+		Message:  "Git Repository is empty.",
+	}
+	if !isRepositoryEmpty(empty) {
+		t.Error("409 plus an empty-repository message is the case this exists for")
+	}
+	// A 409 that means something else must not be mistaken for it.
+	other := &github.ErrorResponse{
+		Response: &http.Response{StatusCode: http.StatusConflict},
+		Message:  "Repository rule violations found",
+	}
+	if isRepositoryEmpty(other) {
+		t.Error("a rule violation is a 409 too, and is not an empty repository")
+	}
+	if isRepositoryEmpty(nil) {
+		t.Error("no error is not an empty repository")
 	}
 }

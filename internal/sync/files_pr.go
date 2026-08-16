@@ -43,7 +43,16 @@ func applyRepoFilePullRequest(ctx context.Context, c *gh.Client, ch util.Change)
 	base := detailString(d, "branch")
 	head := detailString(d, "head_branch")
 
-	if err := ensureHeadBranch(ctx, c, org, repo, base, head); err != nil {
+	switch err := ensureHeadBranch(ctx, c, org, repo, base, head); {
+	case errors.Is(err, errRepositoryEmpty):
+		// A repository with no commits has no branch to open a pull request
+		// against. The first write creates the default branch rather than
+		// advancing it, so a rule about how that branch may be advanced has
+		// nothing to say about it yet — and there is no other way to seed the
+		// repository. Later syncs find a branch and take the usual route.
+		util.Infof("%s/%s is empty; writing %s directly to create %s", org, repo, path, base)
+		return applyRepoFileEnsure(ctx, c, ch)
+	case err != nil:
 		return err
 	}
 	if err := writeFileOnBranch(ctx, c, org, repo, path, head, message, content); err != nil {
@@ -72,14 +81,20 @@ func applyRepoFilePullRequest(ctx context.Context, c *gh.Client, ch util.Change)
 // not already there. An existing branch is left alone: it usually carries an
 // open pull request from an earlier run that this change should join.
 func ensureHeadBranch(ctx context.Context, c *gh.Client, org, repo, base, head string) error {
-	if _, _, err := c.REST.Git.GetRef(ctx, org, repo, "refs/heads/"+head); err == nil {
+	switch _, _, err := c.REST.Git.GetRef(ctx, org, repo, "refs/heads/"+head); {
+	case err == nil:
 		return nil
-	} else if !isNotFound(err) {
+	case isRepositoryEmpty(err):
+		return errRepositoryEmpty
+	case !isNotFound(err):
 		return fmt.Errorf("check branch %s on %s/%s: %w", head, org, repo, err)
 	}
 
 	baseRef, _, err := c.REST.Git.GetRef(ctx, org, repo, "refs/heads/"+base)
-	if err != nil {
+	switch {
+	case isRepositoryEmpty(err):
+		return errRepositoryEmpty
+	case err != nil:
 		return fmt.Errorf("read branch %s on %s/%s: %w", base, org, repo, err)
 	}
 	_, _, err = c.REST.Git.CreateRef(ctx, org, repo, github.CreateRef{
@@ -195,6 +210,22 @@ mutation($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
 		"pullRequestId": prNodeID,
 		"mergeMethod":   fileChangeMergeMethod,
 	}, nil)
+}
+
+// errRepositoryEmpty marks a repository with no commits, which the git refs
+// API reports as 409 rather than 404 because the refs namespace does not exist
+// at all rather than the one ref being absent.
+var errRepositoryEmpty = errors.New("repository is empty")
+
+// isRepositoryEmpty reports whether err is GitHub saying the repository has no
+// commits yet. A repository gomgr created moments earlier is exactly that.
+func isRepositoryEmpty(err error) bool {
+	var ghErr *github.ErrorResponse
+	if !errors.As(err, &ghErr) || ghErr.Response == nil {
+		return false
+	}
+	return ghErr.Response.StatusCode == http.StatusConflict &&
+		strings.Contains(strings.ToLower(ghErr.Message), "empty")
 }
 
 // isRefAlreadyExists reports whether err is GitHub refusing to create a ref
