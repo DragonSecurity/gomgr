@@ -47,13 +47,17 @@ func NewClientFromEnv(ctx context.Context, app config.AppConfig) (*Client, strin
 	// App
 	appID := app.AppID
 	if v := os.Getenv("GITHUB_APP_ID"); v != "" && appID == 0 {
-		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
-			appID = id
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			// Silently ignoring this used to send a typo'd env var all the way
+			// to "no auth found", which says nothing about the actual mistake.
+			return nil, "", fmt.Errorf("GITHUB_APP_ID is not a number: %q", v)
 		}
+		appID = id
 	}
 	key := firstNonEmpty(app.PrivateKey, os.Getenv("GITHUB_APP_PRIVATE_KEY"))
 	if appID == 0 || key == "" {
-		return nil, "", errors.New("no auth found: set GITHUB_TOKEN or app_id+private_key")
+		return nil, "", missingAuthError(appID, key)
 	}
 	pemBytes, err := maybeReadPEM(key)
 	if err != nil {
@@ -78,6 +82,30 @@ func NewClientFromEnv(ctx context.Context, app config.AppConfig) (*Client, strin
 		return nil, "", fmt.Errorf("new github client: %w", err)
 	}
 	return &Client{REST: rest, httpClient: httpClient}, "Github App", nil
+}
+
+// missingAuthError explains which half of the App credentials is missing, and
+// every place the missing half can come from.
+//
+// The two halves are not equally sensitive, and the message says so: an App ID
+// identifies the app but grants nothing, so it belongs in a committed app.yaml,
+// while the private key is the actual credential and should arrive by flag or
+// environment. Saying only "no auth found" leaves someone who supplied one of
+// the two with no idea which one failed.
+func missingAuthError(appID int64, key string) error {
+	switch {
+	case appID == 0 && key == "":
+		return errors.New("no GitHub credentials found. Either export GITHUB_TOKEN for a personal " +
+			"access token, or supply a GitHub App: --app-id and --private-key, app_id and private_key " +
+			"in app.yaml, or GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY")
+	case appID == 0:
+		return errors.New("a GitHub App private key was supplied but no App ID. Pass --app-id, " +
+			"or set app_id in app.yaml — an App ID is not a secret, so it is safe to commit alongside " +
+			"the org name — or export GITHUB_APP_ID")
+	default:
+		return fmt.Errorf("GitHub App ID %d was supplied but no private key. Pass --private-key <path>, "+
+			"set private_key in app.yaml, or export GITHUB_APP_PRIVATE_KEY", appID)
+	}
 }
 
 func maybeReadPEM(s string) ([]byte, error) {

@@ -15,6 +15,8 @@ var (
 	timeout         time.Duration
 	auditLog        bool
 	continueOnError bool
+	appIDFlag       int64
+	privateKeyFlag  string
 )
 
 var rootCmd = &cobra.Command{
@@ -37,4 +39,6 @@ func init() {
 	rootCmd.PersistentFlags().DurationVar(&timeout, "timeout", 10*time.Minute, "Overall context timeout for the sync operation")
 	rootCmd.PersistentFlags().BoolVar(&auditLog, "audit-log", false, "Emit structured JSON audit log entries to stderr")
 	rootCmd.PersistentFlags().BoolVar(&continueOnError, "continue-on-error", false, "Keep applying remaining changes after a failure, then report all errors at the end")
+	rootCmd.PersistentFlags().Int64Var(&appIDFlag, "app-id", 0, "GitHub App ID, overriding app.yaml and GITHUB_APP_ID")
+	rootCmd.PersistentFlags().StringVar(&privateKeyFlag, "private-key", "", "Path to the GitHub App private key PEM, overriding app.yaml and GITHUB_APP_PRIVATE_KEY")
 }

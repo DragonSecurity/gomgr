@@ -346,6 +346,12 @@ func fetchRepoRulesets(ctx context.Context, c *gh.Client, org, repo string) ([]*
 	for _, s := range summaries {
 		full, _, err := c.REST.Repositories.GetRuleset(ctx, org, repo, s.GetID(), false)
 		if err != nil {
+			// A ruleset that lists at the repository but 404s when fetched
+			// without parents was inherited from the organization or the
+			// enterprise. It is not this scope's to read, let alone manage.
+			if isNotFound(err) {
+				continue
+			}
 			return nil, fmt.Errorf("get ruleset %q on %s/%s (ID %d): %w", s.Name, org, repo, s.GetID(), err)
 		}
 		out = append(out, full)

@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
-	"github.com/DragonSecurity/gomgr/internal/gh"
 	insync "github.com/DragonSecurity/gomgr/internal/sync"
 	"github.com/DragonSecurity/gomgr/internal/util"
 )
@@ -37,12 +36,9 @@ var syncCmd = &cobra.Command{
 			return err
 		}
 
-		client, appInfo, err := gh.NewClientFromEnv(ctx, cfg.App)
+		client, err := newClient(ctx, cfg)
 		if err != nil {
 			return err
-		}
-		if appInfo != "" {
-			util.Infof("auth: %s", appInfo)
 		}
 
 		plan, err := insync.BuildPlan(ctx, client, cfg)
