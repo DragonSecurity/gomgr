@@ -1,7 +1,13 @@
 package sync
 
 import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
@@ -104,7 +110,7 @@ func TestPlanRepoFiles_SignsOffCustomAndDefaultMessages(t *testing.T) {
 		{Path: "LICENSE", Content: "MIT\n"},
 	}
 
-	changes, err := planRepoFiles("Acme", "widgets", "widgets", specs, testSignOff, map[string]bool{})
+	changes, err := planRepoFiles(context.Background(), nil, "Acme", "widgets", "widgets", specs, testSignOff, map[string]bool{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -153,7 +159,7 @@ func TestPlanRepoFiles_RendersAndDedupes(t *testing.T) {
 	}
 	emitted := map[string]bool{}
 
-	changes, err := planRepoFiles("Acme", "widgets", "widgets", specs, "", emitted)
+	changes, err := planRepoFiles(context.Background(), nil, "Acme", "widgets", "widgets", specs, "", emitted)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -181,7 +187,7 @@ func TestPlanRepoFiles_RendersAndDedupes(t *testing.T) {
 	}
 
 	// Calling again should be a no-op because emitted tracks both paths now.
-	more, err := planRepoFiles("Acme", "widgets", "widgets", specs, "", emitted)
+	more, err := planRepoFiles(context.Background(), nil, "Acme", "widgets", "widgets", specs, "", emitted)
 	if err != nil {
 		t.Fatalf("unexpected error on second call: %v", err)
 	}
@@ -194,7 +200,7 @@ func TestPlanRepoFiles_OnlyGlobSkipsNonMatch(t *testing.T) {
 	specs := []config.FileSpec{
 		{Path: "LICENSE", Content: "MIT", Only: []string{"public-*"}},
 	}
-	changes, err := planRepoFiles("Acme", "internal-api", "internal-api", specs, "", map[string]bool{})
+	changes, err := planRepoFiles(context.Background(), nil, "Acme", "internal-api", "internal-api", specs, "", map[string]bool{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -202,7 +208,7 @@ func TestPlanRepoFiles_OnlyGlobSkipsNonMatch(t *testing.T) {
 		t.Errorf("expected no changes for non-matching repo, got %d", len(changes))
 	}
 
-	changes, err = planRepoFiles("Acme", "public-docs", "public-docs", specs, "", map[string]bool{})
+	changes, err = planRepoFiles(context.Background(), nil, "Acme", "public-docs", "public-docs", specs, "", map[string]bool{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -213,7 +219,7 @@ func TestPlanRepoFiles_OnlyGlobSkipsNonMatch(t *testing.T) {
 
 func TestPlanRepoFiles_BadTemplatePropagates(t *testing.T) {
 	specs := []config.FileSpec{{Path: "bad.md", Content: "{{.Missing}}"}}
-	_, err := planRepoFiles("Acme", "widgets", "widgets", specs, "", map[string]bool{})
+	_, err := planRepoFiles(context.Background(), nil, "Acme", "widgets", "widgets", specs, "", map[string]bool{})
 	if err == nil {
 		t.Fatal("expected template error")
 	}
@@ -375,5 +381,158 @@ func TestPlanCodeownersDeletions_RespectsEmittedSet(t *testing.T) {
 	changes := planCodeownersDeletions("acme", managed, names, map[string][]string{}, map[string]bool{}, "", emitted)
 	if len(changes) != 0 {
 		t.Errorf("expected no changes when already emitted (write wins), got %d", len(changes))
+	}
+}
+
+// staticProbe answers from a fixed map of "repo:path" -> content. A key that is
+// absent means the file does not exist on the branch.
+func staticProbe(files map[string]string) fileProbe {
+	return func(_ context.Context, _, repo, path, _ string) (remoteFile, error) {
+		if content, ok := files[repo+":"+path]; ok {
+			return remoteFile{exists: true, content: content}, nil
+		}
+		return remoteFile{}, nil
+	}
+}
+
+func TestFileNeedsWrite(t *testing.T) {
+	tests := []struct {
+		name      string
+		current   remoteFile
+		desired   string
+		reconcile bool
+		want      bool
+	}{
+		{name: "missing file is written", current: remoteFile{}, desired: "x", want: true},
+		{
+			name:    "existing file is left alone without reconcile",
+			current: remoteFile{exists: true, content: "old"}, desired: "new", want: false,
+		},
+		{
+			name:    "identical content is a no-op even with reconcile",
+			current: remoteFile{exists: true, content: "same"}, desired: "same", reconcile: true, want: false,
+		},
+		{
+			name:    "drifted content is written with reconcile",
+			current: remoteFile{exists: true, content: "old"}, desired: "new", reconcile: true, want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := fileNeedsWrite(tt.current, tt.desired, tt.reconcile); got != tt.want {
+				t.Errorf("fileNeedsWrite = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestPlanRepoFilesSkipsFilesThatAlreadyMatch is the regression this whole
+// change exists for: a reconciled file identical to what is on the branch used
+// to appear in every plan forever, claiming a commit that would never happen.
+func TestPlanRepoFilesSkipsFilesThatAlreadyMatch(t *testing.T) {
+	specs := []config.FileSpec{{
+		Path:      ".github/renovate.json",
+		Content:   "{\n  \"extends\": [\"config:base\"]\n}\n",
+		Reconcile: true,
+	}}
+	rendered := specs[0].Content
+
+	t.Run("identical content plans nothing", func(t *testing.T) {
+		probe := staticProbe(map[string]string{"infra:.github/renovate.json": rendered})
+		got, err := planRepoFiles(context.Background(), probe, "myorg", "infra", "infra", specs, "", map[string]bool{})
+		if err != nil {
+			t.Fatalf("plan: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("got %d changes, want none for a file that already matches: %+v", len(got), got)
+		}
+	})
+
+	t.Run("drifted content plans a write", func(t *testing.T) {
+		probe := staticProbe(map[string]string{"infra:.github/renovate.json": "{}\n"})
+		got, err := planRepoFiles(context.Background(), probe, "myorg", "infra", "infra", specs, "", map[string]bool{})
+		if err != nil {
+			t.Fatalf("plan: %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("got %d changes, want 1", len(got))
+		}
+	})
+
+	t.Run("missing file plans a write", func(t *testing.T) {
+		got, err := planRepoFiles(context.Background(), staticProbe(nil), "myorg", "infra", "infra", specs, "", map[string]bool{})
+		if err != nil {
+			t.Fatalf("plan: %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("got %d changes, want 1", len(got))
+		}
+	})
+
+	t.Run("existing file without reconcile plans nothing", func(t *testing.T) {
+		noReconcile := []config.FileSpec{{Path: "README.md", Content: "new"}}
+		probe := staticProbe(map[string]string{"infra:README.md": "hand-edited"})
+		got, err := planRepoFiles(context.Background(), probe, "myorg", "infra", "infra", noReconcile, "", map[string]bool{})
+		if err != nil {
+			t.Fatalf("plan: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("got %+v, want nothing: the file exists and drift is not tracked", got)
+		}
+	})
+
+	t.Run("a nil probe plans everything", func(t *testing.T) {
+		// What a repository being created in this same run gets.
+		got, err := planRepoFiles(context.Background(), nil, "myorg", "infra", "infra", specs, "", map[string]bool{})
+		if err != nil {
+			t.Fatalf("plan: %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("got %d changes, want 1", len(got))
+		}
+	})
+}
+
+func TestNewFileProbeReadsAndCaches(t *testing.T) {
+	var calls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/contents/present.txt") {
+			atomic.AddInt32(&calls, 1)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"type": "file", "name": "present.txt", "path": "present.txt",
+				"encoding": "base64",
+				"content":  base64.StdEncoding.EncodeToString([]byte("hello\n")),
+			})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	probe := newFileProbe(newTestClient(t, server))
+
+	got, err := probe(context.Background(), "myorg", "infra", "present.txt", "main")
+	if err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	if !got.exists || got.content != "hello\n" {
+		t.Errorf("got %+v, want the decoded file", got)
+	}
+
+	// A second read of the same file must not hit the API again: one repository
+	// can be reached through several teams.
+	if _, err := probe(context.Background(), "myorg", "infra", "present.txt", "main"); err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	if n := atomic.LoadInt32(&calls); n != 1 {
+		t.Errorf("API called %d times, want 1 — the probe should memoize", n)
+	}
+
+	missing, err := probe(context.Background(), "myorg", "infra", "absent.txt", "main")
+	if err != nil {
+		t.Fatalf("a 404 is not an error, it means the file is missing: %v", err)
+	}
+	if missing.exists {
+		t.Errorf("got %+v, want a missing file", missing)
 	}
 }

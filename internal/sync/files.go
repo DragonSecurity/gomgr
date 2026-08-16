@@ -1,11 +1,16 @@
 package sync
 
 import (
+	"context"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 
+	"github.com/google/go-github/v90/github"
+
 	"github.com/DragonSecurity/gomgr/internal/config"
+	"github.com/DragonSecurity/gomgr/internal/gh"
 	"github.com/DragonSecurity/gomgr/internal/templates"
 	"github.com/DragonSecurity/gomgr/internal/util"
 )
@@ -71,15 +76,84 @@ func materializeFileSpecs(app config.AppConfig) []config.FileSpec {
 	return final
 }
 
+// remoteFile is the current state of a file on a branch.
+type remoteFile struct {
+	exists  bool
+	content string
+}
+
+// fileProbe reads a file's current state so planning can tell a real change
+// from a no-op.
+//
+// A nil probe means "assume every file needs writing", which is what a
+// repository being created in this same run requires — there is nothing to read
+// yet — and what tests use when the answer is not what they are checking.
+type fileProbe func(ctx context.Context, org, repo, path, branch string) (remoteFile, error)
+
+// newFileProbe returns a probe backed by the API, memoized per file so that a
+// repository referenced by several teams is only read once.
+func newFileProbe(c *gh.Client) fileProbe {
+	cache := map[string]remoteFile{}
+	return func(ctx context.Context, org, repo, path, branch string) (remoteFile, error) {
+		key := org + "/" + repo + "@" + branch + ":" + path
+		if hit, ok := cache[key]; ok {
+			return hit, nil
+		}
+		file, _, resp, err := c.REST.Repositories.GetContents(ctx, org, repo, path,
+			&github.RepositoryContentGetOptions{Ref: branch})
+		switch {
+		case err != nil && resp != nil && resp.StatusCode == http.StatusNotFound:
+			// Also covers a branch that does not exist yet.
+		case err != nil:
+			return remoteFile{}, fmt.Errorf("read %s/%s:%s: %w", org, repo, path, err)
+		}
+
+		out := remoteFile{}
+		if file != nil {
+			content, err := file.GetContent()
+			if err != nil {
+				return remoteFile{}, fmt.Errorf("decode %s/%s:%s: %w", org, repo, path, err)
+			}
+			out = remoteFile{exists: true, content: content}
+		}
+		cache[key] = out
+		return out, nil
+	}
+}
+
+// fileNeedsWrite reports whether a file has to be written, given what is
+// already on the branch. It is the same decision applyRepoFileEnsure makes,
+// lifted to plan time so that `--dry` reports files that will actually change
+// rather than files that will merely be checked.
+//
+// Without this, every managed repository contributes a repo-file:ensure to
+// every plan forever, whether or not anything differs — which both hides real
+// drift in the noise and, under reconcile, makes the plan claim commits to
+// default branches that will never happen.
+func fileNeedsWrite(current remoteFile, desired string, reconcile bool) bool {
+	switch {
+	case !current.exists:
+		return true
+	case !reconcile:
+		// The file is there and we are not tracking drift for it.
+		return false
+	default:
+		return current.content != desired
+	}
+}
+
 // planRepoFiles renders each FileSpec for the given repo (when it matches the
 // Only filter) and returns a list of repo-file:ensure changes. emittedFiles is
 // updated in place so the same path is only emitted once per repo, even when
 // multiple teams reference the same repository.
 //
+// probe, when non-nil, is consulted so files that already match are left out of
+// the plan entirely.
+//
 // signOff, when non-empty, is appended to every commit message as a
 // Signed-off-by trailer. It is applied here rather than at apply time so a dry
 // run shows the message that will actually be committed.
-func planRepoFiles(org, repo, repoKey string, specs []config.FileSpec, signOff string, emittedFiles map[string]bool) ([]util.Change, error) {
+func planRepoFiles(ctx context.Context, probe fileProbe, org, repo, repoKey string, specs []config.FileSpec, signOff string, emittedFiles map[string]bool) ([]util.Change, error) {
 	var out []util.Change
 	for _, spec := range specs {
 		if !templates.MatchesRepo(spec, repo) {
@@ -103,6 +177,17 @@ func planRepoFiles(org, repo, repoKey string, specs []config.FileSpec, signOff s
 		branch := spec.Branch
 		if branch == "" {
 			branch = defaultFileBranch
+		}
+
+		if probe != nil {
+			current, err := probe(ctx, org, repo, spec.Path, branch)
+			if err != nil {
+				return nil, err
+			}
+			if !fileNeedsWrite(current, content, spec.Reconcile) {
+				emittedFiles[dedupeKey] = true
+				continue
+			}
 		}
 
 		out = append(out, util.Change{
