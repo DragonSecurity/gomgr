@@ -153,7 +153,7 @@ func fileNeedsWrite(current remoteFile, desired string, reconcile bool) bool {
 // signOff, when non-empty, is appended to every commit message as a
 // Signed-off-by trailer. It is applied here rather than at apply time so a dry
 // run shows the message that will actually be committed.
-func planRepoFiles(ctx context.Context, probe fileProbe, org, repo, repoKey string, specs []config.FileSpec, signOff string, emittedFiles map[string]bool) ([]util.Change, error) {
+func planRepoFiles(ctx context.Context, probe fileProbe, route fileRouter, org, repo, repoKey string, specs []config.FileSpec, signOff string, emittedFiles map[string]bool) ([]util.Change, error) {
 	var out []util.Change
 	for _, spec := range specs {
 		if !templates.MatchesRepo(spec, repo) {
@@ -190,19 +190,32 @@ func planRepoFiles(ctx context.Context, probe fileProbe, org, repo, repoKey stri
 			}
 		}
 
+		details := map[string]any{
+			"org":       org,
+			"repo":      repo,
+			"path":      spec.Path,
+			"content":   content,
+			"message":   message,
+			"branch":    branch,
+			"reconcile": spec.Reconcile,
+		}
+		scope := "repo-file"
+		if route != nil {
+			decision, err := route(repo, branch)
+			if err != nil {
+				return nil, err
+			}
+			if decision.UsePullRequest {
+				scope = scopeRepoFilePR
+				decision.decorate(details)
+			}
+		}
+
 		out = append(out, util.Change{
-			Scope:  "repo-file",
-			Target: repoKey + ":" + spec.Path,
-			Action: "ensure",
-			Details: map[string]any{
-				"org":       org,
-				"repo":      repo,
-				"path":      spec.Path,
-				"content":   content,
-				"message":   message,
-				"branch":    branch,
-				"reconcile": spec.Reconcile,
-			},
+			Scope:   scope,
+			Target:  repoKey + ":" + spec.Path,
+			Action:  "ensure",
+			Details: details,
 		})
 		emittedFiles[dedupeKey] = true
 	}
@@ -335,4 +348,30 @@ func planCodeownersDeletions(org string, managedRepos map[string]bool, repoNames
 		emittedFiles[dedupeKey] = true
 	}
 	return out
+}
+
+// markFinalPullRequestFiles flags the last pull-request-routed file change for
+// each repository.
+//
+// Several files in one repository share a head branch and therefore one pull
+// request. Auto-merge must only be enabled once the last commit is on that
+// branch, or GitHub could merge the pull request while gomgr is still adding to
+// it — and the rest of the files would silently never land.
+func markFinalPullRequestFiles(changes []util.Change) {
+	lastForRepo := map[string]int{}
+	for i, ch := range changes {
+		if ch.Scope != scopeRepoFilePR {
+			continue
+		}
+		d, ok := ch.Details.(map[string]any)
+		if !ok {
+			continue
+		}
+		lastForRepo[fmt.Sprint(d["org"], "/", d["repo"])] = i
+	}
+	for _, i := range lastForRepo {
+		if d, ok := changes[i].Details.(map[string]any); ok {
+			d["final"] = true
+		}
+	}
 }

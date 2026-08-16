@@ -25,7 +25,7 @@ func newTestClient(t *testing.T, server *httptest.Server) *gh.Client {
 	if err != nil {
 		t.Fatalf("new github client: %v", err)
 	}
-	return &gh.Client{REST: client}
+	return gh.NewClientWithHTTP(client, server.Client(), server.URL+"/graphql")
 }
 
 func TestApplyTeamCreate(t *testing.T) {

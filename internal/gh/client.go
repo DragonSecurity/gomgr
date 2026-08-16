@@ -229,3 +229,13 @@ func (c *Client) DoGraphQL(ctx context.Context, query string, variables map[stri
 
 	return nil
 }
+
+// NewClientWithHTTP builds a Client around an HTTP client the caller already
+// has.
+//
+// DoGraphQL needs that client and the field is unexported, so without this
+// there is no way to construct a GraphQL-capable Client outside this package —
+// which left the GraphQL paths untestable.
+func NewClientWithHTTP(rest *github.Client, httpClient *http.Client, graphQLURL string) *Client {
+	return &Client{REST: rest, httpClient: httpClient, GraphQLURL: graphQLURL}
+}

@@ -87,6 +87,7 @@ func buildDefaultRegistry() *HandlerRegistry {
 	r.Register("team-repo", "grant", precedenceTeamRepoGrant, HandlerFunc(applyTeamRepoGrant))
 	r.Register("team-member", "ensure", precedenceTeamMemberEnsure, HandlerFunc(applyTeamMemberEnsure))
 	r.Register("repo-file", "ensure", precedenceRepoFileEnsure, HandlerFunc(applyRepoFileEnsure))
+	r.Register(scopeRepoFilePR, "ensure", precedenceRepoFileEnsure, HandlerFunc(applyRepoFilePullRequest))
 	r.Register("repo-topics", "ensure", precedenceRepoTopicsEnsure, HandlerFunc(applyRepoTopicsEnsure))
 	r.Register("repo-template", "ensure", precedenceRepoTemplateEnsure, HandlerFunc(applyRepoTemplateEnsure))
 	r.Register("repo-pin", "ensure", precedenceRepoPinEnsure, HandlerFunc(applyRepoPinEnsure))
