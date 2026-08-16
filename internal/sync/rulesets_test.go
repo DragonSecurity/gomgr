@@ -493,7 +493,15 @@ func TestApplyOrgRulesetUpsert(t *testing.T) {
 			if r.Method == http.MethodPost && r.URL.Path == "/orgs/myorg/rulesets" {
 				_ = json.NewDecoder(r.Body).Decode(&gotBody)
 				w.WriteHeader(http.StatusCreated)
-				_ = json.NewEncoder(w).Encode(map[string]any{"id": 1, "name": "baseline"})
+				// Echo the ruleset back, as the real endpoint does — the apply
+				// verifies the response against what it asked for.
+				echo := map[string]any{}
+				for k, v := range gotBody {
+					echo[k] = v
+				}
+				echo["id"] = 1
+				echo["source_type"] = "Organization"
+				_ = json.NewEncoder(w).Encode(echo)
 				return
 			}
 			http.NotFound(w, r)
@@ -522,7 +530,11 @@ func TestApplyOrgRulesetUpsert(t *testing.T) {
 		var hit string
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			hit = r.Method + " " + r.URL.Path
-			_ = json.NewEncoder(w).Encode(map[string]any{"id": 99, "name": "baseline"})
+			var sent map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&sent)
+			sent["id"] = 99
+			sent["source_type"] = "Organization"
+			_ = json.NewEncoder(w).Encode(sent)
 		}))
 		defer server.Close()
 
@@ -815,5 +827,71 @@ func TestDroppingABypassActorIsDetected(t *testing.T) {
 	}
 	if same {
 		t.Error("removing a bypass actor is a change and must be planned as one")
+	}
+}
+
+// TestApplyFailsWhenGitHubDoesNotApplyTheChange covers an accepted request that
+// did not take effect.
+//
+// This is the failure a pipeline cannot see for itself: the API returns 200,
+// gomgr reports success, and a chain that treats a successful apply as proof
+// ticks the change green — while the next plan shows it again, for ever. It has
+// to fail here, so the run that claimed to make the change is the run that
+// reports it did not.
+func TestApplyFailsWhenGitHubDoesNotApplyTheChange(t *testing.T) {
+	// The config asks for no bypass actors; GitHub answers still carrying one.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var sent map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&sent)
+		sent["id"] = 99
+		sent["source_type"] = "Organization"
+		sent["bypass_actors"] = []any{
+			map[string]any{"actor_id": 4242, "actor_type": "Integration", "bypass_mode": "always"},
+		}
+		_ = json.NewEncoder(w).Encode(sent)
+	}))
+	defer server.Close()
+
+	spec, err := config.RulesetConfig{Name: "require-dco", Preset: config.PresetRequireDCO}.Resolve()
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	ch := util.Change{
+		Scope:   scopeOrgRuleset,
+		Target:  "require-dco",
+		Action:  "update",
+		Details: rulesetChange{Org: "myorg", ID: 99, Name: "require-dco", Spec: spec},
+	}
+
+	err = applyOrgRulesetUpsert(context.Background(), newTestClient(t, server), ch)
+	if err == nil {
+		t.Fatal("a change GitHub did not apply must be reported as a failure, not a success")
+	}
+	if !strings.Contains(err.Error(), "did not take effect") {
+		t.Errorf("error should say the change did not take effect, got: %v", err)
+	}
+}
+
+func TestApplySucceedsWhenGitHubAppliesTheChange(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var sent map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&sent)
+		sent["id"] = 99
+		sent["source_type"] = "Organization"
+		_ = json.NewEncoder(w).Encode(sent)
+	}))
+	defer server.Close()
+
+	spec, err := config.RulesetConfig{Name: "require-dco", Preset: config.PresetRequireDCO}.Resolve()
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	ch := util.Change{
+		Scope:   scopeOrgRuleset,
+		Action:  "update",
+		Details: rulesetChange{Org: "myorg", ID: 99, Name: "require-dco", Spec: spec},
+	}
+	if err := applyOrgRulesetUpsert(context.Background(), newTestClient(t, server), ch); err != nil {
+		t.Fatalf("an echoed-back ruleset must verify clean: %v", err)
 	}
 }
