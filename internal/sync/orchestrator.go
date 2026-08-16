@@ -25,6 +25,7 @@ type State struct {
 	CurrentRepos       int
 	CurrentRepoPerms   int
 	CurrentCustomRoles int
+	CurrentRulesets    int
 
 	// Desired state from config
 	DesiredTeams       int
@@ -32,6 +33,7 @@ type State struct {
 	DesiredRepos       int
 	DesiredRepoPerms   int
 	DesiredCustomRoles int
+	DesiredRulesets    int
 }
 
 func BuildPlan(ctx context.Context, c *gh.Client, cfg *config.Root) (util.Plan, error) {
@@ -64,6 +66,18 @@ func BuildPlan(ctx context.Context, c *gh.Client, cfg *config.Root) (util.Plan, 
 		return plan, fmt.Errorf("plan repo permissions: %w", err)
 	}
 
+	// Rulesets are planned after repo permissions so that ManagedRepos and the
+	// resolved repo settings reflect what this run will create.
+	orgRulesetChanges, orgRulesetWarnings, err := planOrgRulesets(ctx, c, cfg, st)
+	if err != nil {
+		return plan, fmt.Errorf("plan org rulesets: %w", err)
+	}
+
+	repoRulesetChanges, repoRulesetWarnings, err := planRepoRulesets(ctx, c, cfg, st)
+	if err != nil {
+		return plan, fmt.Errorf("plan repo rulesets: %w", err)
+	}
+
 	cleanupChanges, warnings, err := planCleanups(ctx, c, cfg, st, desiredBySlug)
 	if err != nil {
 		return plan, fmt.Errorf("plan cleanups: %w", err)
@@ -78,9 +92,13 @@ func BuildPlan(ctx context.Context, c *gh.Client, cfg *config.Root) (util.Plan, 
 	plan.Changes = append(plan.Changes, teamChanges...)
 	plan.Changes = append(plan.Changes, memChanges...)
 	plan.Changes = append(plan.Changes, repoChanges...)
+	plan.Changes = append(plan.Changes, orgRulesetChanges...)
+	plan.Changes = append(plan.Changes, repoRulesetChanges...)
 	plan.Changes = append(plan.Changes, cleanupChanges...)
 	plan.Changes = append(plan.Changes, customRoleCleanups...)
 	plan.Warnings = append(warnings, roleWarnings...)
+	plan.Warnings = append(plan.Warnings, orgRulesetWarnings...)
+	plan.Warnings = append(plan.Warnings, repoRulesetWarnings...)
 
 	// Populate stats
 	plan.Stats = &util.StateStats{
@@ -103,6 +121,10 @@ func BuildPlan(ctx context.Context, c *gh.Client, cfg *config.Root) (util.Plan, 
 		CustomRoles: util.StatePair{
 			Current: st.CurrentCustomRoles,
 			Desired: st.DesiredCustomRoles,
+		},
+		Rulesets: util.StatePair{
+			Current: st.CurrentRulesets,
+			Desired: st.DesiredRulesets,
 		},
 	}
 

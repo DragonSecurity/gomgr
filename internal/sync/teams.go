@@ -46,11 +46,20 @@ const (
 	precedenceRepoTopicsEnsure   = 45
 	precedenceRepoTemplateEnsure = 46
 	precedenceRepoPinEnsure      = 47
-	precedenceRepoFileDelete     = 80
-	precedenceOrgMemberRemove    = 85
-	precedenceTeamDelete         = 90
-	precedenceRepoDelete         = 90
-	precedenceCustomRoleDelete   = 95
+	// Rulesets go on last of the mutating changes. A guard rail that requires a
+	// pull request would otherwise reject the file writes above it, which push
+	// straight to the default branch in the same run.
+	precedenceOrgRulesetCreate  = 60
+	precedenceOrgRulesetUpdate  = 60
+	precedenceRepoRulesetCreate = 62
+	precedenceRepoRulesetUpdate = 62
+	precedenceRepoFileDelete    = 80
+	precedenceOrgMemberRemove   = 85
+	precedenceOrgRulesetDelete  = 86
+	precedenceRepoRulesetDelete = 86
+	precedenceTeamDelete        = 90
+	precedenceRepoDelete        = 90
+	precedenceCustomRoleDelete  = 95
 )
 
 const (
@@ -75,6 +84,7 @@ type repoSettings struct {
 	from       string
 	visibility string // "", "public", "private", or "internal"
 	codeowners []string
+	rulesets   []config.RulesetConfig
 }
 
 var validVisibilities = map[string]bool{
@@ -174,6 +184,14 @@ func parseRepoConfig(val any) (repoSettings, error) {
 			return settings, fmt.Errorf("visibility must be a string, got %T", m["visibility"])
 		}
 
+		if raw, has := m["rulesets"]; has {
+			rulesets, err := config.ParseRulesets(raw)
+			if err != nil {
+				return settings, err
+			}
+			settings.rulesets = rulesets
+		}
+
 		if raw, has := m["codeowners"]; has {
 			items, ok := raw.([]any)
 			if !ok {
@@ -271,6 +289,21 @@ func resolveTemplate(_ string, settings repoSettings, allRepos map[string]repoSe
 		if !ownerSet[co] {
 			ownerSet[co] = true
 			result.codeowners = append(result.codeowners, co)
+		}
+	}
+
+	// Merge rulesets by name: the template supplies the guard rails, and a
+	// repo-specific ruleset of the same name replaces the template's version
+	// rather than being added alongside it (GitHub would enforce both).
+	result.rulesets = nil
+	rulesetSeen := map[string]bool{}
+	for _, rs := range settings.rulesets {
+		rulesetSeen[strings.ToLower(rs.Name)] = true
+		result.rulesets = append(result.rulesets, rs)
+	}
+	for _, rs := range templateSettings.rulesets {
+		if !rulesetSeen[strings.ToLower(rs.Name)] {
+			result.rulesets = append(result.rulesets, rs)
 		}
 	}
 

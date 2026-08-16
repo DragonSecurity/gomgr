@@ -42,6 +42,20 @@ The gomgr agent can:
   - Warn about unmanaged custom roles
   - Support fine-grained permissions for specialized access patterns
 
+- **Rulesets (guard rails)**
+  - Manage organization-wide rulesets from `org.yaml` and repository-specific
+    rulesets from a repository entry in `teams/*.yaml`
+  - Built-in presets for the common guard rails: `branch-protection`,
+    `strict-branch-protection`, `tag-protection`, `no-force-push`,
+    `require-signed-commits`, `require-dco`, `no-committed-keys`
+  - Branch, tag and push targets, with `active`, `evaluate` (report-only) and
+    `disabled` enforcement
+  - Bypass actors resolved from team slugs, GitHub App IDs (`app: self` for
+    gomgr's own app) and repository role IDs
+  - Delete unmanaged rulesets (optional); warn about them
+  - Offline validation via `gomgr validate` catches bad presets, invalid
+    enumerations and rules used on the wrong target before GitHub does
+
 - **Synchronization**
   - Idempotent apply: safe to run repeatedly
   - Dry-run mode for safe planning before applying changes
@@ -75,8 +89,9 @@ The agent performs operations in the following order:
 7. **Write Files** - Optionally injects default README and `.github/renovate.json` into repos
 8. **Set Topics** - Applies topics/labels to repositories for organization
 9. **Pin Repos** - Attempts to pin repositories (warning issued due to API limitation)
-10. **Cleanups** - Optionally removes unmanaged resources (teams, members, repositories)
-11. **Delete Custom Roles** - Optionally removes unmanaged custom roles (if configured)
+10. **Apply Rulesets** - Creates/updates organization then repository rulesets. These go on *after* the file writes above, because a ruleset requiring a pull request would otherwise reject gomgr's own pushes to the default branch in the same run
+11. **Cleanups** - Optionally removes unmanaged resources (teams, members, repositories, rulesets)
+12. **Delete Custom Roles** - Optionally removes unmanaged custom roles (if configured)
 
 ## CI/CD Automation
 
@@ -139,9 +154,11 @@ Defines the target organization, authentication method, and behavioral flags:
 - Default README injection (optional)
 
 ### `org.yaml` - Organization Metadata
-Defines organization owners and custom repository roles (GitHub Enterprise Cloud):
+Defines organization owners, custom repository roles (GitHub Enterprise Cloud)
+and organization-wide rulesets:
 - List of organization owners
 - Custom repository role definitions with base roles and permissions
+- Ruleset definitions: the guard rails every matching repository inherits
 
 ### `teams/*.yaml` - Team Definitions
 Each file defines a team with:
@@ -158,6 +175,9 @@ Each file defines a team with:
       pinned: true
       template: true
       from: template-repo  # inherit from template
+      rulesets:            # repository-specific guard rails
+        - name: locked-down-main
+          preset: strict-branch-protection
     ```
 
 ## Agent Safety Features
@@ -167,6 +187,8 @@ Each file defines a team with:
 - **Idempotent Operations**: Safe to run multiple times without side effects
 - **Least Privilege**: GitHub App authentication with minimal required permissions
 - **Fail-safe Warnings**: Alerts about unmanaged resources before cleanup
+- **Self-lockout Detection**: Warns when a ruleset would reject gomgr's own file-sync pushes, before the sync runs into it
+- **Report-only Rulesets**: `enforcement: evaluate` records what a new guard rail would have blocked without blocking it
 
 ## Agent Observability
 

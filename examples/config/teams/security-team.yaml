@@ -41,7 +41,23 @@ repositories:
       - security
       - vulnerabilities
       - private
-  
+    # Repository-specific rulesets stack on top of the organization's. GitHub
+    # evaluates every ruleset that matches and enforces the strictest outcome,
+    # so this tightens the org baseline for one repository rather than
+    # replacing it.
+    rulesets:
+      - name: locked-down-main
+        preset: strict-branch-protection
+        bypass_actors:
+          - type: Team
+            team: security-team
+            mode: pull_request
+
+      # Refuse pushes carrying private keys outright, rather than finding them
+      # in a secret-scanning alert afterwards.
+      - name: no-committed-keys
+        preset: no-committed-keys
+
   # Admin access to security policies
   security-policies:
     permission: admin

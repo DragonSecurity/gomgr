@@ -73,9 +73,17 @@ func (r *Root) Validate() error {
 		if !validPrivacy[t.Privacy] {
 			return fmt.Errorf("team %q has invalid privacy %q (must be closed or secret)", t.Name, t.Privacy)
 		}
-		for repo := range t.Repositories {
+		for repo, val := range t.Repositories {
 			if err := validateRepoName(repo); err != nil {
 				return fmt.Errorf("team %q: %w", t.Name, err)
+			}
+			rulesets, err := repoRulesets(val)
+			if err != nil {
+				return fmt.Errorf("team %q, repo %q: %w", t.Name, repo, err)
+			}
+			where := fmt.Sprintf("team %q, repo %q", t.Name, repo)
+			if err := ValidateRulesets(ScopeRepo, where, rulesets); err != nil {
+				return err
 			}
 		}
 		for _, u := range t.Maintainers {
@@ -102,10 +110,45 @@ func (r *Root) Validate() error {
 			return fmt.Errorf("org owner: %w", err)
 		}
 	}
+	if err := ValidateRulesets(ScopeOrg, "org.yaml", r.Org.Rulesets); err != nil {
+		return err
+	}
 	if err := validateFileSpecs(r.App.Files); err != nil {
 		return err
 	}
 	return nil
+}
+
+// repoRulesets pulls the `rulesets:` block out of a repository entry in
+// teams/*.yaml. Repository entries are held as untyped YAML because they accept
+// either a bare permission string or a settings map, so the block has to be
+// fished out and decoded rather than unmarshaled into a struct directly.
+func repoRulesets(val any) ([]RulesetConfig, error) {
+	m, ok := asStringMap(val)
+	if !ok {
+		return nil, nil
+	}
+	raw, has := m["rulesets"]
+	if !has {
+		return nil, nil
+	}
+	return ParseRulesets(raw)
+}
+
+// asStringMap normalizes the two map shapes yaml.v3 can produce into one.
+func asStringMap(v any) (map[string]any, bool) {
+	switch m := v.(type) {
+	case map[string]any:
+		return m, true
+	case map[any]any:
+		out := make(map[string]any, len(m))
+		for k, val := range m {
+			out[fmt.Sprint(k)] = val
+		}
+		return out, true
+	default:
+		return nil, false
+	}
 }
 
 // validateFileSpecs ensures every templated file has a path and content and

@@ -14,13 +14,14 @@ A fast, idempotent **GitHub Organization Manager** written in Go. Define your or
 - ✅ YAML-driven org config (`app.yaml`, `org.yaml`, `teams/*.yaml`)
 - ✅ Teams, maintainers, members (idempotent add/update)
 - ✅ Repo permission grants (pull/triage/push/maintain/admin)
+- ✅ **Rulesets**: org-wide and repo-specific guard rails (branch protection, tag protection, push rules) with built-in presets — see [Rulesets & guard rails](#rulesets--guard-rails)
 - ✅ **Custom repository roles**: fully managed - define in YAML, gomgr creates/updates them (GitHub Enterprise Cloud)
 - ✅ **Repository topics**: add topics/labels to repositories for organization
 - ✅ **Repository pinning**: pin important repositories to organization profile (⚠️ *GitHub API limitation: not currently supported for organizations - configuration accepted but manual pinning required via web UI*)
 - ✅ **Optional**: create repos that don’t exist (`create_repo: true`)
 - ✅ **Optional**: inject `.github/renovate.json` into repos
-- ✅ Warnings & cleanups: unmanaged teams, members without team, unmanaged repos, unmanaged custom roles
-- ✅ **Optional** hard cleanups: delete unmanaged teams, remove members without team, delete unmanaged repos, delete unmanaged custom roles
+- ✅ Warnings & cleanups: unmanaged teams, members without team, unmanaged repos, unmanaged custom roles, unmanaged rulesets
+- ✅ **Optional** hard cleanups: delete unmanaged teams, remove members without team, delete unmanaged repos, delete unmanaged custom roles, delete unmanaged rulesets
 - ✅ Auth: GitHub App (recommended) or PAT
 - ✅ `--dry` plan with **state comparison** showing current GitHub state vs desired config state
 - ✅ Cross‑platform binaries via GitHub Releases; `gomgr version` stamped at build
@@ -126,12 +127,14 @@ dry_warnings:
   warn_members_without_any_team: true
   warn_unmanaged_repos: true         # warn about repos not defined in any team
   warn_unmanaged_custom_roles: true  # warn about custom roles not in org.yaml
+  warn_unmanaged_rulesets: true      # warn about rulesets not defined in YAML
 
 # Optional enforcement / extras:
 remove_members_without_team: true   # remove org members not in any team
 delete_unconfigured_teams: true     # delete teams not defined in YAML
 delete_unmanaged_repos: false       # delete repos not defined in any team (DESTRUCTIVE!)
 delete_unmanaged_custom_roles: false # delete custom roles not in org.yaml (DESTRUCTIVE!)
+delete_unmanaged_rulesets: false    # delete rulesets not in YAML (removes guard rails!)
 create_repo: true                   # create repos if missing when referenced by teams
 
 # Sign every commit gomgr writes with a Signed-off-by trailer. Required when
@@ -243,6 +246,9 @@ custom_roles:
       - edit_releases
       - manage_environments
 ```
+
+`org.yaml` is also where organization-wide **rulesets** live — see
+[Rulesets & guard rails](#rulesets--guard-rails) below.
 
 **Available Permissions** (partial list - see [GitHub Docs](https://docs.github.com/en/enterprise-cloud@latest/rest/orgs/custom-roles#list-repository-fine-grained-permissions-for-an-organization) for full list):
 - Actions: `write_actions`, `read_actions_variables`, `write_actions_variables`
@@ -412,6 +418,186 @@ gomgr supports marking repositories as templates and referencing them from other
 **Limitations:**
 - Currently only supports same-organization templates
 - Cross-organization template references are not yet supported
+
+---
+
+## Rulesets & guard rails
+
+Rulesets are GitHub's successor to branch protection, and gomgr manages them the
+same way it manages everything else: declaratively, idempotently, and with a
+`--dry` plan you can read before anything changes.
+
+They come in two scopes, and **both apply at once** — GitHub evaluates every
+ruleset that matches a push and enforces the strictest outcome, so a repository
+ruleset tightens the org baseline rather than replacing it:
+
+| Scope | Declared in | Covers |
+| --- | --- | --- |
+| Organization | `org.yaml` → `rulesets:` | Every repository the `repository_name` condition matches |
+| Repository | `teams/*.yaml` → a repo's `rulesets:` | That repository alone |
+
+### Presets
+
+A preset is a named guard rail. Reference one and you get its target,
+conditions and rules without restating them:
+
+| Preset | What it enforces |
+| --- | --- |
+| `branch-protection` | Default branch: no deletion, no force-push, changes via a pull request with 1 approval, stale reviews dismissed, review threads resolved |
+| `strict-branch-protection` | The same, tightened: 2 approvals, code-owner review, last-push approval, linear history |
+| `tag-protection` | Tags cannot be moved or deleted |
+| `no-force-push` | Every branch is append-only. The minimum guard rail if you are not ready to require reviews |
+| `require-signed-commits` | Every commit on the default branch carries a verified signature |
+| `require-dco` | Commit messages must contain `Signed-off-by:`, enforced at the ref rather than by a pull-request check |
+| `no-committed-keys` | Push rule rejecting `.pem`, `.key`, `.p12`, `.pfx`, `.jks`, `.keystore`, `.ppk` |
+
+Anything you set alongside a preset wins, **at whole-rule granularity**: naming
+a rule key replaces the preset's version of that rule outright rather than
+merging into it field by field. Setting a boolean rule to `false` switches the
+preset's version off.
+
+```yaml
+# org.yaml
+rulesets:
+  - name: default-branch-protection
+    preset: branch-protection
+    conditions:
+      repository_name:
+        include: ["~ALL"]
+        exclude: ["sandbox-*"]
+    bypass_actors:
+      - type: Integration
+        app: self          # gomgr's own GitHub App — see the warning below
+        mode: always
+
+  # Same preset, two approvals instead of one, only on production services.
+  - name: production-branch-protection
+    preset: branch-protection
+    conditions:
+      repository_name:
+        include: ["svc-*"]
+    rules:
+      pull_request:
+        required_approving_review_count: 2
+        require_code_owner_review: true
+        required_review_thread_resolution: true
+```
+
+```yaml
+# teams/security-team.yaml
+repositories:
+  vulnerability-reports:
+    permission: admin
+    rulesets:
+      - name: locked-down-main
+        preset: strict-branch-protection
+      - name: no-committed-keys
+        preset: no-committed-keys
+```
+
+### ⚠️ Do not lock gomgr out of its own repositories
+
+gomgr commits templated files (`app.files`, CODEOWNERS, `renovate.json`)
+straight to the default branch. A ruleset that requires a pull request or
+signed commits on that branch **rejects those pushes**. Either exempt the app:
+
+```yaml
+bypass_actors:
+  - type: Integration
+    app: self       # resolves to app.app_id; requires GitHub App auth, not a PAT
+    mode: always
+```
+
+…or scope the ruleset away from the repositories gomgr writes to. gomgr raises
+this as a plan warning when it spots the combination, so `--dry` tells you
+before the sync does.
+
+### Rolling a guard rail out safely
+
+Set `enforcement: evaluate` to have GitHub record what *would* have been blocked
+without blocking it. Read the ruleset's insights page, then flip to `active`.
+
+```yaml
+  - name: require-ci-green
+    target: branch
+    enforcement: evaluate     # active | evaluate | disabled
+    conditions:
+      ref_name:
+        include: ["~DEFAULT_BRANCH"]
+      repository_name:
+        include: ["~ALL"]
+    rules:
+      required_status_checks:
+        strict: true
+        checks:
+          - context: build
+          - context: test
+```
+
+### Reference
+
+**Ruleset fields**
+
+| Field | Notes |
+| --- | --- |
+| `name` | Required. Also the identity gomgr matches on, case-insensitively |
+| `preset` | Optional built-in guard rail (table above) |
+| `target` | `branch` (default), `tag`, or `push` |
+| `enforcement` | `active` (default), `evaluate`, or `disabled` |
+| `conditions.ref_name` | `include` / `exclude` fnmatch patterns, plus `~ALL` and `~DEFAULT_BRANCH`. Defaults to `~ALL`; not used by push rulesets |
+| `conditions.repository_name` | `include` / `exclude` / `protected`. Organization rulesets only; defaults to `~ALL` |
+| `bypass_actors` | Who may bypass. Compared exactly — an actor nobody configured is removed |
+| `rules` | The rules themselves |
+
+**Bypass actors**
+
+```yaml
+bypass_actors:
+  - type: Team
+    team: platform-team       # slug, resolved to a team ID
+    mode: pull_request        # always | pull_request (default always)
+  - type: Integration
+    app: self                 # "self" or a numeric GitHub App ID
+  - type: RepositoryRole
+    actor_id: 5               # role ID from the repository-roles API
+  # Identified by type alone — these take no ID:
+  - type: OrganizationAdmin
+  - type: EnterpriseOwner
+  - type: DeployKey
+```
+
+`OrganizationAdmin`, `EnterpriseOwner` and `DeployKey` are recognized by their
+type; GitHub reports them with no `actor_id` and gomgr sends none. `Team`,
+`Integration` and `RepositoryRole` each need an identity — a slug, an app, or a
+role ID respectively.
+
+Role IDs are not guessable and gomgr does not map role names to them; read the
+IDs your organization actually uses from the
+[repository roles API](https://docs.github.com/en/rest/orgs/custom-roles).
+
+**Rules**
+
+Branch and tag targets: `creation`, `update`, `deletion`,
+`required_linear_history`, `required_signatures`, `non_fast_forward`,
+`pull_request`, `required_status_checks`, `required_deployments`, `merge_queue`,
+`commit_message_pattern`, `commit_author_email_pattern`,
+`committer_email_pattern`, `branch_name_pattern`, `tag_name_pattern`,
+`workflows`, `code_scanning`.
+
+Push target: `file_extension_restriction`, `file_path_restriction`,
+`max_file_path_length`, `max_file_size`. Push rulesets need GitHub Enterprise
+Cloud on private repositories.
+
+`gomgr validate -c <config>` checks all of this offline — unknown presets,
+invalid enumerations, duplicate names, and rules used on the wrong target — so
+you find mistakes before GitHub answers with an opaque 422.
+
+### Cleanup
+
+`warn_unmanaged_rulesets: true` reports rulesets that exist on GitHub but are
+not in your YAML. `delete_unmanaged_rulesets: true` removes them. Rulesets
+inherited from the organization or an enterprise are never touched at the
+repository scope — they are not that scope's to delete.
 
 ---
 
