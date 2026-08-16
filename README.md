@@ -39,7 +39,7 @@ gomgr version
 
 ### Option 2 — Build from source
 ```bash
-go build -trimpath -buildvcs=true -ldflags "-s -w -X github.com/DragonSecurity/github-org-manager-go/internal/version.Version=$(git describe --tags --always --dirty)" -o gomgr .
+go build -trimpath -ldflags "-s -X github.com/DragonSecurity/gomgr/internal/version.stamped=$(git describe --tags --always --dirty)" -o gomgr .
 ```
 
 ---
