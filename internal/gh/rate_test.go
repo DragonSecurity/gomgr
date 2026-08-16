@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v88/github"
+	"github.com/google/go-github/v90/github"
 )
 
 func TestRespectRate_Healthy(t *testing.T) {

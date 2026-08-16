@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/go-github/v88/github"
+	"github.com/google/go-github/v90/github"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"

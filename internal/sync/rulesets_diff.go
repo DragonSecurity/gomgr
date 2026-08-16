@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/google/go-github/v88/github"
+	"github.com/google/go-github/v90/github"
 )
 
 // rulesetMatches reports whether the ruleset already on GitHub enforces exactly
