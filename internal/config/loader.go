@@ -99,6 +99,11 @@ func (r *Root) Validate() error {
 			if err := validateRepoName(repo); err != nil {
 				return fmt.Errorf("team %q: %w", t.Name, err)
 			}
+			if m, ok := asStringMap(val); ok {
+				if err := RejectUnknownRepoKeys(m); err != nil {
+					return fmt.Errorf("team %q, repo %q: %w", t.Name, repo, err)
+				}
+			}
 			rulesets, err := repoRulesets(val)
 			if err != nil {
 				return fmt.Errorf("team %q, repo %q: %w", t.Name, repo, err)

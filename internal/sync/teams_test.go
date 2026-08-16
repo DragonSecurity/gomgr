@@ -1126,3 +1126,75 @@ func TestResolveTemplate_CodeownersUnion(t *testing.T) {
 		}
 	}
 }
+
+// TestParseRepoConfigRejectsUnknownKeys covers a misspelled setting.
+//
+// A live configuration wrote "permissions: admin" for a repository. The key was
+// ignored, so no permission was declared, gomgr granted the empty string,
+// GitHub read that as its default of read — and the admins team sat on read
+// access to a repository the configuration said was admin, while gomgr
+// re-granted it on every run and reported success.
+func TestParseRepoConfigRejectsUnknownKeys(t *testing.T) {
+	_, err := parseRepoConfig(map[string]any{"permissions": "admin"})
+	if err == nil {
+		t.Fatal("a key gomgr does not understand must not be ignored")
+	}
+	if !strings.Contains(err.Error(), `"permissions"`) {
+		t.Errorf("error should name the offending key: %v", err)
+	}
+	if !strings.Contains(err.Error(), `did you mean "permission"`) {
+		t.Errorf("error should suggest the intended key: %v", err)
+	}
+}
+
+func TestParseRepoConfigAcceptsEveryKnownKey(t *testing.T) {
+	settings, err := parseRepoConfig(map[string]any{
+		"permission": "push",
+		"topics":     []any{"backend"},
+		"pinned":     true,
+		"template":   false,
+		"from":       "base",
+		"visibility": "private",
+		"codeowners": []any{"@octocat"},
+		"rulesets":   []any{},
+		"settings":   map[string]any{"allow_auto_merge": true},
+	})
+	if err != nil {
+		t.Fatalf("every documented key must be accepted: %v", err)
+	}
+	if settings.permission != "push" || settings.visibility != "private" {
+		t.Errorf("settings = %+v", settings)
+	}
+}
+
+func TestNearestRepoKeySuggestsTheLikelySlip(t *testing.T) {
+	for typo, want := range map[string]string{
+		"permissions": "permission",
+		"permision":   "permission",
+		"topic":       "topics",
+		"visibilty":   "visibility",
+		"ruleset":     "rulesets",
+	} {
+		if got := config.NearestRepoKey(typo); got != want {
+			t.Errorf("config.NearestRepoKey(%q) = %q, want %q", typo, got, want)
+		}
+	}
+	// Something genuinely unrelated gets no misleading suggestion.
+	if got := config.NearestRepoKey("elephant"); got != "" {
+		t.Errorf("nearestRepoKey(elephant) = %q, want no suggestion", got)
+	}
+}
+
+// TestNoGrantWithoutADeclaredPermission covers a repository entry that declares
+// only topics. Granting the empty string is not "leave it alone": GitHub reads
+// it as read, so the grant never converges.
+func TestNoGrantWithoutADeclaredPermission(t *testing.T) {
+	settings, err := parseRepoConfig(map[string]any{"topics": []any{"backend"}})
+	if err != nil {
+		t.Fatalf("topics without a permission is a legitimate entry: %v", err)
+	}
+	if settings.permission != "" {
+		t.Fatalf("permission = %q, want empty", settings.permission)
+	}
+	// planRepoPerms skips the grant for this case; see the guard there.
+}

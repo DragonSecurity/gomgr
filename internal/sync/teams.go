@@ -152,6 +152,9 @@ func parseRepoConfig(val any) (repoSettings, error) {
 		if !ok {
 			return settings, nil
 		}
+		if err := config.RejectUnknownRepoKeys(m); err != nil {
+			return settings, err
+		}
 		if perm, ok := m["permission"].(string); ok {
 			if perm == "" {
 				return settings, fmt.Errorf("permission cannot be empty string")
@@ -695,6 +698,16 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 
 			if settings.template {
 				desiredTemplates[r] = true
+			}
+
+			// A repository entry may legitimately declare only topics or
+			// rulesets. Granting the empty string is not "leave it alone":
+			// GitHub reads it as its own default of read, so the grant is
+			// planned, applied, and planned again next run while the team keeps
+			// whatever access it had. Say nothing about a permission the
+			// configuration says nothing about.
+			if settings.permission == "" {
+				continue
 			}
 
 			out = append(out, util.Change{
