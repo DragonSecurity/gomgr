@@ -123,11 +123,11 @@ func printSpecs(imported []insync.ImportedRuleset) {
 
 func reportSkipped(result *insync.ImportResult) {
 	if result.AlreadyDeclared > 0 {
-		fmt.Printf("%s already declared in your configuration were left alone.\n", plural(result.AlreadyDeclared, "ruleset", "rulesets"))
+		fmt.Printf("Skipped %s already declared in your configuration.\n", plural(result.AlreadyDeclared, "ruleset", "rulesets"))
 	}
 	if len(result.Skipped) > 0 {
-		fmt.Printf("\n%s could not be represented as configuration and were left\n"+
-			"untouched on GitHub:\n", plural(len(result.Skipped), "ruleset", "rulesets"))
+		fmt.Printf("\nLeft %s untouched on GitHub, having no way to express them:\n",
+			plural(len(result.Skipped), "ruleset", "rulesets"))
 		for _, s := range result.Skipped {
 			where := s.Name
 			if s.Repo != "" {
@@ -137,7 +137,7 @@ func reportSkipped(result *insync.ImportResult) {
 		}
 	}
 	if len(result.Unmanaged) > 0 {
-		fmt.Printf("\n%s hold rulesets but appear in no team file, so there is\n"+
+		fmt.Printf("\nFound rulesets on %s that appear in no team file, leaving\n"+
 			"nowhere to write them. Add the repository to a team first:\n", plural(len(result.Unmanaged), "repository", "repositories"))
 		for _, repo := range result.Unmanaged {
 			fmt.Printf("  - %s\n", repo)
@@ -212,11 +212,148 @@ func plural(n int, singular, many string) string {
 	return fmt.Sprintf("%d %s", n, many)
 }
 
+var importTeamsCmd = &cobra.Command{
+	Use:   "teams",
+	Short: "Adopt teams that exist on GitHub but are not in your YAML",
+	Long: `Scan the organization for teams the configuration does not declare and render
+them as team files: name, privacy, description, maintainers, members, and the
+repositories each team reaches with the permission it holds.
+
+This is the command for bringing an organization under management that was
+never under management before. Teams your configuration already declares are
+left alone.
+
+Without --write this only prints what it found. With --write each team is
+written to teams/<slug>.yaml; an existing file of that name is never
+overwritten.`,
+	Example: `  gomgr import teams -c ./config
+  gomgr import teams -c ./config --write`,
+	RunE: func(_ *cobra.Command, _ []string) error {
+		if cfgDir == "" {
+			return fmt.Errorf("--config/-c flag is required")
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		if debug {
+			util.EnableDebug()
+		}
+
+		cfg, err := config.Load(cfgDir)
+		if err != nil {
+			return err
+		}
+		client, err := newClient(ctx, cfg)
+		if err != nil {
+			return err
+		}
+
+		result, err := insync.ImportTeams(ctx, client, cfg)
+		if err != nil {
+			return err
+		}
+		insync.LogTeamImportWarnings(result)
+
+		if !importWrite {
+			printTeamPreview(result)
+			return nil
+		}
+		return writeTeamImport(cfgDir, result)
+	},
+}
+
+func printTeamPreview(result *insync.TeamImportResult) {
+	if result.Total() == 0 {
+		fmt.Println("Nothing to adopt: every team on GitHub is already declared.")
+		reportTeamSkips(result)
+		return
+	}
+
+	fmt.Printf("%s available to adopt.\n\n", plural(result.Total(), "team", "teams"))
+	for _, t := range result.Teams {
+		fmt.Printf("  - %-30s %s, %s, %s\n",
+			t.Config.ResolvedSlug(),
+			plural(len(t.Config.Maintainers), "maintainer", "maintainers"),
+			plural(len(t.Config.Members), "member", "members"),
+			plural(len(t.Config.Repositories), "repository", "repositories"))
+	}
+
+	reportTeamSkips(result)
+	fmt.Println("\nRe-run with --write to create the team files.")
+}
+
+func reportTeamSkips(result *insync.TeamImportResult) {
+	if result.AlreadyDeclared > 0 {
+		fmt.Printf("\nSkipped %s already declared in your configuration.\n",
+			plural(result.AlreadyDeclared, "team", "teams"))
+	}
+	if len(result.Skipped) > 0 {
+		fmt.Printf("\nLeft %s untouched on GitHub, having no way to express them:\n",
+			plural(len(result.Skipped), "team", "teams"))
+		for _, s := range result.Skipped {
+			fmt.Printf("  - %s: %s\n", s.Slug, s.Reason)
+		}
+	}
+	if len(result.Ungranted) == 0 {
+		return
+	}
+
+	// A repository no team reaches is not merely undocumented: under
+	// delete_unmanaged_repos it is what the next sync deletes.
+	if result.DeletionRisk {
+		fmt.Printf("\n⚠  No team reaches %s in this organization, and\n"+
+			"delete_unmanaged_repos is set. THE NEXT SYNC WOULD DELETE THEM:\n",
+			plural(len(result.Ungranted), "repository", "repositories"))
+	} else {
+		fmt.Printf("\nNo team reaches %s, so nothing in your configuration\n"+
+			"covers them:\n", plural(len(result.Ungranted), "repository", "repositories"))
+	}
+	for _, repo := range result.Ungranted {
+		fmt.Printf("  - %s\n", repo)
+	}
+	fmt.Println("Grant them to a team before your next sync.")
+}
+
+func writeTeamImport(dir string, result *insync.TeamImportResult) error {
+	if result.Total() == 0 {
+		fmt.Println("Nothing to adopt: every team on GitHub is already declared.")
+		reportTeamSkips(result)
+		return nil
+	}
+
+	for _, t := range result.Teams {
+		path, err := config.WriteTeamFile(dir, t.Config)
+		if err != nil {
+			return err
+		}
+		rel, relErr := filepath.Rel(dir, path)
+		if relErr != nil {
+			rel = path
+		}
+		fmt.Printf("adopted team %-30s -> %s\n", t.Config.ResolvedSlug(), rel)
+	}
+
+	// Loading the directory proves the new files parse and validate together,
+	// before the user finds out on their next sync.
+	if _, err := config.Load(dir); err != nil {
+		return fmt.Errorf("configuration no longer loads after writing (review with `git status`): %w", err)
+	}
+
+	fmt.Printf("\n%s adopted.\n", plural(result.Total(), "team", "teams"))
+	reportTeamSkips(result)
+	fmt.Println("\nReview with `git status` and `git diff`, then commit and open a pull request.")
+	return nil
+}
+
 func init() {
 	importRulesetsCmd.Flags().BoolVar(&importWrite, "write", false,
 		"Splice the adopted rulesets into the configuration files instead of only printing them")
 	importRulesetsCmd.Flags().StringSliceVar(&importOnly, "only", nil,
 		"Restrict the repository scan to names matching these globs (repeatable)")
+	importTeamsCmd.Flags().BoolVar(&importWrite, "write", false,
+		"Create the team files instead of only printing what was found")
 	importCmd.AddCommand(importRulesetsCmd)
+	importCmd.AddCommand(importTeamsCmd)
 	rootCmd.AddCommand(importCmd)
 }

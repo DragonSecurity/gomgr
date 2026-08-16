@@ -56,6 +56,17 @@ The gomgr agent can:
   - Offline validation via `gomgr validate` catches bad presets, invalid
     enumerations and rules used on the wrong target before GitHub does
 
+- **Adopting Existing State (`gomgr import teams`)**
+  - Renders teams the config does not declare as `teams/<slug>.yaml`: name,
+    description, privacy, maintainers, members, and each team's repository
+    grants with the permission held
+  - Never overwrites an existing team file
+  - Reports team hierarchy rather than writing a `parents:` field gomgr would
+    not act on
+  - Reports repositories no team reaches, and shouts when
+    `delete_unmanaged_repos` means the next sync would delete them
+  - Members and maintainers are sorted, so re-importing produces the same bytes
+
 - **Adopting Existing State (`gomgr import rulesets`)**
   - Scans the organization and every repository — wider than `sync`, which only
     inspects repositories a team file declares
