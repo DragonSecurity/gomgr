@@ -558,11 +558,22 @@ bypass_actors:
     mode: pull_request        # always | pull_request (default always)
   - type: Integration
     app: self                 # "self" or a numeric GitHub App ID
-  - type: OrganizationAdmin
   - type: RepositoryRole
     actor_id: 5               # role ID from the repository-roles API
+  # Identified by type alone — these take no ID:
+  - type: OrganizationAdmin
+  - type: EnterpriseOwner
   - type: DeployKey
 ```
+
+`OrganizationAdmin`, `EnterpriseOwner` and `DeployKey` are recognized by their
+type; GitHub reports them with no `actor_id` and gomgr sends none. `Team`,
+`Integration` and `RepositoryRole` each need an identity — a slug, an app, or a
+role ID respectively.
+
+Role IDs are not guessable and gomgr does not map role names to them; read the
+IDs your organization actually uses from the
+[repository roles API](https://docs.github.com/en/rest/orgs/custom-roles).
 
 **Rules**
 

@@ -105,6 +105,7 @@ func TestBuildBypassActors(t *testing.T) {
 			{Type: "Integration", App: "self"},
 			{Type: "OrganizationAdmin"},
 			{Type: "RepositoryRole", ActorID: 5},
+			{Type: "EnterpriseOwner"},
 		},
 	}
 
@@ -112,8 +113,8 @@ func TestBuildBypassActors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
-	if len(rs.BypassActors) != 4 {
-		t.Fatalf("got %d bypass actors, want 4", len(rs.BypassActors))
+	if len(rs.BypassActors) != 5 {
+		t.Fatalf("got %d bypass actors, want 5", len(rs.BypassActors))
 	}
 
 	want := []struct {
@@ -123,8 +124,11 @@ func TestBuildBypassActors(t *testing.T) {
 	}{
 		{github.BypassActorTypeTeam, 77, github.BypassModePullRequest},
 		{github.BypassActorTypeIntegration, 4242, github.BypassModeAlways},
-		{github.BypassActorTypeOrganizationAdmin, 1, github.BypassModeAlways},
+		// OrganizationAdmin and EnterpriseOwner carry no ID: GitHub identifies
+		// them by type and reports them back without one.
+		{github.BypassActorTypeOrganizationAdmin, 0, github.BypassModeAlways},
 		{github.BypassActorTypeRepositoryRole, 5, github.BypassModeAlways},
+		{github.BypassActorType(config.BypassActorTypeEnterpriseOwner), 0, github.BypassModeAlways},
 	}
 	for i, w := range want {
 		got := rs.BypassActors[i]
@@ -706,5 +710,44 @@ func TestBuildPlanIncludesRulesets(t *testing.T) {
 	}
 	if plan.Stats.Rulesets.Desired != 2 {
 		t.Errorf("desired rulesets = %d, want 2", plan.Stats.Rulesets.Desired)
+	}
+}
+
+// TestIdentityFreeBypassActorsAreIdempotent is a regression test for a bug that
+// only a live organization exposed. gomgr used to send actor_id 1 for an
+// OrganizationAdmin bypass actor. GitHub accepts that and then reports the
+// actor back with no actor_id at all, so the next comparison saw a difference
+// that did not exist and rewrote the ruleset — forever, on every run.
+func TestIdentityFreeBypassActorsAreIdempotent(t *testing.T) {
+	for _, kind := range []string{"OrganizationAdmin", "EnterpriseOwner", "DeployKey"} {
+		t.Run(kind, func(t *testing.T) {
+			spec, err := config.RulesetConfig{
+				Name:         "guarded",
+				Preset:       config.PresetBranchProtection,
+				BypassActors: []config.BypassActorConfig{{Type: kind}},
+			}.Resolve()
+			if err != nil {
+				t.Fatalf("resolve: %v", err)
+			}
+			desired, err := buildRuleset(context.Background(), spec, true, "", testLookup())
+			if err != nil {
+				t.Fatalf("build: %v", err)
+			}
+
+			// This is what GitHub sends back: the type, the mode, no ID.
+			actual := roundTripThroughAPI(t, desired, func(g map[string]any) {
+				g["bypass_actors"] = []any{
+					map[string]any{"actor_type": kind, "bypass_mode": "always"},
+				}
+			})
+
+			same, err := rulesetMatches(actual, desired)
+			if err != nil {
+				t.Fatalf("compare: %v", err)
+			}
+			if !same {
+				t.Errorf("a %s bypass actor reports drift against GitHub's own representation of it", kind)
+			}
+		})
 	}
 }

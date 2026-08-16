@@ -126,7 +126,7 @@ func validateResolvedRuleset(scope RulesetScope, where string, r RulesetConfig) 
 func validateBypassActor(a BypassActorConfig) error {
 	kind := a.NormalizedType()
 	if kind == "" {
-		return fmt.Errorf("invalid type %q (must be Integration, OrganizationAdmin, RepositoryRole, Team or DeployKey)", a.Type)
+		return fmt.Errorf("invalid type %q (must be one of: %s)", a.Type, BypassActorTypeNames())
 	}
 	switch mode := a.BypassMode(); mode {
 	case BypassModeAlways, BypassModePullRequest:

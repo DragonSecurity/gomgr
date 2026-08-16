@@ -313,9 +313,34 @@ func TestBypassActorDefaults(t *testing.T) {
 	if got := a.BypassMode(); got != BypassModeAlways {
 		t.Errorf("BypassMode() = %q, want %q", got, BypassModeAlways)
 	}
-	id, ok := a.FixedActorID()
-	if !ok || id != orgAdminActorID {
-		t.Errorf("FixedActorID() = (%d, %v), want (%d, true)", id, ok, orgAdminActorID)
+	if !a.IdentifiedByTypeAlone() {
+		t.Error("OrganizationAdmin is identified by its type; GitHub reports it with no actor_id")
+	}
+}
+
+func TestBypassActorEnterpriseOwner(t *testing.T) {
+	// Not in go-github's enumeration, but what an enterprise-owned org returns.
+	a := BypassActorConfig{Type: "EnterpriseOwner"}
+	if got := a.NormalizedType(); got != BypassActorTypeEnterpriseOwner {
+		t.Errorf("NormalizedType() = %q, want %q", got, BypassActorTypeEnterpriseOwner)
+	}
+	if !a.IdentifiedByTypeAlone() {
+		t.Error("EnterpriseOwner carries no actor_id")
+	}
+	ruleset := RulesetConfig{
+		Name:         "main",
+		Rules:        RulesetRules{Deletion: boolPtr(true)},
+		BypassActors: []BypassActorConfig{a},
+	}
+	if err := ValidateRulesets(ScopeRepo, "test", []RulesetConfig{ruleset}); err != nil {
+		t.Errorf("EnterpriseOwner should validate: %v", err)
+	}
+}
+
+func TestBypassActorTeamIsNotIdentifiedByTypeAlone(t *testing.T) {
+	a := BypassActorConfig{Type: "Team", Team: "platform"}
+	if a.IdentifiedByTypeAlone() {
+		t.Error("a Team actor needs its ID")
 	}
 }
 

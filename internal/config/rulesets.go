@@ -29,20 +29,40 @@ const (
 const (
 	BypassActorTypeIntegration       = "Integration"
 	BypassActorTypeOrganizationAdmin = "OrganizationAdmin"
+	BypassActorTypeEnterpriseOwner   = "EnterpriseOwner"
 	BypassActorTypeRepositoryRole    = "RepositoryRole"
 	BypassActorTypeTeam              = "Team"
 	BypassActorTypeDeployKey         = "DeployKey"
 )
+
+// bypassActorTypes is the set gomgr recognizes, in the casing the API wants.
+// GitHub has added types over time — EnterpriseOwner is not in go-github's
+// enumeration but is what an enterprise-owned organization actually returns —
+// so treat this list as something that grows rather than as closed.
+var bypassActorTypes = []string{
+	BypassActorTypeIntegration,
+	BypassActorTypeOrganizationAdmin,
+	BypassActorTypeEnterpriseOwner,
+	BypassActorTypeRepositoryRole,
+	BypassActorTypeTeam,
+	BypassActorTypeDeployKey,
+}
+
+// identityFreeBypassActors are the types GitHub identifies by type alone. It
+// reports them with no actor_id at all, so gomgr must not invent one: sending
+// an ID the API then omits from its reply makes every comparison see a
+// difference and rewrite the ruleset on every run.
+var identityFreeBypassActors = map[string]bool{
+	BypassActorTypeOrganizationAdmin: true,
+	BypassActorTypeEnterpriseOwner:   true,
+	BypassActorTypeDeployKey:         true,
+}
 
 // Bypass modes. "pull_request" lets the actor bypass only via a pull request.
 const (
 	BypassModeAlways      = "always"
 	BypassModePullRequest = "pull_request"
 )
-
-// orgAdminActorID is the fixed actor ID GitHub assigns to the OrganizationAdmin
-// bypass actor type; it carries no per-org identity.
-const orgAdminActorID = 1
 
 // RulesetConfig declares a GitHub ruleset — the successor to branch protection,
 // and the mechanism behind org-wide guard rails.
@@ -332,13 +352,7 @@ func (b BypassActorConfig) BypassMode() string {
 // NormalizedType returns the canonical, correctly-cased actor type for the
 // GitHub API, or "" if the configured type is not recognized.
 func (b BypassActorConfig) NormalizedType() string {
-	for _, known := range []string{
-		BypassActorTypeIntegration,
-		BypassActorTypeOrganizationAdmin,
-		BypassActorTypeRepositoryRole,
-		BypassActorTypeTeam,
-		BypassActorTypeDeployKey,
-	} {
+	for _, known := range bypassActorTypes {
 		if strings.EqualFold(b.Type, known) {
 			return known
 		}
@@ -346,11 +360,13 @@ func (b BypassActorConfig) NormalizedType() string {
 	return ""
 }
 
-// FixedActorID returns the actor ID GitHub mandates for actor types that have
-// no per-instance identity, and false for types that need one resolved.
-func (b BypassActorConfig) FixedActorID() (int64, bool) {
-	if b.NormalizedType() == BypassActorTypeOrganizationAdmin {
-		return orgAdminActorID, true
-	}
-	return 0, false
+// IdentifiedByTypeAlone reports whether GitHub recognizes this actor from its
+// type without an ID. Such actors must be sent without one.
+func (b BypassActorConfig) IdentifiedByTypeAlone() bool {
+	return identityFreeBypassActors[b.NormalizedType()]
+}
+
+// BypassActorTypeNames returns the recognized actor types, for error messages.
+func BypassActorTypeNames() string {
+	return strings.Join(bypassActorTypes, ", ")
 }

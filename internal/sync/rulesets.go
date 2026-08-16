@@ -225,6 +225,10 @@ func buildBypassActors(ctx context.Context, actors []config.BypassActorConfig, l
 
 		var id int64
 		switch {
+		// OrganizationAdmin, EnterpriseOwner and DeployKey are identified by
+		// type alone. GitHub reports them with no actor_id, so sending one
+		// would make every later comparison see a difference that is not there.
+		case a.IdentifiedByTypeAlone():
 		case a.ActorID != 0:
 			id = a.ActorID
 		case kind == config.BypassActorTypeTeam:
@@ -239,10 +243,6 @@ func buildBypassActors(ctx context.Context, actors []config.BypassActorConfig, l
 				return nil, fmt.Errorf("bypass actor: %w", err)
 			}
 			id = resolved
-		default:
-			if fixed, ok := a.FixedActorID(); ok {
-				id = fixed
-			}
 		}
 
 		actorType := github.BypassActorType(kind)
