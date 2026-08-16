@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/go-github/v90/github"
+
 	"github.com/DragonSecurity/gomgr/internal/gh"
 	"github.com/DragonSecurity/gomgr/internal/util"
 )
@@ -26,13 +28,43 @@ func applyOrgRulesetUpsert(ctx context.Context, c *gh.Client, ch util.Change) er
 		return err
 	}
 	if d.ID == 0 {
-		if _, _, err := c.REST.Organizations.CreateRepositoryRuleset(ctx, d.Org, *rs); err != nil {
+		created, _, err := c.REST.Organizations.CreateRepositoryRuleset(ctx, d.Org, *rs)
+		if err != nil {
 			return fmt.Errorf("create org ruleset %q in %s: %w", d.Name, d.Org, err)
 		}
-		return nil
+		return verifyRulesetApplied(created, rs, d.Name, d.Org)
 	}
-	if _, _, err := c.REST.Organizations.UpdateRepositoryRuleset(ctx, d.Org, d.ID, *rs); err != nil {
+	updated, _, err := c.REST.Organizations.UpdateRepositoryRuleset(ctx, d.Org, d.ID, *rs)
+	if err != nil {
 		return fmt.Errorf("update org ruleset %q (ID %d) in %s: %w", d.Name, d.ID, d.Org, err)
+	}
+	return verifyRulesetApplied(updated, rs, d.Name, d.Org)
+}
+
+// verifyRulesetApplied checks that the ruleset GitHub returned is the one that
+// was asked for.
+//
+// The create and update endpoints answer with the resulting ruleset, so this
+// costs no extra call — and it closes a gap that is otherwise invisible. An
+// accepted request is not the same as an applied one: a field the request did
+// not manage to express is silently kept as it was, gomgr reports success, and
+// the next plan plans the same change again, for ever.
+//
+// That matters most in a pipeline that treats a successful apply as proof.
+// Reporting success for a change that did not happen is worse than failing,
+// because the failure is what a reviewer would have acted on.
+func verifyRulesetApplied(got, want *github.RepositoryRuleset, name, where string) error {
+	if got == nil {
+		return nil // nothing came back to check against
+	}
+	same, err := rulesetMatches(got, want)
+	if err != nil {
+		return fmt.Errorf("verify ruleset %q on %s: %w", name, where, err)
+	}
+	if !same {
+		return fmt.Errorf("ruleset %q on %s: GitHub accepted the request but the ruleset it returned "+
+			"is not what was asked for, so the change did not take effect and the next plan will show "+
+			"it again", name, where)
 	}
 	return nil
 }
@@ -57,16 +89,19 @@ func applyRepoRulesetUpsert(ctx context.Context, c *gh.Client, ch util.Change) e
 	if err != nil {
 		return err
 	}
+	where := d.Org + "/" + d.Repo
 	if d.ID == 0 {
-		if _, _, err := c.REST.Repositories.CreateRuleset(ctx, d.Org, d.Repo, *rs); err != nil {
-			return fmt.Errorf("create ruleset %q on %s/%s: %w", d.Name, d.Org, d.Repo, err)
+		created, _, err := c.REST.Repositories.CreateRuleset(ctx, d.Org, d.Repo, *rs)
+		if err != nil {
+			return fmt.Errorf("create ruleset %q on %s: %w", d.Name, where, err)
 		}
-		return nil
+		return verifyRulesetApplied(created, rs, d.Name, where)
 	}
-	if _, _, err := c.REST.Repositories.UpdateRuleset(ctx, d.Org, d.Repo, d.ID, *rs); err != nil {
-		return fmt.Errorf("update ruleset %q (ID %d) on %s/%s: %w", d.Name, d.ID, d.Org, d.Repo, err)
+	updated, _, err := c.REST.Repositories.UpdateRuleset(ctx, d.Org, d.Repo, d.ID, *rs)
+	if err != nil {
+		return fmt.Errorf("update ruleset %q (ID %d) on %s: %w", d.Name, d.ID, where, err)
 	}
-	return nil
+	return verifyRulesetApplied(updated, rs, d.Name, where)
 }
 
 func applyRepoRulesetDelete(ctx context.Context, c *gh.Client, ch util.Change) error {

@@ -493,7 +493,15 @@ func TestApplyOrgRulesetUpsert(t *testing.T) {
 			if r.Method == http.MethodPost && r.URL.Path == "/orgs/myorg/rulesets" {
 				_ = json.NewDecoder(r.Body).Decode(&gotBody)
 				w.WriteHeader(http.StatusCreated)
-				_ = json.NewEncoder(w).Encode(map[string]any{"id": 1, "name": "baseline"})
+				// Echo the ruleset back, as the real endpoint does — the apply
+				// verifies the response against what it asked for.
+				echo := map[string]any{}
+				for k, v := range gotBody {
+					echo[k] = v
+				}
+				echo["id"] = 1
+				echo["source_type"] = "Organization"
+				_ = json.NewEncoder(w).Encode(echo)
 				return
 			}
 			http.NotFound(w, r)
@@ -522,7 +530,11 @@ func TestApplyOrgRulesetUpsert(t *testing.T) {
 		var hit string
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			hit = r.Method + " " + r.URL.Path
-			_ = json.NewEncoder(w).Encode(map[string]any{"id": 99, "name": "baseline"})
+			var sent map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&sent)
+			sent["id"] = 99
+			sent["source_type"] = "Organization"
+			_ = json.NewEncoder(w).Encode(sent)
 		}))
 		defer server.Close()
 
@@ -749,5 +761,137 @@ func TestIdentityFreeBypassActorsAreIdempotent(t *testing.T) {
 				t.Errorf("a %s bypass actor reports drift against GitHub's own representation of it", kind)
 			}
 		})
+	}
+}
+
+// TestRemovingEveryBypassActorIsSent covers the case of trimming the last
+// bypass actor out of a configuration.
+//
+// The field is tagged omitzero, so a nil slice vanishes from the request body,
+// and GitHub reads an absent bypass_actors as "leave them alone". The removal
+// would be planned, applied as a no-op, and planned again next run for ever,
+// while the actor stayed exempt — the same shape as the OrganizationAdmin
+// actor_id bug, and just as invisible.
+func TestRemovingEveryBypassActorIsSent(t *testing.T) {
+	spec, err := config.RulesetConfig{Name: "require-dco", Preset: config.PresetRequireDCO}.Resolve()
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	built, err := buildRuleset(context.Background(), spec, true, "", testLookup())
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+
+	if built.BypassActors == nil {
+		t.Fatal("bypass actors must be an empty list, not nil, or the field is dropped from the request")
+	}
+	body, err := json.Marshal(built)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(body), `"bypass_actors":[]`) {
+		t.Errorf("request body must state the empty list explicitly:\n%s", body)
+	}
+}
+
+// TestDroppingABypassActorIsDetected proves the plan notices, so the fix above
+// is reached at all.
+func TestDroppingABypassActorIsDetected(t *testing.T) {
+	withActor, err := config.RulesetConfig{
+		Name:         "require-dco",
+		Preset:       config.PresetRequireDCO,
+		BypassActors: []config.BypassActorConfig{{Type: "Integration", App: "self"}},
+	}.Resolve()
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	live, err := buildRuleset(context.Background(), withActor, true, "", testLookup())
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	onGitHub := roundTripThroughAPI(t, live, nil)
+
+	// The same ruleset with the bypass actor trimmed out of the config.
+	trimmed, err := config.RulesetConfig{Name: "require-dco", Preset: config.PresetRequireDCO}.Resolve()
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	desired, err := buildRuleset(context.Background(), trimmed, true, "", testLookup())
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+
+	same, err := rulesetMatches(onGitHub, desired)
+	if err != nil {
+		t.Fatalf("compare: %v", err)
+	}
+	if same {
+		t.Error("removing a bypass actor is a change and must be planned as one")
+	}
+}
+
+// TestApplyFailsWhenGitHubDoesNotApplyTheChange covers an accepted request that
+// did not take effect.
+//
+// This is the failure a pipeline cannot see for itself: the API returns 200,
+// gomgr reports success, and a chain that treats a successful apply as proof
+// ticks the change green — while the next plan shows it again, for ever. It has
+// to fail here, so the run that claimed to make the change is the run that
+// reports it did not.
+func TestApplyFailsWhenGitHubDoesNotApplyTheChange(t *testing.T) {
+	// The config asks for no bypass actors; GitHub answers still carrying one.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var sent map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&sent)
+		sent["id"] = 99
+		sent["source_type"] = "Organization"
+		sent["bypass_actors"] = []any{
+			map[string]any{"actor_id": 4242, "actor_type": "Integration", "bypass_mode": "always"},
+		}
+		_ = json.NewEncoder(w).Encode(sent)
+	}))
+	defer server.Close()
+
+	spec, err := config.RulesetConfig{Name: "require-dco", Preset: config.PresetRequireDCO}.Resolve()
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	ch := util.Change{
+		Scope:   scopeOrgRuleset,
+		Target:  "require-dco",
+		Action:  "update",
+		Details: rulesetChange{Org: "myorg", ID: 99, Name: "require-dco", Spec: spec},
+	}
+
+	err = applyOrgRulesetUpsert(context.Background(), newTestClient(t, server), ch)
+	if err == nil {
+		t.Fatal("a change GitHub did not apply must be reported as a failure, not a success")
+	}
+	if !strings.Contains(err.Error(), "did not take effect") {
+		t.Errorf("error should say the change did not take effect, got: %v", err)
+	}
+}
+
+func TestApplySucceedsWhenGitHubAppliesTheChange(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var sent map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&sent)
+		sent["id"] = 99
+		sent["source_type"] = "Organization"
+		_ = json.NewEncoder(w).Encode(sent)
+	}))
+	defer server.Close()
+
+	spec, err := config.RulesetConfig{Name: "require-dco", Preset: config.PresetRequireDCO}.Resolve()
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	ch := util.Change{
+		Scope:   scopeOrgRuleset,
+		Action:  "update",
+		Details: rulesetChange{Org: "myorg", ID: 99, Name: "require-dco", Spec: spec},
+	}
+	if err := applyOrgRulesetUpsert(context.Background(), newTestClient(t, server), ch); err != nil {
+		t.Fatalf("an echoed-back ruleset must verify clean: %v", err)
 	}
 }
