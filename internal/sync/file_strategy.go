@@ -13,6 +13,9 @@ import (
 // refAll and refDefaultBranch are GitHub's magic ref selectors.
 const (
 	refSelectorDefaultBranch = "~DEFAULT_BRANCH"
+	// unknownDefaultBranch marks a repository whose default branch gomgr cannot
+	// read because the repository does not exist yet.
+	unknownDefaultBranch = "\x00unknown"
 )
 
 // pushBlockingRule names a rule that stops gomgr committing straight to a
@@ -180,7 +183,11 @@ func (d *routeDecider) rulesetCovers(spec config.RulesetConfig, repoKey, branch 
 	if !matchesSelector(repoKey, repoInclude, repoExclude, "") {
 		return false
 	}
-	return matchesSelector(branch, include, exclude, d.defaultBranch[repoKey])
+	known, seen := d.defaultBranch[repoKey]
+	if !seen {
+		known = unknownDefaultBranch
+	}
+	return matchesSelector(branch, include, exclude, known)
 }
 
 // matchesSelector applies GitHub's include/exclude semantics: a value is
@@ -205,8 +212,15 @@ func selectorMatches(pattern, value, defaultBranch string) bool {
 	case refSelectorAll:
 		return true
 	case refSelectorDefaultBranch:
-		// Only meaningful for refs; an empty defaultBranch means the caller is
-		// matching repository names, where this selector does not apply.
+		if defaultBranch == unknownDefaultBranch {
+			// A repository this run is creating has no default branch to read
+			// yet. Assuming the ruleset does not apply would pick a direct push
+			// that GitHub rejects the moment the repository exists, so assume it
+			// does: the wrong guess costs a pull request, the other costs a 409.
+			return true
+		}
+		// An empty defaultBranch means the caller is matching repository names,
+		// where this selector does not apply.
 		return defaultBranch != "" && strings.EqualFold(defaultBranch, value)
 	}
 	// GitHub writes ref conditions as full refs; accept either spelling.

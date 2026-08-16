@@ -240,3 +240,15 @@ func TestPrintSummary(t *testing.T) {
 		})
 	}
 }
+
+func TestPlanHasChanges(t *testing.T) {
+	if (Plan{}).HasChanges() {
+		t.Error("an empty plan changes nothing")
+	}
+	if (Plan{Warnings: []string{"something"}}).HasChanges() {
+		t.Error("warnings are not changes; a run that only warns has nothing to apply")
+	}
+	if !(Plan{Changes: []Change{{Scope: "team", Action: "create"}}}).HasChanges() {
+		t.Error("a plan with a change has changes")
+	}
+}

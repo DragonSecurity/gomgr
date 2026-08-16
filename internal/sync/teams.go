@@ -43,9 +43,11 @@ const (
 	precedenceTeamRepoGrant      = 20
 	precedenceTeamMemberEnsure   = 30
 	precedenceRepoFileEnsure     = 40
+	precedenceRepoSettingsEnsure = 44
 	precedenceRepoTopicsEnsure   = 45
 	precedenceRepoTemplateEnsure = 46
 	precedenceRepoPinEnsure      = 47
+	precedenceRepoVisibility     = 48
 	// Rulesets go on last of the mutating changes. A guard rail that requires a
 	// pull request would otherwise reject the file writes above it, which push
 	// straight to the default branch in the same run.
@@ -85,6 +87,7 @@ type repoSettings struct {
 	visibility string // "", "public", "private", or "internal"
 	codeowners []string
 	rulesets   []config.RulesetConfig
+	settings   config.RepoSettingsConfig
 }
 
 var validVisibilities = map[string]bool{
@@ -182,6 +185,14 @@ func parseRepoConfig(val any) (repoSettings, error) {
 			settings.visibility = visibility
 		} else if _, has := m["visibility"]; has {
 			return settings, fmt.Errorf("visibility must be a string, got %T", m["visibility"])
+		}
+
+		if raw, has := m["settings"]; has {
+			parsed, err := config.ParseRepoSettings(raw)
+			if err != nil {
+				return settings, err
+			}
+			settings.settings = parsed
 		}
 
 		if raw, has := m["rulesets"]; has {
@@ -861,6 +872,16 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 		}
 		filtered = append(filtered, ch)
 	}
+
+	settingsChanges, settingsWarnings, err := planRepoSettings(ctx, newRepoDetailFetcher(c), cfg, resolvedSettings, existingRepos)
+	if err != nil {
+		return nil, err
+	}
+	filtered = append(filtered, settingsChanges...)
+	visibilityChanges, visibilityWarnings := planRepoVisibility(cfg, resolvedSettings, existingRepos)
+	filtered = append(filtered, visibilityChanges...)
+	st.RepoWarnings = append(st.RepoWarnings, settingsWarnings...)
+	st.RepoWarnings = append(st.RepoWarnings, visibilityWarnings...)
 
 	markFinalPullRequestFiles(filtered)
 	return filtered, nil

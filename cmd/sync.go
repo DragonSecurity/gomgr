@@ -18,7 +18,7 @@ var syncCmd = &cobra.Command{
   gomgr sync -c ./config --dry
   gomgr sync -c ./config --timeout 5m --audit-log
   gomgr sync -c ./config --continue-on-error`,
-	RunE: func(_ *cobra.Command, _ []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		if cfgDir == "" {
 			return fmt.Errorf("--config/-c flag is required")
 		}
@@ -53,6 +53,12 @@ var syncCmd = &cobra.Command{
 		if dryRun {
 			util.PrintSummary(plan)
 			util.Infof("dry-run: no changes applied")
+			if detailedExitCode && plan.HasChanges() {
+				// Silenced by Execute; the plan above is the output that matters.
+				cmd.SilenceUsage = true
+				cmd.SilenceErrors = true
+				return ErrPendingChanges
+			}
 			return nil
 		}
 		return insync.ApplyWithOptions(ctx, client, plan, insync.ApplyOptions{ContinueOnError: continueOnError})

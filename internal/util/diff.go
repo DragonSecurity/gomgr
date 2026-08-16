@@ -26,6 +26,9 @@ type StatePair struct {
 	Desired int `json:"desired"`
 }
 
+// HasChanges reports whether the plan would change anything.
+func (p Plan) HasChanges() bool { return len(p.Changes) > 0 }
+
 type Plan struct {
 	Changes  []Change    `json:"changes"`
 	Warnings []string    `json:"warnings"`
