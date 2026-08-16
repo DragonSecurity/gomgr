@@ -26,6 +26,17 @@ type AppConfig struct {
 	DeleteStaleCodeowners      bool `yaml:"delete_stale_codeowners"`
 	CreateRepo                 bool `yaml:"create_repo"`
 
+	// ReconcileVisibility allows gomgr to change the visibility of a repository
+	// that already exists, and only one that explicitly declares a visibility.
+	//
+	// Off by default, and deliberately a second key rather than something an
+	// org-wide default can trigger. Making a private repository public is the
+	// most damaging thing this tool can do — a deleted repository can be
+	// restored for ninety days, a disclosed one cannot be undisclosed — so it
+	// takes a deliberate edit in two files, and can never happen to thirty-four
+	// repositories because one line changed.
+	ReconcileVisibility bool `yaml:"reconcile_visibility"`
+
 	// SignOff is the identity used for the Signed-off-by trailer appended to
 	// every commit gomgr writes, in "Name <email>" form. Set it when the org
 	// enforces DCO — a ruleset with a commit_message_pattern rule requiring
@@ -76,6 +87,11 @@ type OrgConfig struct {
 	Owners      []string           `yaml:"owners"`
 	CustomRoles []CustomRoleConfig `yaml:"custom_roles,omitempty"`
 
+	// RepoDefaults are the repository settings every managed repository gets
+	// unless its own entry in teams/*.yaml overrides them. Visibility is not
+	// among them on purpose: see AppConfig.ReconcileVisibility.
+	RepoDefaults RepoSettingsConfig `yaml:"repo_defaults,omitempty"`
+
 	// Rulesets declares organization-wide rulesets — the guard rails that
 	// apply across repositories, narrowed by their repository_name conditions.
 	// Repository-specific rulesets live on the repository entry in teams/*.yaml
@@ -94,10 +110,12 @@ type CustomRoleConfig struct {
 }
 
 type RepoConfig struct {
-	Permission string          `yaml:"permission,omitempty"` // pull|triage|push|maintain|admin
-	Topics     []string        `yaml:"topics,omitempty"`
-	Pinned     bool            `yaml:"pinned,omitempty"`
-	Rulesets   []RulesetConfig `yaml:"rulesets,omitempty"`
+	Permission string             `yaml:"permission,omitempty"` // pull|triage|push|maintain|admin
+	Topics     []string           `yaml:"topics,omitempty"`
+	Pinned     bool               `yaml:"pinned,omitempty"`
+	Rulesets   []RulesetConfig    `yaml:"rulesets,omitempty"`
+	Settings   RepoSettingsConfig `yaml:"settings,omitempty"`
+	Visibility string             `yaml:"visibility,omitempty"` // public|private|internal
 }
 
 type TeamConfig struct {

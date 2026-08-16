@@ -233,3 +233,13 @@ func TestRoot_UnknownCommand(t *testing.T) {
 		t.Fatal("expected error for unknown command")
 	}
 }
+
+func TestDetailedExitCodeFlagExists(t *testing.T) {
+	f := rootCmd.PersistentFlags().Lookup("detailed-exitcode")
+	if f == nil {
+		t.Fatal("--detailed-exitcode should be a persistent flag")
+	}
+	if f.DefValue != "false" {
+		t.Errorf("default = %q; the flag must be opt-in so existing pipelines keep their exit codes", f.DefValue)
+	}
+}

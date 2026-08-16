@@ -34,6 +34,9 @@ type State struct {
 	DesiredRepoPerms   int
 	DesiredCustomRoles int
 	DesiredRulesets    int
+
+	// RepoWarnings are advisories raised while planning repository settings.
+	RepoWarnings []string
 }
 
 func BuildPlan(ctx context.Context, c *gh.Client, cfg *config.Root) (util.Plan, error) {
@@ -99,6 +102,7 @@ func BuildPlan(ctx context.Context, c *gh.Client, cfg *config.Root) (util.Plan, 
 	plan.Warnings = append(warnings, roleWarnings...)
 	plan.Warnings = append(plan.Warnings, orgRulesetWarnings...)
 	plan.Warnings = append(plan.Warnings, repoRulesetWarnings...)
+	plan.Warnings = append(plan.Warnings, st.RepoWarnings...)
 
 	// Populate stats
 	plan.Stats = &util.StateStats{

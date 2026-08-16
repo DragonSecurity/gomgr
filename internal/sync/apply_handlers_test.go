@@ -1238,3 +1238,60 @@ func TestPlanCustomRoleCleanups(t *testing.T) {
 		t.Error("expected custom-role:delete change for stale-role")
 	}
 }
+
+// TestApplyTeamUpdateClearsDescription covers removing a team description.
+//
+// planTeams includes "description" only when it differs, so an empty value
+// means "clear it". Treating empty as "nothing to send" left the planner
+// detecting a removal that the apply never made — the same change re-planned on
+// every run while the description stayed put. Observed against a live
+// organization before it was fixed.
+func TestApplyTeamUpdateClearsDescription(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_ = json.NewEncoder(w).Encode(map[string]any{"slug": "platform-team"})
+	}))
+	defer server.Close()
+
+	ch := util.Change{
+		Scope:  "team",
+		Target: "platform-team",
+		Action: "update",
+		Details: map[string]any{
+			"org": "myorg", "slug": "platform-team", "name": "Platform Team",
+			"description": "",
+		},
+	}
+	if err := applyTeamUpdate(context.Background(), newTestClient(t, server), ch); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	desc, present := gotBody["description"]
+	if !present {
+		t.Fatalf("the request must carry the empty description, got %v", gotBody)
+	}
+	if desc != "" {
+		t.Errorf("description = %v, want the empty string", desc)
+	}
+}
+
+func TestApplyTeamUpdateOmitsUnmentionedDescription(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_ = json.NewEncoder(w).Encode(map[string]any{"slug": "platform-team"})
+	}))
+	defer server.Close()
+
+	ch := util.Change{
+		Scope: "team", Action: "update",
+		Details: map[string]any{"org": "myorg", "slug": "platform-team", "name": "Platform Team"},
+	}
+	if err := applyTeamUpdate(context.Background(), newTestClient(t, server), ch); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if _, present := gotBody["description"]; present {
+		t.Error("a change that does not mention the description must not send one")
+	}
+}

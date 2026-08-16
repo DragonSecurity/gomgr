@@ -74,8 +74,12 @@ func applyTeamUpdate(ctx context.Context, c *gh.Client, ch util.Change) error {
 	slug := detailString(d, "slug")
 	name := detailString(d, "name")
 	newTeam := github.NewTeam{Name: name}
-	if dv := detailString(d, "description"); dv != "" {
-		newTeam.Description = github.Ptr(dv)
+	// Presence of the key, not truthiness of the value. planTeams only includes
+	// "description" when it differs, so an empty one means "clear it" — and
+	// skipping it left the planner detecting a removal the apply never sent,
+	// re-planning the same change on every run while the description stayed.
+	if dv, ok := d["description"]; ok {
+		newTeam.Description = github.Ptr(fmt.Sprint(dv))
 	}
 	if pv := detailString(d, "privacy"); pv != "" {
 		newTeam.Privacy = github.Ptr(pv)
