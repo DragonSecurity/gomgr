@@ -602,9 +602,14 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 	// use prefetched repos
 	existing := map[string]bool{}
 	existingRepos := map[string]*github.Repository{}
+	// preexisting records what was on GitHub before this run. `existing` is
+	// marked true as repositories are planned for creation, so it cannot answer
+	// "is there anything there to read yet".
+	preexisting := map[string]bool{}
 	for _, r := range st.ActualRepos {
 		repoName := strings.ToLower(r.GetName())
 		existing[repoName] = true
+		preexisting[repoName] = true
 		existingRepos[repoName] = r
 	}
 
@@ -622,6 +627,16 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 	userFilePaths := map[string]bool{}
 	for _, fs := range fileSpecs {
 		userFilePaths[fs.Path] = true
+	}
+
+	// A repository this run is about to create has nothing to read yet, so it
+	// gets no probe and every file it declares is planned as a write.
+	repoProbe := newFileProbe(c)
+	probeFor := func(repoKey string) fileProbe {
+		if !preexisting[repoKey] {
+			return nil
+		}
+		return repoProbe
 	}
 
 	desiredTopics := map[string][]string{}
@@ -721,7 +736,7 @@ func planRepoPerms(ctx context.Context, c *gh.Client, cfg *config.Root, st *Stat
 			}
 
 			// Emit file changes only once per repo (skip if already emitted from another team)
-			fileChanges, err := planRepoFiles(org, repo, r, fileSpecs, cfg.App.SignOff, emittedFiles)
+			fileChanges, err := planRepoFiles(ctx, probeFor(r), org, repo, r, fileSpecs, cfg.App.SignOff, emittedFiles)
 			if err != nil {
 				return nil, err
 			}
