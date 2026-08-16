@@ -751,3 +751,69 @@ func TestIdentityFreeBypassActorsAreIdempotent(t *testing.T) {
 		})
 	}
 }
+
+// TestRemovingEveryBypassActorIsSent covers the case of trimming the last
+// bypass actor out of a configuration.
+//
+// The field is tagged omitzero, so a nil slice vanishes from the request body,
+// and GitHub reads an absent bypass_actors as "leave them alone". The removal
+// would be planned, applied as a no-op, and planned again next run for ever,
+// while the actor stayed exempt — the same shape as the OrganizationAdmin
+// actor_id bug, and just as invisible.
+func TestRemovingEveryBypassActorIsSent(t *testing.T) {
+	spec, err := config.RulesetConfig{Name: "require-dco", Preset: config.PresetRequireDCO}.Resolve()
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	built, err := buildRuleset(context.Background(), spec, true, "", testLookup())
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+
+	if built.BypassActors == nil {
+		t.Fatal("bypass actors must be an empty list, not nil, or the field is dropped from the request")
+	}
+	body, err := json.Marshal(built)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(body), `"bypass_actors":[]`) {
+		t.Errorf("request body must state the empty list explicitly:\n%s", body)
+	}
+}
+
+// TestDroppingABypassActorIsDetected proves the plan notices, so the fix above
+// is reached at all.
+func TestDroppingABypassActorIsDetected(t *testing.T) {
+	withActor, err := config.RulesetConfig{
+		Name:         "require-dco",
+		Preset:       config.PresetRequireDCO,
+		BypassActors: []config.BypassActorConfig{{Type: "Integration", App: "self"}},
+	}.Resolve()
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	live, err := buildRuleset(context.Background(), withActor, true, "", testLookup())
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	onGitHub := roundTripThroughAPI(t, live, nil)
+
+	// The same ruleset with the bypass actor trimmed out of the config.
+	trimmed, err := config.RulesetConfig{Name: "require-dco", Preset: config.PresetRequireDCO}.Resolve()
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	desired, err := buildRuleset(context.Background(), trimmed, true, "", testLookup())
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+
+	same, err := rulesetMatches(onGitHub, desired)
+	if err != nil {
+		t.Fatalf("compare: %v", err)
+	}
+	if same {
+		t.Error("removing a bypass actor is a change and must be planned as one")
+	}
+}

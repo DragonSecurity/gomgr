@@ -213,9 +213,13 @@ func buildConditions(spec config.RulesetConfig, orgLevel bool) *github.Repositor
 }
 
 func buildBypassActors(ctx context.Context, actors []config.BypassActorConfig, l *refLookup) ([]*github.BypassActor, error) {
-	if len(actors) == 0 {
-		return nil, nil
-	}
+	// Empty but not nil, deliberately. The field is tagged omitzero, so a nil
+	// slice is dropped from the request body entirely — and GitHub reads an
+	// absent bypass_actors as "leave them as they are". Removing the last
+	// bypass actor from a configuration would then be planned as a change,
+	// applied as a no-op, and planned again on the next run, for ever, while
+	// the actor it was trying to remove stayed exempt. Sending [] says what is
+	// meant.
 	out := make([]*github.BypassActor, 0, len(actors))
 	for _, a := range actors {
 		kind := a.NormalizedType()
