@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DragonSecurity/gomgr/internal/config"
 )
 
 func TestMaybeReadPEM_InlineKey(t *testing.T) {
@@ -243,5 +245,67 @@ func TestFirstNonEmpty(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("firstNonEmpty(%q, %q) = %q, want %q", tt.a, tt.b, got, tt.want)
 		}
+	}
+}
+
+func TestMissingAuthErrorNamesTheMissingHalf(t *testing.T) {
+	tests := []struct {
+		name  string
+		appID int64
+		key   string
+		want  []string
+	}{
+		{
+			name: "neither",
+			want: []string{"GITHUB_TOKEN", "--app-id", "--private-key"},
+		},
+		{
+			name: "key without an ID",
+			key:  "/path/to/key.pem",
+			want: []string{"private key was supplied but no App ID", "--app-id", "not a secret"},
+		},
+		{
+			name:  "ID without a key",
+			appID: 1719369,
+			want:  []string{"1719369", "no private key", "--private-key"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := missingAuthError(tt.appID, tt.key)
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			for _, want := range tt.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q should mention %q", err, want)
+				}
+			}
+		})
+	}
+}
+
+func TestNewClientFromEnvRejectsMalformedAppID(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GITHUB_APP_ID", "not-a-number")
+	t.Setenv("GITHUB_APP_PRIVATE_KEY", "")
+
+	_, _, err := NewClientFromEnv(context.Background(), config.AppConfig{Org: "myorg"})
+	if err == nil || !strings.Contains(err.Error(), "GITHUB_APP_ID is not a number") {
+		t.Fatalf("err = %v, want a complaint about the malformed env var", err)
+	}
+}
+
+func TestNewClientFromEnvConfigAppIDBeatsMalformedEnv(t *testing.T) {
+	// The env var is only consulted when nothing else supplied an ID, so a
+	// stale one in the shell must not break a run that passed --app-id.
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GITHUB_APP_ID", "not-a-number")
+	t.Setenv("GITHUB_APP_PRIVATE_KEY", "")
+
+	_, _, err := NewClientFromEnv(context.Background(), config.AppConfig{Org: "myorg", AppID: 42})
+	if err == nil || !strings.Contains(err.Error(), "no private key") {
+		t.Fatalf("err = %v, want it to get past the env var and complain about the key", err)
 	}
 }
