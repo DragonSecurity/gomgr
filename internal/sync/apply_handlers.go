@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v88/github"
+	"github.com/google/go-github/v90/github"
 
 	"github.com/DragonSecurity/gomgr/internal/gh"
 	"github.com/DragonSecurity/gomgr/internal/util"
@@ -145,8 +145,8 @@ func applyRepoEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
 	if templateRef := detailString(d, "from"); templateRef != "" {
 		templateOrg, templateRepo := parseTemplateRef(templateRef, org)
 
-		_, _, err := c.REST.Repositories.CreateFromTemplate(ctx, templateOrg, templateRepo, &github.TemplateRepoRequest{
-			Name:    github.Ptr(name),
+		_, _, err := c.REST.Repositories.CreateFromTemplate(ctx, templateOrg, templateRepo, github.TemplateRepoRequest{
+			Name:    name,
 			Owner:   github.Ptr(org),
 			Private: github.Ptr(private),
 		})

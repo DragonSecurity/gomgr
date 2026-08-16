@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/go-github/v88/github"
+	"github.com/google/go-github/v90/github"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
@@ -191,32 +191,32 @@ func applyCustomRoleChanges(ctx context.Context, c *gh.Client, changes []util.Ch
 
 		switch ch.Scope + ":" + ch.Action {
 		case "custom-role:create":
-			opts := &github.CreateOrUpdateCustomRepoRoleOptions{
-				Name:        github.Ptr(d.Name),
-				BaseRole:    github.Ptr(d.BaseRole),
+			req := github.CreateCustomRepoRoleRequest{
+				Name:        d.Name,
+				BaseRole:    d.BaseRole,
 				Permissions: d.Permissions,
 			}
 			if d.Description != "" {
-				opts.Description = github.Ptr(d.Description)
+				req.Description = github.Ptr(d.Description)
 			}
 
-			_, _, err := c.REST.Organizations.CreateCustomRepoRole(ctx, d.Org, opts)
+			_, _, err := c.REST.Organizations.CreateCustomRepoRole(ctx, d.Org, req)
 			if err != nil {
 				util.Audit(ch.Scope, ch.Target, ch.Action, "error")
 				return fmt.Errorf("create custom role %q: %w", d.Name, err)
 			}
 
 		case "custom-role:update":
-			opts := &github.CreateOrUpdateCustomRepoRoleOptions{
+			req := github.UpdateCustomRepoRoleRequest{
 				Name:        github.Ptr(d.Name),
 				BaseRole:    github.Ptr(d.BaseRole),
 				Permissions: d.Permissions,
 			}
 			if d.Description != "" {
-				opts.Description = github.Ptr(d.Description)
+				req.Description = github.Ptr(d.Description)
 			}
 
-			_, _, err := c.REST.Organizations.UpdateCustomRepoRole(ctx, d.Org, d.ID, opts)
+			_, _, err := c.REST.Organizations.UpdateCustomRepoRole(ctx, d.Org, d.ID, req)
 			if err != nil {
 				util.Audit(ch.Scope, ch.Target, ch.Action, "error")
 				return fmt.Errorf("update custom role %q (ID %d): %w", d.Name, d.ID, err)
