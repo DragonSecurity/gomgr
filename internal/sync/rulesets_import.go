@@ -25,6 +25,18 @@ type ImportedRuleset struct {
 	Spec config.RulesetConfig
 }
 
+// SkippedRuleset is a ruleset the import could not turn into configuration.
+//
+// GitHub's ruleset schema is wider than gomgr's, and grows: a rule or bypass
+// actor type that postdates this build has to land somewhere. One such ruleset
+// must not abort a scan of fifty, so it is reported and passed over — the
+// ruleset itself is left exactly as it is on GitHub.
+type SkippedRuleset struct {
+	Repo   string // "" for an organization ruleset
+	Name   string
+	Reason string
+}
+
 // ImportOptions tunes what ImportRulesets looks at.
 type ImportOptions struct {
 	// Only restricts the repository scan to names matching these path.Match
@@ -43,6 +55,9 @@ type ImportResult struct {
 	// no team file. There is nowhere in the configuration to write their
 	// rulesets until the repository itself is adopted into a team.
 	Unmanaged []string
+	// Skipped lists rulesets that exist but could not be represented as
+	// configuration, with the reason.
+	Skipped []SkippedRuleset
 	// AlreadyDeclared counts rulesets skipped because the configuration
 	// already declares a ruleset of that name at that scope.
 	AlreadyDeclared int
@@ -95,7 +110,12 @@ func ImportRulesets(ctx context.Context, c *gh.Client, cfg *config.Root, opts Im
 			result.AlreadyDeclared++
 			continue
 		}
-		result.Org = append(result.Org, ImportedRuleset{Spec: rulesetToConfig(rs, true, lookup)})
+		spec := rulesetToConfig(rs, true, lookup)
+		if err := config.ValidateRulesets(config.ScopeOrg, "imported", []config.RulesetConfig{spec}); err != nil {
+			result.Skipped = append(result.Skipped, SkippedRuleset{Name: rs.Name, Reason: reasonOf(err)})
+			continue
+		}
+		result.Org = append(result.Org, ImportedRuleset{Spec: spec})
 	}
 
 	declaredByRepo, managed, err := declaredRepoRulesets(cfg, org)
@@ -123,7 +143,12 @@ func ImportRulesets(ctx context.Context, c *gh.Client, cfg *config.Root, opts Im
 				result.AlreadyDeclared++
 				continue
 			}
-			adoptable = append(adoptable, ImportedRuleset{Repo: repo, Spec: rulesetToConfig(rs, false, lookup)})
+			spec := rulesetToConfig(rs, false, lookup)
+			if err := config.ValidateRulesets(config.ScopeRepo, "imported", []config.RulesetConfig{spec}); err != nil {
+				result.Skipped = append(result.Skipped, SkippedRuleset{Repo: repo, Name: rs.Name, Reason: reasonOf(err)})
+				continue
+			}
+			adoptable = append(adoptable, ImportedRuleset{Repo: repo, Spec: spec})
 		}
 		if len(adoptable) == 0 {
 			continue
@@ -137,6 +162,19 @@ func ImportRulesets(ctx context.Context, c *gh.Client, cfg *config.Root, opts Im
 	sort.Strings(result.Unmanaged)
 
 	return result, nil
+}
+
+// reasonOf strips the scope and ruleset-name prefixes ValidateRulesets adds,
+// leaving the part that says what is actually wrong. The caller already knows
+// which ruleset it was asking about.
+func reasonOf(err error) string {
+	msg := err.Error()
+	if _, rest, found := strings.Cut(msg, `ruleset "`); found {
+		if _, detail, ok := strings.Cut(rest, `": `); ok {
+			return detail
+		}
+	}
+	return msg
 }
 
 // matchesAnyGlob reports whether name matches one of the globs, or whether

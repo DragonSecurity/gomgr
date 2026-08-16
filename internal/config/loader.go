@@ -44,10 +44,32 @@ func Load(dir string) (*Root, error) {
 	if r.App.Org == "" {
 		return nil, errors.New("app.org is required")
 	}
+	r.App.PrivateKey = resolvePrivateKeyPath(dir, r.App.PrivateKey)
 	if err := r.Validate(); err != nil {
 		return nil, err
 	}
 	return r, nil
+}
+
+// resolvePrivateKeyPath lets `private_key: ./key.pem` in an app.yaml mean "next
+// to this app.yaml" rather than "next to wherever gomgr happens to be invoked
+// from" — the two only coincide when you run from inside the config directory.
+//
+// The value is returned untouched unless it is a relative path that does not
+// resolve from the working directory but does resolve against dir, so a setup
+// that works today keeps working and only a previously broken one starts to.
+func resolvePrivateKeyPath(dir, key string) string {
+	if key == "" || strings.Contains(key, "BEGIN") || filepath.IsAbs(key) {
+		return key
+	}
+	if _, err := os.Stat(key); err == nil {
+		return key
+	}
+	candidate := filepath.Join(dir, key)
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate
+	}
+	return key
 }
 
 func readYAML(path string, out any) error {

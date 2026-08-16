@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -144,24 +145,6 @@ func TestWriteImportIsIdempotentAgainstItsOwnOutput(t *testing.T) {
 	}
 }
 
-func TestValidateImportRejectsUnroundtrippable(t *testing.T) {
-	// A ruleset whose rules do not survive the trip must be caught before it
-	// reaches disk, not on the next sync.
-	result := &insync.ImportResult{
-		Org: []insync.ImportedRuleset{{Spec: config.RulesetConfig{
-			Name:        "broken",
-			Target:      config.RulesetTargetTag,
-			Enforcement: config.RulesetEnforcementActive,
-			Rules:       config.RulesetRules{PullRequest: &config.PullRequestRule{}},
-		}}},
-		Repos: map[string][]insync.ImportedRuleset{},
-	}
-	err := validateImport(result)
-	if err == nil || !strings.Contains(err.Error(), "round-trip") {
-		t.Fatalf("err = %v, want a round-trip complaint", err)
-	}
-}
-
 func TestWriteImportNothingToDo(t *testing.T) {
 	dir := newImportConfigDir(t)
 	before := readTestFile(t, filepath.Join(dir, "org.yaml"))
@@ -180,4 +163,41 @@ func readTestFile(t *testing.T, path string) string {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(b)
+}
+
+func TestNewClientPrefersFlagsOverConfig(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GITHUB_APP_ID", "")
+	t.Setenv("GITHUB_APP_PRIVATE_KEY", "")
+
+	origID, origKey := appIDFlag, privateKeyFlag
+	t.Cleanup(func() { appIDFlag, privateKeyFlag = origID, origKey })
+
+	cfg := &config.Root{App: config.AppConfig{Org: "myorg", AppID: 1, PrivateKey: "from-config.pem"}}
+	appIDFlag = 99
+	privateKeyFlag = "from-flag.pem"
+
+	// The client build will fail (the key does not exist), but by then the
+	// overrides have been applied, which is what this asserts.
+	_, _ = newClient(context.Background(), cfg)
+
+	if cfg.App.AppID != 99 {
+		t.Errorf("AppID = %d, want the flag's 99", cfg.App.AppID)
+	}
+	if cfg.App.PrivateKey != "from-flag.pem" {
+		t.Errorf("PrivateKey = %q, want the flag's value", cfg.App.PrivateKey)
+	}
+}
+
+func TestNewClientLeavesConfigAloneWithoutFlags(t *testing.T) {
+	origID, origKey := appIDFlag, privateKeyFlag
+	t.Cleanup(func() { appIDFlag, privateKeyFlag = origID, origKey })
+	appIDFlag, privateKeyFlag = 0, ""
+
+	cfg := &config.Root{App: config.AppConfig{Org: "myorg", AppID: 7, PrivateKey: "from-config.pem"}}
+	_, _ = newClient(context.Background(), cfg)
+
+	if cfg.App.AppID != 7 || cfg.App.PrivateKey != "from-config.pem" {
+		t.Errorf("app config = %+v, want it untouched when no flags are set", cfg.App)
+	}
 }

@@ -69,6 +69,23 @@ go build -trimpath -buildvcs=true -ldflags "-s -w -X github.com/DragonSecurity/g
   export GITHUB_TOKEN=<personal-access-token>
   ```
 
+- **App credentials on the command line** — for a config directory shared
+  through a repository, which has nowhere safe to keep a private key:
+  ```bash
+  gomgr sync -c <config> --app-id 1719369 --private-key ~/keys/gomgr.pem
+  ```
+  Credentials resolve in the order **flags → `app.yaml` → environment**, so the
+  committed `app.yaml` can name the org and the behavior flags while CI
+  supplies the secrets and you supply them locally.
+
+  There is deliberately no `--token` flag: an App ID is not a secret and a
+  private key is passed by *path*, but a PAT on `argv` is visible in `ps` and
+  lands in your shell history, so `GITHUB_TOKEN` stays the only way in.
+
+  A relative `private_key:` in `app.yaml` is resolved next to that `app.yaml`
+  if it does not resolve from your working directory — so `-c ../../org-config`
+  works from anywhere.
+
 3. **Run a dry run, then apply**
 ```bash
 gomgr sync -c <config> --dry  # Shows JSON plan + summary of changes
@@ -628,6 +645,10 @@ What it does:
 - **Validates before and after.** The adopted rulesets go through the same
   checks a hand-written config does, and the whole directory is reloaded after
   writing — if either fails, you hear about it there and then.
+- **Reports what it cannot express, and carries on.** GitHub's ruleset schema
+  is wider than gomgr's and keeps growing. A ruleset using something this build
+  does not know is named, with the reason, and left exactly as it is on GitHub —
+  one such ruleset does not abort a scan of fifty.
 
 ```console
 $ gomgr import rulesets -c . --write

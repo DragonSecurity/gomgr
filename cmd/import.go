@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
-	"github.com/DragonSecurity/gomgr/internal/gh"
 	insync "github.com/DragonSecurity/gomgr/internal/sync"
 	"github.com/DragonSecurity/gomgr/internal/util"
 )
@@ -63,20 +62,13 @@ the result is a reviewable diff in your config repository.`,
 			return err
 		}
 
-		client, appInfo, err := gh.NewClientFromEnv(ctx, cfg.App)
+		client, err := newClient(ctx, cfg)
 		if err != nil {
 			return err
-		}
-		if appInfo != "" {
-			util.Infof("auth: %s", appInfo)
 		}
 
 		result, err := insync.ImportRulesets(ctx, client, cfg, insync.ImportOptions{Only: importOnly})
 		if err != nil {
-			return err
-		}
-
-		if err := validateImport(result); err != nil {
 			return err
 		}
 
@@ -86,22 +78,6 @@ the result is a reviewable diff in your config repository.`,
 		}
 		return writeImport(cfgDir, result)
 	},
-}
-
-// validateImport runs the adopted rulesets through the same checks a config
-// file gets, so a ruleset GitHub allows but gomgr's schema does not is caught
-// here rather than on the next sync — after it has been written to disk.
-func validateImport(result *insync.ImportResult) error {
-	if err := config.ValidateRulesets(config.ScopeOrg, "imported org rulesets", specs(result.Org)); err != nil {
-		return fmt.Errorf("imported rulesets do not round-trip: %w", err)
-	}
-	for _, repo := range result.RepoNames() {
-		where := fmt.Sprintf("imported rulesets for %s", repo)
-		if err := config.ValidateRulesets(config.ScopeRepo, where, specs(result.Repos[repo])); err != nil {
-			return fmt.Errorf("imported rulesets do not round-trip: %w", err)
-		}
-	}
-	return nil
 }
 
 func specs(imported []insync.ImportedRuleset) []config.RulesetConfig {
@@ -148,6 +124,17 @@ func printSpecs(imported []insync.ImportedRuleset) {
 func reportSkipped(result *insync.ImportResult) {
 	if result.AlreadyDeclared > 0 {
 		fmt.Printf("%s already declared in your configuration were left alone.\n", plural(result.AlreadyDeclared, "ruleset", "rulesets"))
+	}
+	if len(result.Skipped) > 0 {
+		fmt.Printf("\n%s could not be represented as configuration and were left\n"+
+			"untouched on GitHub:\n", plural(len(result.Skipped), "ruleset", "rulesets"))
+		for _, s := range result.Skipped {
+			where := s.Name
+			if s.Repo != "" {
+				where = s.Repo + "/" + s.Name
+			}
+			fmt.Printf("  - %s: %s\n", where, s.Reason)
+		}
 	}
 	if len(result.Unmanaged) > 0 {
 		fmt.Printf("\n%s hold rulesets but appear in no team file, so there is\n"+

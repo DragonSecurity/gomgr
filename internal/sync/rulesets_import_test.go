@@ -395,3 +395,94 @@ func specNames(imported []ImportedRuleset) []string {
 	}
 	return out
 }
+
+// TestImportSkipsUnrepresentableRulesets covers what a live enterprise org
+// showed: GitHub's ruleset schema is wider than gomgr's and keeps growing, so
+// a scan must report the one ruleset it cannot express and still adopt the
+// rest, rather than failing the whole run.
+func TestImportSkipsUnrepresentableRulesets(t *testing.T) {
+	exotic := liveRuleset(20, "exotic", "Repository")
+	exotic["bypass_actors"] = []any{
+		map[string]any{"actor_type": "SomeFutureActorType", "bypass_mode": "always"},
+	}
+
+	server := importServer(t, map[string]any{},
+		map[string]map[string]any{
+			"infra": {
+				"exotic":  exotic,
+				"ordinry": liveRuleset(21, "ordinry", "Repository"),
+			},
+		},
+	)
+	defer server.Close()
+
+	cfg := &config.Root{
+		App:  config.AppConfig{Org: "myorg"},
+		Team: []config.TeamConfig{{Name: "Platform", Repositories: map[string]any{"infra": "maintain"}}},
+	}
+
+	result, err := ImportRulesets(context.Background(), newTestClient(t, server), cfg, ImportOptions{})
+	if err != nil {
+		t.Fatalf("import must not fail on one unrepresentable ruleset: %v", err)
+	}
+
+	if len(result.Skipped) != 1 {
+		t.Fatalf("Skipped = %+v, want the exotic ruleset", result.Skipped)
+	}
+	if result.Skipped[0].Name != "exotic" || result.Skipped[0].Repo != "infra" {
+		t.Errorf("Skipped[0] = %+v", result.Skipped[0])
+	}
+	if !strings.Contains(result.Skipped[0].Reason, "SomeFutureActorType") {
+		t.Errorf("reason = %q, want it to name the unknown actor type", result.Skipped[0].Reason)
+	}
+
+	adopted := result.Repos["infra"]
+	if len(adopted) != 1 || adopted[0].Spec.Name != "ordinry" {
+		t.Errorf("adopted = %v, want the ruleset that could be represented", specNames(adopted))
+	}
+}
+
+// TestImportAcceptsEnterpriseOwner is the case that actually failed against a
+// real enterprise-owned organization.
+func TestImportAcceptsEnterpriseOwner(t *testing.T) {
+	rs := liveRuleset(30, "main", "Repository")
+	rs["bypass_actors"] = []any{
+		map[string]any{"actor_type": "EnterpriseOwner", "bypass_mode": "always"},
+		map[string]any{"actor_type": "OrganizationAdmin", "bypass_mode": "always"},
+		map[string]any{"actor_id": 2, "actor_type": "RepositoryRole", "bypass_mode": "always"},
+	}
+
+	server := importServer(t, map[string]any{}, map[string]map[string]any{"infra": {"main": rs}})
+	defer server.Close()
+
+	cfg := &config.Root{
+		App:  config.AppConfig{Org: "myorg"},
+		Team: []config.TeamConfig{{Name: "Platform", Repositories: map[string]any{"infra": "maintain"}}},
+	}
+
+	result, err := ImportRulesets(context.Background(), newTestClient(t, server), cfg, ImportOptions{})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if len(result.Skipped) != 0 {
+		t.Fatalf("Skipped = %+v, want none", result.Skipped)
+	}
+	adopted := result.Repos["infra"]
+	if len(adopted) != 1 {
+		t.Fatalf("adopted = %v, want the ruleset", specNames(adopted))
+	}
+
+	actors := adopted[0].Spec.BypassActors
+	if len(actors) != 3 {
+		t.Fatalf("bypass actors = %+v", actors)
+	}
+	if actors[0].Type != config.BypassActorTypeEnterpriseOwner || actors[0].ActorID != 0 {
+		t.Errorf("EnterpriseOwner = %+v, want the type with no ID", actors[0])
+	}
+	if actors[1].ActorID != 0 {
+		t.Errorf("OrganizationAdmin = %+v, want no ID", actors[1])
+	}
+	if actors[2].ActorID != 2 {
+		t.Errorf("RepositoryRole = %+v, want its role ID preserved", actors[2])
+	}
+}
