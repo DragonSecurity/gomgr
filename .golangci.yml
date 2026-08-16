@@ -44,6 +44,11 @@ linters:
         - name: exported
           disabled: true
     gosec:
+      # Keep this list in step with GOSEC_EXCLUDE in the Makefile. The
+      # standalone gosec binary that `make security` runs does not read this
+      # file, so a rule excluded in only one place is reported by the other.
+      # G404 is deliberately absent: it is annotated at the one call site where
+      # weak randomness is correct, so any other use is still caught.
       excludes:
         - G304 # Audit use of file path - we need this for config files
         - G301 # Directory permissions 0755 are fine for config dirs

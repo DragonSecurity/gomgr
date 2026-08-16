@@ -10,6 +10,13 @@ LDFLAGS=-ldflags "-s"
 BUILD_DIR=build
 COVERAGE_DIR=coverage
 
+# gosec rules excluded from `make security`. This list mirrors the gosec
+# exclusions in .golangci.yml, and the two have to be kept in step: the
+# standalone gosec binary does not read golangci-lint's configuration, so a rule
+# excluded in only one place is reported by the other. The rationale for each
+# rule lives in .golangci.yml.
+GOSEC_EXCLUDE=G101,G301,G304,G306,G703
+
 # Go parameters
 GOCMD=go
 GOBUILD=$(GOCMD) build
@@ -84,16 +91,12 @@ lint: ## Run golangci-lint (requires golangci-lint to be installed)
 
 security: ## Run security checks with gosec (requires gosec to be installed)
 	@echo "Running security checks..."
-	@if command -v gosec >/dev/null 2>&1; then \
-		gosec -quiet ./...; \
-		echo "Security check passed"; \
-	elif [ -x "$(shell go env GOPATH)/bin/gosec" ]; then \
-		$(shell go env GOPATH)/bin/gosec -quiet ./...; \
-		echo "Security check passed"; \
-	else \
+	@GOSEC=$$(command -v gosec 2>/dev/null || echo "$(shell go env GOPATH)/bin/gosec"); \
+	if [ ! -x "$$GOSEC" ]; then \
 		echo "gosec not found. Install it with: make install-tools"; \
 		exit 1; \
-	fi
+	fi; \
+	"$$GOSEC" -quiet -exclude=$(GOSEC_EXCLUDE) ./... && echo "Security check passed"
 
 mod-tidy: ## Tidy go modules
 	@echo "Tidying go modules..."
