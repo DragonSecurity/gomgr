@@ -199,7 +199,7 @@ func planRepoVisibility(cfg *config.Root, bySettings map[string]repoSettings, ex
 		}
 		current, ok := existingRepos[repo]
 		if !ok {
-			continue // creation already honours the declared visibility
+			continue // creation already honors the declared visibility
 		}
 		if current.GetVisibility() == want {
 			continue
