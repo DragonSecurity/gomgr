@@ -1198,3 +1198,120 @@ func TestNoGrantWithoutADeclaredPermission(t *testing.T) {
 	}
 	// planRepoPerms skips the grant for this case; see the guard there.
 }
+
+// twoTeams builds a config where two teams name one repository. The team files
+// are loaded in directory order, so "aaa" is folded in before "zzz".
+func twoTeams(aaa, zzz any) *config.Root {
+	return &config.Root{Team: []config.TeamConfig{
+		{Name: "aaa", Repositories: map[string]any{"apikit": aaa}},
+		{Name: "zzz", Repositories: map[string]any{"apikit": zzz}},
+	}}
+}
+
+// TestPermissionIsPerTeamNotPerRepo covers a privilege escalation: repository
+// settings are keyed by repository, so reading a grant's permission out of them
+// gave every team naming a repository whatever the last team file to name it
+// asked for. A team declaring pull was handed admin because an unrelated file
+// sorted later.
+func TestPermissionIsPerTeamNotPerRepo(t *testing.T) {
+	cfg := twoTeams("pull", "admin")
+
+	all, _, perTeam, err := collectRepoSettings(cfg, "acme")
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	perms, err := resolveTeamPerms(perTeam, all, "acme")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+
+	if got := perms["aaa/apikit"]; got != "pull" {
+		t.Errorf("team aaa asked for pull, would be granted %q", got)
+	}
+	if got := perms["zzz/apikit"]; got != "admin" {
+		t.Errorf("team zzz asked for admin, would be granted %q", got)
+	}
+}
+
+// TestRepoDefinitionMergesAcrossTeams covers the other half: the repository-level
+// map was overwritten rather than merged, so a repository defined by an earlier
+// team silently lost its topics and visibility to a later team that only wanted
+// a grant.
+func TestRepoDefinitionMergesAcrossTeams(t *testing.T) {
+	cfg := twoTeams(
+		map[string]any{"permission": "pull", "topics": []any{"backend"}, "visibility": "private"},
+		"admin",
+	)
+
+	all, _, _, err := collectRepoSettings(cfg, "acme")
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	got := all["apikit"]
+	if len(got.topics) != 1 || got.topics[0] != "backend" {
+		t.Errorf("topics = %v, want [backend] to survive the later team", got.topics)
+	}
+	if got.visibility != "private" {
+		t.Errorf("visibility = %q, want private to survive the later team", got.visibility)
+	}
+}
+
+// TestRepoDefinitionUnionsSetFields checks the documented merge rule for the
+// set-like fields: topics and codeowners union across teams.
+func TestRepoDefinitionUnionsSetFields(t *testing.T) {
+	cfg := twoTeams(
+		map[string]any{"topics": []any{"backend"}, "codeowners": []any{"@a"}},
+		map[string]any{"topics": []any{"api", "backend"}, "codeowners": []any{"@b", "@a"}},
+	)
+
+	all, _, _, err := collectRepoSettings(cfg, "acme")
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	got := all["apikit"]
+	if strings.Join(got.topics, ",") != "backend,api" {
+		t.Errorf("topics = %v, want the union in first-seen order", got.topics)
+	}
+	if strings.Join(got.codeowners, ",") != "@a,@b" {
+		t.Errorf("codeowners = %v, want the union in first-seen order", got.codeowners)
+	}
+}
+
+// TestRepoDefinitionRejectsContradiction checks the scalar half of the merge
+// rule. Only one of the two values can win and neither file says which, so the
+// config is refused rather than resolved by filename order.
+func TestRepoDefinitionRejectsContradiction(t *testing.T) {
+	cases := map[string]*config.Root{
+		"visibility": twoTeams(
+			map[string]any{"visibility": "private"},
+			map[string]any{"visibility": "public"},
+		),
+		"settings.allow_auto_merge": twoTeams(
+			map[string]any{"settings": map[string]any{"allow_auto_merge": true}},
+			map[string]any{"settings": map[string]any{"allow_auto_merge": false}},
+		),
+	}
+	for field, cfg := range cases {
+		t.Run(field, func(t *testing.T) {
+			_, _, _, err := collectRepoSettings(cfg, "acme")
+			if err == nil {
+				t.Fatalf("two teams contradicting each other on %s must be refused", field)
+			}
+			if !strings.Contains(err.Error(), field) {
+				t.Errorf("error should name the field in conflict, got: %v", err)
+			}
+			if !strings.Contains(err.Error(), "aaa") || !strings.Contains(err.Error(), "zzz") {
+				t.Errorf("error should name both teams, got: %v", err)
+			}
+		})
+	}
+}
+
+// TestDifferentPermissionsAreNotAConflict guards the merge from overreaching:
+// two teams holding different access to one repository is the entire point of
+// teams, and must not be mistaken for a contradiction.
+func TestDifferentPermissionsAreNotAConflict(t *testing.T) {
+	if _, _, _, err := collectRepoSettings(twoTeams("pull", "admin"), "acme"); err != nil {
+		t.Fatalf("differing permissions are legitimate, got: %v", err)
+	}
+}

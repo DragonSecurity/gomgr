@@ -203,7 +203,7 @@ func declaredNames(rulesets []config.RulesetConfig) map[string]bool {
 // configuration declares, along with the set of repositories the configuration
 // knows about at all.
 func declaredRepoRulesets(cfg *config.Root, org string) (map[string]map[string]bool, map[string]bool, error) {
-	allSettings, managed, err := collectRepoSettings(cfg, org)
+	allSettings, managed, _, err := collectRepoSettings(cfg, org)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -271,7 +271,7 @@ func ExplainFileRoutes(ctx context.Context, c *gh.Client, cfg *config.Root) []st
 	if err := prefetchState(ctx, c, st); err != nil {
 		return []string{fmt.Sprintf("prefetch: %v", err)}
 	}
-	all, _, err := collectRepoSettings(cfg, cfg.App.Org)
+	all, _, _, err := collectRepoSettings(cfg, cfg.App.Org)
 	if err != nil {
 		return []string{fmt.Sprintf("collect: %v", err)}
 	}
