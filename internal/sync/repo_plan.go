@@ -39,6 +39,11 @@ type repoPlanner struct {
 	settings     map[string]repoSettings
 	managedRepos map[string]bool
 
+	// teamPerms is the permission each team's own entry asks for, keyed
+	// "team-slug/repo". settings is keyed by repository alone and so cannot
+	// answer this: two teams may hold different access to one repository.
+	teamPerms map[teamRepoPermKey]string
+
 	fileSpecs     []config.FileSpec
 	userFilePaths map[string]bool
 	emittedFiles  map[string]bool
@@ -77,12 +82,15 @@ func newRepoPlanner(ctx context.Context, c *gh.Client, cfg *config.Root, st *Sta
 		p.repos[name] = r
 	}
 
-	all, managed, err := collectRepoSettings(cfg, p.org)
+	all, managed, perTeam, err := collectRepoSettings(cfg, p.org)
 	if err != nil {
 		return nil, err
 	}
 	p.managedRepos = managed
 	if p.settings, err = resolveAllTemplates(all, p.org); err != nil {
+		return nil, err
+	}
+	if p.teamPerms, err = resolveTeamPerms(perTeam, all, p.org); err != nil {
 		return nil, err
 	}
 
@@ -151,7 +159,7 @@ func (p *repoPlanner) planPerTeamRepo() ([]util.Change, error) {
 			if change, ok := p.planRepoCreation(repo, key, settings); ok {
 				out = append(out, change)
 			}
-			if grant, ok := p.planGrant(slug, repo, key, settings); ok {
+			if grant, ok := p.planGrant(slug, repo, key); ok {
 				out = append(out, grant)
 			}
 			if err := p.accumulate(repo, key, settings); err != nil {
@@ -192,6 +200,11 @@ func (p *repoPlanner) planRepoCreation(repo, key string, settings repoSettings) 
 
 // planGrant emits a team-repo:grant, unless the entry declares no permission.
 //
+// The permission comes from this team's own entry, not from the repository-level
+// settings: those are keyed by repository, so reading a permission out of them
+// handed every team naming a repository whatever the last team file to name it
+// asked for.
+//
 // Granting the empty string is not "leave it alone": GitHub reads it as its own
 // default of read, so the grant is planned, applied, and planned again next run
 // while the team keeps whatever access it had. Saying nothing is the only way to
@@ -199,8 +212,9 @@ func (p *repoPlanner) planRepoCreation(repo, key string, settings repoSettings) 
 //
 // Only the grant is skipped. An entry may declare topics or rulesets and no
 // permission at all, and everything else it declares still applies.
-func (p *repoPlanner) planGrant(slug, repo, key string, settings repoSettings) (util.Change, bool) {
-	if settings.permission == "" {
+func (p *repoPlanner) planGrant(slug, repo, key string) (util.Change, bool) {
+	permission := p.teamPerms[slug+"/"+key]
+	if permission == "" {
 		return util.Change{}, false
 	}
 	return util.Change{
@@ -208,7 +222,7 @@ func (p *repoPlanner) planGrant(slug, repo, key string, settings repoSettings) (
 		Target: slug + "/" + key,
 		Action: "grant",
 		Details: map[string]any{
-			"org": p.org, "slug": slug, "repo": repo, "permission": settings.permission,
+			"org": p.org, "slug": slug, "repo": repo, "permission": permission,
 		},
 	}, true
 }

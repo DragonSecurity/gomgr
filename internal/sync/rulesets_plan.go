@@ -74,7 +74,7 @@ func planRepoRulesets(ctx context.Context, c *gh.Client, cfg *config.Root, st *S
 	var warnings []string
 	org := st.Org
 
-	allSettings, _, err := collectRepoSettings(cfg, org)
+	allSettings, _, _, err := collectRepoSettings(cfg, org)
 	if err != nil {
 		return nil, nil, err
 	}

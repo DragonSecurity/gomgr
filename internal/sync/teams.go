@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -518,9 +519,27 @@ func planTeamMembership(ctx context.Context, c *gh.Client, st *State, desiredByS
 }
 
 // collectRepoSettings gathers and validates all repository settings from config.
-func collectRepoSettings(cfg *config.Root, _ string) (allSettings map[string]repoSettings, managedRepos map[string]bool, err error) {
+//
+// Two things are collected, because a repository entry says two different kinds
+// of thing. Permission belongs to the (team, repo) pair — several teams may hold
+// different access to one repository, and that is the point of teams. Everything
+// else — topics, visibility, settings, rulesets, codeowners, pinning — describes
+// the repository itself, so it is folded into one definition per repository and
+// returned keyed by repo alone.
+//
+// perTeam keeps each team's own declaration so a grant can be planned from what
+// that team asked for. Reading the permission out of the repo-keyed map instead
+// was a privilege escalation: the map was overwritten unconditionally, so the
+// last team file to name a repository decided what *every* team naming it was
+// granted, and a team declaring pull could be handed admin because an unrelated
+// file sorted later.
+func collectRepoSettings(cfg *config.Root, _ string) (allSettings map[string]repoSettings, managedRepos map[string]bool, perTeam map[teamRepoPermKey]repoSettings, err error) {
 	allSettings = map[string]repoSettings{}
 	managedRepos = map[string]bool{}
+	perTeam = map[teamRepoPermKey]repoSettings{}
+	// declaredBy names the team that first stated a repo-level field, so a
+	// conflict can say which two files disagree.
+	declaredBy := map[string]string{}
 
 	for _, t := range cfg.Team {
 		slug := t.ResolvedSlug()
@@ -530,12 +549,160 @@ func collectRepoSettings(cfg *config.Root, _ string) (allSettings map[string]rep
 
 			settings, err := parseRepoConfig(val)
 			if err != nil {
-				return nil, nil, fmt.Errorf("invalid config for repo %s in team %s: %w", repo, slug, err)
+				return nil, nil, nil, fmt.Errorf("invalid config for repo %s in team %s: %w", repo, slug, err)
 			}
-			allSettings[r] = settings
+			perTeam[slug+"/"+r] = settings
+
+			existing, seen := allSettings[r]
+			if !seen {
+				allSettings[r] = settings
+				if statesRepoDefinition(settings) {
+					declaredBy[r] = slug
+				}
+				continue
+			}
+			merged, err := mergeRepoDefinition(existing, settings, repo, declaredBy[r], slug)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			allSettings[r] = merged
+			if declaredBy[r] == "" && statesRepoDefinition(settings) {
+				declaredBy[r] = slug
+			}
 		}
 	}
-	return allSettings, managedRepos, nil
+	return allSettings, managedRepos, perTeam, nil
+}
+
+// statesRepoDefinition reports whether an entry says anything about the
+// repository beyond which permission its team should hold.
+func statesRepoDefinition(s repoSettings) bool {
+	return len(s.topics) > 0 || s.pinned || s.template || s.from != "" ||
+		s.visibility != "" || len(s.codeowners) > 0 || len(s.rulesets) > 0 ||
+		!s.settings.IsEmpty()
+}
+
+// mergeRepoDefinition folds one team's declaration of a repository into what an
+// earlier team declared. Set-like fields (topics, codeowners) union, flags OR,
+// and scalar fields must agree — two teams may each state part of a repository's
+// definition, but they may not contradict each other, because only one of the
+// two can win and neither file says which.
+//
+// Permission is deliberately not merged: it is per (team, repo) and lives in
+// collectRepoSettings' perTeam map. The copy kept here exists only so template
+// inheritance can read a template repository's permission; the first team to
+// state one defines it.
+func mergeRepoDefinition(into, from repoSettings, repo, prevTeam, team string) (repoSettings, error) {
+	conflict := func(field string, a, b any) error {
+		where := prevTeam
+		if where == "" {
+			where = "an earlier team"
+		}
+		return fmt.Errorf("repo %s is defined by more than one team and they disagree on %s: "+
+			"team %s says %v, team %s says %v — state it in one team only",
+			repo, field, where, a, team, b)
+	}
+
+	out := into
+	if out.permission == "" {
+		out.permission = from.permission
+	}
+
+	if from.from != "" {
+		if out.from != "" && out.from != from.from {
+			return out, conflict("from", out.from, from.from)
+		}
+		out.from = from.from
+	}
+	if from.visibility != "" {
+		if out.visibility != "" && out.visibility != from.visibility {
+			return out, conflict("visibility", out.visibility, from.visibility)
+		}
+		out.visibility = from.visibility
+	}
+	out.pinned = out.pinned || from.pinned
+	out.template = out.template || from.template
+	out.topics = unionStrings(out.topics, from.topics)
+	out.codeowners = unionStrings(out.codeowners, from.codeowners)
+
+	if len(from.rulesets) > 0 {
+		if len(out.rulesets) > 0 && !reflect.DeepEqual(out.rulesets, from.rulesets) {
+			return out, conflict("rulesets", "one set", "another")
+		}
+		out.rulesets = from.rulesets
+	}
+
+	merged, err := mergeRepoSettingsConfig(out.settings, from.settings, conflict)
+	if err != nil {
+		return out, err
+	}
+	out.settings = merged
+	return out, nil
+}
+
+// mergeRepoSettingsConfig merges two settings blocks field by field. A field one
+// side leaves unset takes the other's value; a field both set must agree.
+func mergeRepoSettingsConfig(into, from config.RepoSettingsConfig, conflict func(string, any, any) error) (config.RepoSettingsConfig, error) {
+	fields := []struct {
+		name string
+		into **bool
+		from *bool
+	}{
+		{"allow_auto_merge", &into.AllowAutoMerge, from.AllowAutoMerge},
+		{"allow_squash_merge", &into.AllowSquashMerge, from.AllowSquashMerge},
+		{"allow_merge_commit", &into.AllowMergeCommit, from.AllowMergeCommit},
+		{"allow_rebase_merge", &into.AllowRebaseMerge, from.AllowRebaseMerge},
+		{"delete_branch_on_merge", &into.DeleteBranchOnMerge, from.DeleteBranchOnMerge},
+		{"allow_update_branch", &into.AllowUpdateBranch, from.AllowUpdateBranch},
+	}
+	for _, f := range fields {
+		if f.from == nil {
+			continue
+		}
+		if *f.into != nil && **f.into != *f.from {
+			return into, conflict("settings."+f.name, **f.into, *f.from)
+		}
+		v := *f.from
+		*f.into = &v
+	}
+	return into, nil
+}
+
+// unionStrings appends the members of b that a does not already have, keeping
+// a's order. Topics and codeowners are unions across teams by design.
+func unionStrings(a, b []string) []string {
+	if len(b) == 0 {
+		return a
+	}
+	seen := make(map[string]bool, len(a))
+	for _, s := range a {
+		seen[s] = true
+	}
+	out := a
+	for _, s := range b {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// resolveTeamPerms reduces each team's own repository entry to the permission it
+// asks for, applying the same template inheritance the repository-level settings
+// get: an entry naming a `from:` template and stating no permission of its own
+// inherits the template's, exactly as it did when the permission was read from
+// the repository-keyed map.
+func resolveTeamPerms(perTeam map[teamRepoPermKey]repoSettings, all map[string]repoSettings, org string) (map[teamRepoPermKey]string, error) {
+	out := make(map[teamRepoPermKey]string, len(perTeam))
+	for key, s := range perTeam {
+		resolved, err := resolveTemplate("", s, all, org)
+		if err != nil {
+			return nil, fmt.Errorf("error resolving template for %s: %w", key, err)
+		}
+		out[key] = resolved.permission
+	}
+	return out, nil
 }
 
 // resolveAllTemplates resolves template inheritance for all repository settings.
