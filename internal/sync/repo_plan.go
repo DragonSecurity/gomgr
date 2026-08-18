@@ -214,7 +214,9 @@ func (p *repoPlanner) specsFor(key string) []config.FileSpec {
 		byPath[spec.Path] = spec
 	}
 
-	out := make([]config.FileSpec, 0, len(p.fileSpecs)+len(own))
+	// Sized for the org-wide list alone; append covers the few a repository adds
+	// on top, and summing the two lengths reads as an overflow risk to scanners.
+	out := make([]config.FileSpec, 0, len(p.fileSpecs))
 	replaced := make(map[string]bool, len(own))
 	for _, spec := range p.fileSpecs {
 		if override, ok := byPath[spec.Path]; ok {
