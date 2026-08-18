@@ -124,12 +124,27 @@ type RepoConfig struct {
 	Files []FileSpec `yaml:"files,omitempty"`
 }
 
+// The two values GitHub accepts for a team's notification setting. They are
+// compared against what the API reports and sent back to it, so they are
+// constants rather than literals repeated at each end.
+const (
+	NotificationsEnabled  = "notifications_enabled"
+	NotificationsDisabled = "notifications_disabled"
+)
+
 type TeamConfig struct {
 	Name        string   `yaml:"name"`
 	Slug        string   `yaml:"slug,omitempty"`
 	Description string   `yaml:"description,omitempty"`
 	Privacy     string   `yaml:"privacy,omitempty"` // closed, secret
 	Parents     []string `yaml:"parents,omitempty"`
+
+	// NotificationSetting is "notifications_enabled" or
+	// "notifications_disabled". Empty leaves GitHub's setting alone, which for
+	// a team gomgr creates means enabled — so an org that wants its teams quiet
+	// has to say so on every team, and a config that drops this field turns
+	// notifications back on for everyone in it.
+	NotificationSetting string `yaml:"notification_setting,omitempty"`
 
 	Maintainers []string `yaml:"maintainers,omitempty"`
 	Members     []string `yaml:"members,omitempty"`

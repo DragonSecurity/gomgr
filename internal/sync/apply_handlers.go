@@ -58,6 +58,9 @@ func applyTeamCreate(ctx context.Context, c *gh.Client, ch util.Change) error {
 		descPtr = github.Ptr(dv)
 	}
 	newTeam := github.NewTeam{Name: name, Privacy: privacyPtr, Description: descPtr}
+	if nv := detailString(d, "notification_setting"); nv != "" {
+		newTeam.NotificationSetting = github.Ptr(nv)
+	}
 	_, _, err = c.REST.Teams.CreateTeam(ctx, org, newTeam)
 	if err != nil {
 		return fmt.Errorf("create team %q: %w", name, err)
@@ -83,6 +86,9 @@ func applyTeamUpdate(ctx context.Context, c *gh.Client, ch util.Change) error {
 	}
 	if pv := detailString(d, "privacy"); pv != "" {
 		newTeam.Privacy = github.Ptr(pv)
+	}
+	if nv := detailString(d, "notification_setting"); nv != "" {
+		newTeam.NotificationSetting = github.Ptr(nv)
 	}
 	_, _, err = c.REST.Teams.EditTeamBySlug(ctx, org, slug, newTeam, false)
 	if err != nil {

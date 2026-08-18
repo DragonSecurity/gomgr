@@ -100,6 +100,9 @@ func readYAML(path string, out any) error {
 // Validate checks that the loaded configuration is semantically correct.
 func (r *Root) Validate() error {
 	validPrivacy := map[string]bool{"": true, "closed": true, "secret": true}
+	validNotificationSetting := map[string]bool{
+		"": true, NotificationsEnabled: true, NotificationsDisabled: true,
+	}
 	validBaseRole := map[string]bool{"read": true, "triage": true, "write": true, "maintain": true, "admin": true}
 
 	for _, t := range r.Team {
@@ -108,6 +111,10 @@ func (r *Root) Validate() error {
 		}
 		if !validPrivacy[t.Privacy] {
 			return fmt.Errorf("team %q has invalid privacy %q (must be closed or secret)", t.Name, t.Privacy)
+		}
+		if !validNotificationSetting[t.NotificationSetting] {
+			return fmt.Errorf("team %q has invalid notification_setting %q (must be %s or %s)",
+				t.Name, t.NotificationSetting, NotificationsEnabled, NotificationsDisabled)
 		}
 		for repo, val := range t.Repositories {
 			if err := validateRepoName(repo); err != nil {

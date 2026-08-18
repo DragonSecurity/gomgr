@@ -317,3 +317,36 @@ func TestLoad_RepoFilesAreValidated(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
+
+func TestValidate_NotificationSetting(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"unset is fine", "", false},
+		{"disabled", NotificationsDisabled, false},
+		{"enabled", NotificationsEnabled, false},
+		{"anything else is refused", "loud", true},
+		// GitHub takes the full string; a shorthand that looks obvious is not
+		// one it accepts, and finding that out at apply time is too late.
+		{"shorthand is refused", "disabled", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &Root{
+				App:  AppConfig{Org: "myorg"},
+				Team: []TeamConfig{{Name: "Backend", NotificationSetting: tc.value}},
+			}
+			err := r.Validate()
+			if tc.wantErr && err == nil {
+				t.Fatalf("expected %q to be rejected", tc.value)
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("expected %q to be accepted, got %v", tc.value, err)
+			}
+			if tc.wantErr && !strings.Contains(err.Error(), "Backend") {
+				t.Errorf("error should name the team: %v", err)
+			}
+		})
+	}
+}

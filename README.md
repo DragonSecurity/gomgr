@@ -16,6 +16,7 @@ A fast, idempotent **GitHub Organization Manager** written in Go. Define your or
 - ✅ Repo permission grants (pull/triage/push/maintain/admin)
 - ✅ **Rulesets**: org-wide and repo-specific guard rails (branch protection, tag protection, push rules) with built-in presets — see [Rulesets & guard rails](#rulesets--guard-rails)
 - ✅ **Adopt what's already there**: `gomgr import teams` / `gomgr import rulesets` bootstrap an unmanaged org into YAML, comments in your config left intact — see [Adopting an existing organization](#adopting-an-existing-organization)
+- ✅ **Migrate from the Python tool**: `gomgr migrate` converts a `github-user-management` config directory, refusing rather than guessing wherever the two disagree — see [Migrating from the Python tool](#migrating-from-the-python-tool)
 - ✅ **Custom repository roles**: fully managed - define in YAML, gomgr creates/updates them (GitHub Enterprise Cloud)
 - ✅ **Repository topics**: add topics/labels to repositories for organization
 - ✅ **Repository pinning**: pin important repositories to organization profile (⚠️ *GitHub API limitation: not currently supported for organizations - configuration accepted but manual pinning required via web UI*)
@@ -361,6 +362,7 @@ name: Platform Team
 slug: platform-team            # optional; default = kebab(name)
 description: Core platform engineers
 privacy: closed                # closed | secret
+notification_setting: notifications_disabled   # notifications_enabled | notifications_disabled
 parents: []                    # (future enhancement)
 
 # Multiple maintainers (team leads, senior engineers)
@@ -831,6 +833,72 @@ create:
 
 ---
 
+## Migrating from the Python tool
+
+`gomgr migrate` converts a config directory in the layout used by the Python
+[`github-user-management`](https://github.com/GlueOps/github-user-management)
+tool. The layouts are close — same `<orgs>/<org>/{app.yaml,org.yaml,teams/}`
+shape, and `app.yaml`'s flags are the same keys — so most of the work is
+renaming:
+
+| Python | gomgr |
+|---|---|
+| `org.yaml: org_name` | `app.yaml: org` |
+| `org.yaml: org_owners` | `org.yaml: owners` |
+| `teams/all-teams.yaml` — a mapping of N teams | `teams/<slug>.yaml` — one team per file |
+| the team's mapping key | `name:` |
+| `member:` / `maintainer:` | `members:` / `maintainers:` |
+| `repos:` | `repositories:` |
+| `defaults.team.*` | inlined onto each team — gomgr has no defaults block |
+
+```sh
+gomgr migrate --from ./python-orgs --to ./gomgr-orgs
+gomgr validate -c ./gomgr-orgs/<org>
+```
+
+Every org is converted in memory first, and nothing is written unless all of
+them convert. A refusal never leaves a half-translated directory behind.
+
+**It refuses rather than guesses.** Each of these is a case where carrying on
+would produce a config that loads, applies, and grants the wrong thing:
+
+- **A repository with no permission.** `repo-name:` with nothing after it is
+  ambiguous, and every resolution is a guess about someone's access.
+  `--on-missing-permission=drop` omits the grant and says which, since granting
+  less than the source is the safe direction to be wrong in. There is no flag
+  that picks a level for you.
+- **A team name that is not a usable file name.** The mapping key becomes a
+  path, so one containing a separator or `..` is rejected rather than rewritten
+  into something nobody named.
+- **Two teams that converge on one file name**, or one team defined in two
+  files. Keeping the last one read is exactly the file-order precedence gomgr
+  removed in v0.5.0.
+- **A missing `org_name`.** It decides which organization the result manages;
+  the directory name is not a safe substitute for it.
+- **A duplicated mapping key.** PyYAML keeps the last silently, so a repository
+  listed twice under one team resolves to whichever line came second. This
+  parser rejects it and points at both lines.
+
+Anything the source says that the output does not — a dropped grant, a key with
+no gomgr equivalent — is printed per org, and the command **exits 2** when the
+conversion lost something, so a pipeline cannot read a lossy run as a clean one.
+
+Migrate never contacts GitHub and does not carry `app_id` or `private_key`
+across: supply credentials to the result deliberately.
+
+### Two things to check before cutting over
+
+- **Multi-team repository grants.** The Python layout lets several teams name
+  the same repository, and gomgr honours each team's own permission — but only
+  from **v0.4.7** onward. Earlier versions let one team's entry supply the
+  permission for every team naming that repository. Do not cut a config with
+  overlapping grants over to an older binary.
+- **`notification_setting`.** Supported from v0.5.2. On an earlier binary the
+  key is ignored, and every team gomgr creates takes GitHub's default of
+  notifications *enabled*.
+
+---
+
 ## Adopting an existing organization
 
 gomgr is declarative, which is only useful for things that are actually
@@ -1087,6 +1155,11 @@ Use a classic PAT with scopes:
 
 - `gomgr setup-team -n "Team Name" -c <config> [-f out/path.yaml]`  
   Bootstraps a team YAML.
+
+- `gomgr migrate --from <python-config> --to <gomgr-config> [--force] [--on-missing-permission=refuse|drop]`  
+  Converts a config directory in the layout used by the Python
+  `github-user-management` tool. See [Migrating from the Python
+  tool](#migrating-from-the-python-tool).
 
 - `gomgr version`  
   Prints version (stamped at build). If built with VCS info, also prints revision/dirty/commit time.

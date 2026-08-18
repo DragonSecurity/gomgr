@@ -1439,3 +1439,54 @@ func TestSpecsForOverridesByPath(t *testing.T) {
 		t.Errorf("a repo with no files of its own should get the org-wide list unchanged")
 	}
 }
+
+// A team's notification setting has to reach the create, and has to stop
+// re-planning once GitHub agrees — a comparison that always differs would
+// re-send the same update on every run forever.
+func TestPlanTeams_NotificationSetting(t *testing.T) {
+	cfg := &config.Root{
+		App: config.AppConfig{Org: "myorg"},
+		Team: []config.TeamConfig{
+			{Name: "New", Slug: "new", NotificationSetting: config.NotificationsDisabled},
+			{Name: "Agrees", Slug: "agrees", NotificationSetting: config.NotificationsDisabled},
+			{Name: "Differs", Slug: "differs", NotificationSetting: config.NotificationsDisabled},
+			{Name: "Silent", Slug: "silent"},
+		},
+	}
+	st := &State{
+		Org: "myorg",
+		ActualTeams: []*github.Team{
+			{Slug: github.Ptr("agrees"), Name: github.Ptr("Agrees"), NotificationSetting: github.Ptr(config.NotificationsDisabled)},
+			{Slug: github.Ptr("differs"), Name: github.Ptr("Differs"), NotificationSetting: github.Ptr(config.NotificationsEnabled)},
+			{Slug: github.Ptr("silent"), Name: github.Ptr("Silent"), NotificationSetting: github.Ptr(config.NotificationsEnabled)},
+		},
+	}
+
+	changes, _, err := planTeams(context.Background(), nil, cfg, st)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	byTarget := map[string]map[string]any{}
+	for _, ch := range changes {
+		d, ok := ch.Details.(map[string]any)
+		if !ok {
+			t.Fatalf("change for %s has details of type %T", ch.Target, ch.Details)
+		}
+		byTarget[ch.Target] = d
+	}
+
+	if got := byTarget["new"]["notification_setting"]; got != config.NotificationsDisabled {
+		t.Errorf("create did not carry the notification setting: %v", got)
+	}
+	if _, replanned := byTarget["agrees"]; replanned {
+		t.Error("planned an update for a team GitHub already agrees with")
+	}
+	if got := byTarget["differs"]["notification_setting"]; got != config.NotificationsDisabled {
+		t.Errorf("update did not carry the notification setting: %v", got)
+	}
+	// A config that says nothing must not fight whatever the org has set.
+	if _, touched := byTarget["silent"]; touched {
+		t.Error("an unset notification_setting still planned a change")
+	}
+}
