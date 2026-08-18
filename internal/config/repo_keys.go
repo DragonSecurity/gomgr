@@ -17,6 +17,7 @@ var knownRepoKeys = map[string]bool{
 	"rulesets":   true,
 	"codeowners": true,
 	"settings":   true,
+	"files":      true,
 }
 
 // RejectUnknownRepoKeys refuses a key gomgr does not understand.

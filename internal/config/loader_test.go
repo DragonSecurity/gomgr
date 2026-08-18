@@ -210,3 +210,110 @@ func TestValidateCodeOwner(t *testing.T) {
 		})
 	}
 }
+
+// writeSplitConfig writes a configuration whose repository definitions live in
+// repos.yaml and whose team file carries only permissions.
+func writeSplitConfig(t *testing.T, reposYAML, teamRepos string) string {
+	t.Helper()
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "app.yaml"), "org: myorg\n")
+	writeFile(t, filepath.Join(dir, "org.yaml"), "owners:\n  - alice\n")
+	if reposYAML != "" {
+		writeFile(t, filepath.Join(dir, "repos.yaml"), reposYAML)
+	}
+	teamsDir := filepath.Join(dir, "teams")
+	if err := os.MkdirAll(teamsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(teamsDir, "backend.yaml"),
+		"name: Backend\nslug: backend\nrepositories:\n"+teamRepos)
+	return dir
+}
+
+func TestLoad_ReposFileIsOptional(t *testing.T) {
+	dir := writeSplitConfig(t, "", "  api: push\n")
+	root, err := Load(dir)
+	if err != nil {
+		t.Fatalf("a config with no repos.yaml must still load: %v", err)
+	}
+	if len(root.Repos) != 0 {
+		t.Errorf("expected no repo definitions, got %v", root.Repos)
+	}
+}
+
+func TestLoad_ReposFileDefinitions(t *testing.T) {
+	dir := writeSplitConfig(t, `repos:
+  api:
+    topics: [backend]
+    visibility: private
+`, "  api: push\n")
+
+	root, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := root.Repos["api"]; !ok {
+		t.Fatalf("expected api to be defined in repos.yaml, got %v", root.Repos)
+	}
+}
+
+// A permission in repos.yaml has no team to belong to. Accepting it would put
+// the ambiguity the split removes straight back.
+func TestLoad_ReposFileRejectsPermission(t *testing.T) {
+	dir := writeSplitConfig(t, "repos:\n  api:\n    permission: admin\n", "  api: push\n")
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("permission in repos.yaml must be refused")
+	}
+	if !strings.Contains(err.Error(), "belongs to a team") {
+		t.Errorf("error should say where permission belongs, got: %v", err)
+	}
+}
+
+func TestLoad_ReposFileRejectsUnknownKey(t *testing.T) {
+	dir := writeSplitConfig(t, "repos:\n  api:\n    topic: [backend]\n", "  api: push\n")
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("an unknown key in repos.yaml must be refused")
+	}
+	if !strings.Contains(err.Error(), "topics") {
+		t.Errorf("error should suggest the intended key, got: %v", err)
+	}
+}
+
+// `only:` on a repository's own file is either redundant or contradicts the
+// repository it is written under.
+func TestLoad_RepoFilesRejectOnly(t *testing.T) {
+	dir := writeSplitConfig(t, `repos:
+  api:
+    files:
+      - path: .github/renovate.json
+        only: [other]
+        content: "{}"
+`, "  api: push\n")
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("`only:` on a repository's own file must be refused")
+	}
+	if !strings.Contains(err.Error(), "only") {
+		t.Errorf("error should name the offending key, got: %v", err)
+	}
+}
+
+func TestLoad_RepoFilesAreValidated(t *testing.T) {
+	dir := writeSplitConfig(t, `repos:
+  api:
+    files:
+      - path: .github/renovate.json
+        content: "{}"
+      - path: .github/renovate.json
+        content: "{}"
+`, "  api: push\n")
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("duplicate paths in a repository's files must be refused")
+	}
+	if !strings.Contains(err.Error(), "duplicate path") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}

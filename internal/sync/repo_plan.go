@@ -93,6 +93,13 @@ func newRepoPlanner(ctx context.Context, c *gh.Client, cfg *config.Root, st *Sta
 	if p.teamPerms, err = resolveTeamPerms(perTeam, all, p.org); err != nil {
 		return nil, err
 	}
+	// A definition applies to a repository some team names. One that matches no
+	// team entry is inert, and silently ignoring a block someone wrote is how
+	// configuration drifts away from what it looks like it says.
+	for _, repo := range sortedKeys(p.managedReposFromDefinitions(cfg)) {
+		st.RepoWarnings = append(st.RepoWarnings, fmt.Sprintf(
+			"repos.yaml defines %q but no team names it, so nothing is applied to it", repo))
+	}
 
 	p.fileSpecs = materializeFileSpecs(cfg.App)
 	for _, fs := range p.fileSpecs {
@@ -167,7 +174,7 @@ func (p *repoPlanner) planPerTeamRepo() ([]util.Change, error) {
 			}
 
 			files, err := planRepoFiles(p.ctx, p.probeFor(key), p.router,
-				p.org, repo, key, p.fileSpecs, p.cfg.App.SignOff, p.emittedFiles)
+				p.org, repo, key, p.specsFor(key), p.cfg.App.SignOff, p.emittedFiles)
 			if err != nil {
 				return nil, err
 			}
@@ -175,6 +182,55 @@ func (p *repoPlanner) planPerTeamRepo() ([]util.Change, error) {
 		}
 	}
 	return out, nil
+}
+
+// managedReposFromDefinitions returns the repositories repos.yaml defines that
+// no team names, keyed for sortedKeys.
+func (p *repoPlanner) managedReposFromDefinitions(cfg *config.Root) map[string]bool {
+	out := map[string]bool{}
+	for repo := range cfg.Repos {
+		if key := strings.ToLower(repo); !p.managedRepos[key] {
+			out[repo] = true
+		}
+	}
+	return out
+}
+
+// specsFor returns the files that apply to one repository: the org-wide
+// app.files, with any the repository defines for itself substituted in by path.
+//
+// Substituting in place is what makes the override safe to state. The org-wide
+// entry keeps its position, so a repository's exception is expressed by naming
+// the repository rather than by sitting earlier in a list than the entry it
+// means to beat — an ordering nothing declared and a formatter could undo.
+func (p *repoPlanner) specsFor(key string) []config.FileSpec {
+	own := p.settings[key].files
+	if len(own) == 0 {
+		return p.fileSpecs
+	}
+
+	byPath := make(map[string]config.FileSpec, len(own))
+	for _, spec := range own {
+		byPath[spec.Path] = spec
+	}
+
+	out := make([]config.FileSpec, 0, len(p.fileSpecs)+len(own))
+	replaced := make(map[string]bool, len(own))
+	for _, spec := range p.fileSpecs {
+		if override, ok := byPath[spec.Path]; ok {
+			out = append(out, override)
+			replaced[spec.Path] = true
+			continue
+		}
+		out = append(out, spec)
+	}
+	// A file only this repository has, with no org-wide entry to replace.
+	for _, spec := range own {
+		if !replaced[spec.Path] {
+			out = append(out, spec)
+		}
+	}
+	return out
 }
 
 // planRepoCreation emits a repo:ensure for a repository that is not there yet.

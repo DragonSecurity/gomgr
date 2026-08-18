@@ -40,12 +40,14 @@ func InsertOrgRulesets(path string, rulesets []RulesetConfig) error {
 	return doc.insertIntoSequence(value, 0, rulesets)
 }
 
-// InsertRepoRulesets adds ruleset entries to a repository's entry in a team
-// file, handling the three shapes a repository entry can take: one that already
-// has a `rulesets:` block, one that is a settings map without it, and one that
-// is the bare permission string (`infra: push`), which has to grow into a map
-// first.
-func InsertRepoRulesets(path, repo string, rulesets []RulesetConfig) error {
+// InsertRepoRulesets adds ruleset entries to a repository's entry, handling the
+// three shapes a repository entry can take: one that already has a `rulesets:`
+// block, one that is a settings map without it, and one that is the bare
+// permission string (`infra: push`), which has to grow into a map first.
+//
+// container is the key the entries sit under: "repos" in repos.yaml, or
+// "repositories" in a team file.
+func InsertRepoRulesets(path, container, repo string, rulesets []RulesetConfig) error {
 	if len(rulesets) == 0 {
 		return nil
 	}
@@ -54,9 +56,9 @@ func InsertRepoRulesets(path, repo string, rulesets []RulesetConfig) error {
 		return err
 	}
 
-	_, repos := doc.field(doc.root, "repositories")
+	_, repos := doc.field(doc.root, container)
 	if repos == nil {
-		return fmt.Errorf("%s: no `repositories:` block to add %q to", path, repo)
+		return fmt.Errorf("%s: no `%s:` block to add %q to", path, container, repo)
 	}
 	repoKey, repoValue := doc.field(repos, repo)
 	if repoKey == nil {
@@ -94,6 +96,41 @@ func InsertRepoRulesets(path, repo string, rulesets []RulesetConfig) error {
 	}
 	doc.lines = insertAfter(doc.lines, doc.blockEnd(repoValue, keyIndent+2), block)
 	return doc.save()
+}
+
+// FindRepoDefinitionFile returns the file a repository's definition should be
+// written to, and the key its entries sit under.
+//
+// repos.yaml is preferred when it declares the repository, so an imported
+// ruleset lands with the rest of that repository's definition. A configuration
+// still keeping its definitions in team files gets the team file, because
+// writing to repos.yaml instead would define the repository in two places at
+// once, which the loader refuses.
+func FindRepoDefinitionFile(dir, repo string) (path, container string, err error) {
+	reposPath := filepath.Join(dir, "repos.yaml")
+	var rf ReposFile
+	switch _, statErr := os.Stat(reposPath); {
+	case statErr == nil:
+		if err := readYAML(reposPath, &rf); err != nil {
+			return "", "", err
+		}
+		for declared := range rf.Repos {
+			if strings.EqualFold(declared, repo) {
+				return reposPath, "repos", nil
+			}
+		}
+	case !os.IsNotExist(statErr):
+		return "", "", fmt.Errorf("read config file %s: %w", reposPath, statErr)
+	}
+
+	teamPath, err := FindTeamFileForRepo(dir, repo)
+	if err != nil {
+		return "", "", err
+	}
+	if teamPath == "" {
+		return "", "", nil
+	}
+	return teamPath, "repositories", nil
 }
 
 // FindTeamFileForRepo returns the team file under <dir>/teams that declares

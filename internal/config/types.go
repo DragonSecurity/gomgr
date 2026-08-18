@@ -116,6 +116,12 @@ type RepoConfig struct {
 	Rulesets   []RulesetConfig    `yaml:"rulesets,omitempty"`
 	Settings   RepoSettingsConfig `yaml:"settings,omitempty"`
 	Visibility string             `yaml:"visibility,omitempty"` // public|private|internal
+
+	// Files are this repository's own templated files. An entry here replaces
+	// the app.files entry with the same path for this repository alone, so an
+	// exception is stated by naming the repository rather than by relying on
+	// where it sits in a list.
+	Files []FileSpec `yaml:"files,omitempty"`
 }
 
 type TeamConfig struct {
@@ -143,6 +149,32 @@ type Root struct {
 	App  AppConfig    `yaml:"app"`
 	Org  OrgConfig    `yaml:"org"`
 	Team []TeamConfig `yaml:"teams"`
+
+	// Repos are repository definitions from repos.yaml: everything about a
+	// repository that is not some team's permission on it. Values take the same
+	// shape as an advanced entry under a team's `repositories:`, minus
+	// `permission`, which belongs to the (team, repo) pair rather than to the
+	// repository.
+	//
+	// A repository may be defined here or in a team file, but not in both — see
+	// ReposFile.
+	Repos map[string]any
+}
+
+// ReposFile is repos.yaml: repository definitions keyed by repository name.
+//
+// Splitting these out of teams/*.yaml separates the two things a team entry was
+// saying at once. A team file says which teams hold what access; repos.yaml says
+// what the repository is. Keeping both in one place meant a repository named by
+// two teams had two definitions and no rule for which won, and the answer turned
+// out to be "whichever file sorted last", including for the permission granted.
+//
+// Definitions in team files are still honored so a configuration can move across
+// one repository at a time, but a repository defined in both places is refused
+// rather than resolved by precedence, because a precedence rule is what this is
+// getting rid of.
+type ReposFile struct {
+	Repos map[string]any `yaml:"repos"`
 }
 
 // ResolvedAppID returns the GitHub App ID in effect, falling back to
