@@ -41,7 +41,15 @@ linters:
       # The strings that are switched on — change scopes and actions,
       # repository visibilities, permission levels — are constants instead, so
       # a typo in one is a compile error rather than a change routed nowhere.
-      ignore-string-values: '^(org|repo|name|path|content|message|branch|reconcile|permission|from|pinned|user|slug|description|privacy|template|topics|visibility|all|read|write|triage|maintain|admin|closed|secret|pull_request|required_status_checks|update|allow_[a-z_]+|delete_branch_on_merge|README\.md|\.github/renovate\.json)$'
+      ignore-string-values:
+        # Keys in a Change's Details map.
+        - '^(org|repo|name|path|content|message|branch|reconcile|permission|from|pinned|user|slug|description|privacy|template|topics|visibility)$'
+        # GitHub API values and ruleset rule names, which have to equal the
+        # string the API or the YAML uses.
+        - '^(all|read|write|triage|maintain|admin|closed|secret)$'
+        - '^(pull_request|required_status_checks|update|delete_branch_on_merge|allow_[a-z_]+)$'
+        # Well-known paths.
+        - '^(README\.md|\.github/renovate\.json)$'
     misspell:
       locale: US
     revive:
