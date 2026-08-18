@@ -253,7 +253,7 @@ func (p *repoPlanner) planRepoCreation(repo, key string, settings repoSettings) 
 		details["template"] = true
 	}
 	p.exists[key] = true
-	return util.Change{Scope: "repo", Target: key, Action: "ensure", Details: details}, true
+	return util.Change{Scope: scopeRepo, Target: key, Action: util.ActionEnsure, Details: details}, true
 }
 
 // planGrant emits a team-repo:grant, unless the entry declares no permission.
@@ -276,9 +276,9 @@ func (p *repoPlanner) planGrant(slug, repo, key string) (util.Change, bool) {
 		return util.Change{}, false
 	}
 	return util.Change{
-		Scope:  "team-repo",
+		Scope:  scopeTeamRepo,
 		Target: slug + "/" + key,
-		Action: "grant",
+		Action: util.ActionGrant,
 		Details: map[string]any{
 			"org": p.org, "slug": slug, "repo": repo, "permission": permission,
 		},
@@ -352,7 +352,7 @@ func (p *repoPlanner) planAccumulated() []util.Change {
 	for _, repo := range sortedKeys(p.pinned) {
 		if p.pinned[repo] {
 			out = append(out, util.Change{
-				Scope: "repo-pin", Target: repo, Action: "ensure",
+				Scope: scopeRepoPin, Target: repo, Action: util.ActionEnsure,
 				Details: map[string]any{"org": p.org, "repo": repo, "pinned": true},
 			})
 		}
@@ -360,7 +360,7 @@ func (p *repoPlanner) planAccumulated() []util.Change {
 	for _, repo := range sortedKeys(p.templates) {
 		if p.templates[repo] && !p.repos[repo].GetIsTemplate() {
 			out = append(out, util.Change{
-				Scope: "repo-template", Target: repo, Action: "ensure",
+				Scope: scopeRepoTemplate, Target: repo, Action: util.ActionEnsure,
 				Details: map[string]any{"org": p.org, "repo": repo, "template": true},
 			})
 		}
@@ -376,7 +376,7 @@ func (p *repoPlanner) planTopics(repo string, want []string) (util.Change, bool)
 		return util.Change{}, false
 	}
 	return util.Change{
-		Scope: "repo-topics", Target: repo, Action: "ensure",
+		Scope: scopeRepoTopics, Target: repo, Action: util.ActionEnsure,
 		Details: map[string]any{"org": p.org, "repo": repo, "topics": want},
 	}, true
 }
@@ -420,7 +420,7 @@ func (p *repoPlanner) dropSatisfiedGrants(in []util.Change) ([]util.Change, erro
 
 	out := in[:0]
 	for _, ch := range in {
-		if ch.Scope == "team-repo" && ch.Action == "grant" {
+		if ch.Scope == scopeTeamRepo && ch.Action == util.ActionGrant {
 			d, ok := ch.Details.(map[string]any)
 			if !ok {
 				return nil, fmt.Errorf("invalid details for team-repo:grant: %T", ch.Details)

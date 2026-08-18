@@ -62,9 +62,9 @@ func planCustomRoles(ctx context.Context, c *gh.Client, cfg *config.Root, st *St
 		if !exists {
 			// Create new role
 			out = append(out, util.Change{
-				Scope:  "custom-role",
+				Scope:  scopeCustomRole,
 				Target: roleName,
-				Action: "create",
+				Action: util.ActionCreate,
 				Details: customRoleChange{
 					Org:         org,
 					Name:        roleName,
@@ -98,9 +98,9 @@ func planCustomRoles(ctx context.Context, c *gh.Client, cfg *config.Root, st *St
 
 			if needsUpdate {
 				out = append(out, util.Change{
-					Scope:  "custom-role",
+					Scope:  scopeCustomRole,
 					Target: roleName,
-					Action: "update",
+					Action: util.ActionUpdate,
 					Details: customRoleChange{
 						Org:         org,
 						ID:          existingRole.GetID(),
@@ -151,9 +151,9 @@ func planCustomRoleCleanups(ctx context.Context, c *gh.Client, cfg *config.Root,
 			unmanagedRoles = append(unmanagedRoles, roleName)
 			if cfg.App.DeleteUnmanagedCustomRoles {
 				out = append(out, util.Change{
-					Scope:  "custom-role",
+					Scope:  scopeCustomRole,
 					Target: roleName,
-					Action: "delete",
+					Action: util.ActionDelete,
 					Details: customRoleChange{
 						Org:  org,
 						ID:   role.GetID(),

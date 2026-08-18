@@ -130,9 +130,9 @@ func applyRepoEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
 	// private=true if neither is set preserves the pre-Files behavior.
 	private := true
 	switch visibility {
-	case "public", "internal":
+	case visPublic, visInternal:
 		private = false
-	case "private":
+	case visPrivate:
 		private = true
 	case "":
 		if v, ok := d["private"]; ok {
@@ -430,7 +430,7 @@ func applyOrgMemberRemove(ctx context.Context, c *gh.Client, ch util.Change) err
 
 func normalizePermission(p string) string {
 	switch strings.ToLower(p) {
-	case "read", permPull:
+	case permRead, permPull:
 		return permPull
 	case permTriage:
 		return permTriage

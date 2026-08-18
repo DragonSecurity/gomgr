@@ -12,6 +12,18 @@ type Change struct {
 	Details interface{} `json:"details"`
 }
 
+// The actions a Change can carry. They are switched on here and in the apply
+// handlers, across packages, so a literal that drifts by a letter routes a
+// change to nothing at all rather than failing to compile.
+const (
+	ActionCreate = "create"
+	ActionEnsure = "ensure"
+	ActionGrant  = "grant"
+	ActionUpdate = "update"
+	ActionDelete = "delete"
+	ActionRemove = "remove"
+)
+
 type StateStats struct {
 	Teams           StatePair `json:"teams"`
 	TeamMembers     StatePair `json:"team_members"`
@@ -64,11 +76,11 @@ func PrintPlan(p Plan) error {
 // `+` for creation, `-` for removal, `~` for in-place updates.
 func changeSymbol(action string) string {
 	switch action {
-	case "create", "ensure", "grant":
+	case ActionCreate, ActionEnsure, ActionGrant:
 		return "+"
-	case "delete", "remove":
+	case ActionDelete, ActionRemove:
 		return "-"
-	case "update":
+	case ActionUpdate:
 		return "~"
 	}
 	return "·"

@@ -161,11 +161,11 @@ func planRulesetSet(ctx context.Context, args rulesetScopeArgs, desired []config
 
 		current, exists := byName[strings.ToLower(spec.Name)]
 
-		action := "create"
+		action := util.ActionCreate
 		var id int64
 		if exists {
 			id = current.GetID()
-			action = "update"
+			action = util.ActionUpdate
 
 			// A reference the plan cannot resolve yet — most often a team this
 			// run is about to create — means the comparison cannot be trusted,
@@ -223,7 +223,7 @@ func planRulesetCleanup(args rulesetScopeArgs, desired []config.RulesetConfig, e
 		out = append(out, util.Change{
 			Scope:  args.scope,
 			Target: args.target(rs.Name),
-			Action: "delete",
+			Action: util.ActionDelete,
 			Details: rulesetChange{
 				Org:  args.org,
 				Repo: args.repo,
