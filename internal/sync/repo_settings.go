@@ -172,7 +172,7 @@ func planRepoSettings(ctx context.Context, fetch repoDetailFetcher, cfg *config.
 		out = append(out, util.Change{
 			Scope:   scopeRepoSettings,
 			Target:  current.GetName() + " (" + strings.Join(names, ", ") + ")",
-			Action:  "ensure",
+			Action:  util.ActionEnsure,
 			Details: details,
 		})
 	}
@@ -219,7 +219,7 @@ func planRepoVisibility(cfg *config.Root, bySettings map[string]repoSettings, ex
 		out = append(out, util.Change{
 			Scope:  scopeRepoVisibility,
 			Target: fmt.Sprintf("%s (%s -> %s)", current.GetName(), current.GetVisibility(), want),
-			Action: "ensure",
+			Action: util.ActionEnsure,
 			Details: map[string]any{
 				"org":        cfg.App.Org,
 				"repo":       current.GetName(),

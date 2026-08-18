@@ -199,7 +199,7 @@ func planRepoFiles(ctx context.Context, probe fileProbe, route fileRouter, org, 
 			"branch":    branch,
 			"reconcile": spec.Reconcile,
 		}
-		scope := "repo-file"
+		scope := scopeRepoFile
 		if route != nil {
 			decision, err := route(repo, branch)
 			if err != nil {
@@ -214,7 +214,7 @@ func planRepoFiles(ctx context.Context, probe fileProbe, route fileRouter, org, 
 		out = append(out, util.Change{
 			Scope:   scope,
 			Target:  repoKey + ":" + spec.Path,
-			Action:  "ensure",
+			Action:  util.ActionEnsure,
 			Details: details,
 		})
 		emittedFiles[dedupeKey] = true
@@ -284,9 +284,9 @@ func planCodeowners(org string, ownersByRepo map[string][]string, repoNames map[
 			repoName = r
 		}
 		out = append(out, util.Change{
-			Scope:  "repo-file",
+			Scope:  scopeRepoFile,
 			Target: dedupeKey,
-			Action: "ensure",
+			Action: util.ActionEnsure,
 			Details: map[string]any{
 				"org":       org,
 				"repo":      repoName,
@@ -334,9 +334,9 @@ func planCodeownersDeletions(org string, managedRepos map[string]bool, repoNames
 			repoName = r
 		}
 		out = append(out, util.Change{
-			Scope:  "repo-file",
+			Scope:  scopeRepoFile,
 			Target: dedupeKey,
-			Action: "delete",
+			Action: util.ActionDelete,
 			Details: map[string]any{
 				"org":     org,
 				"repo":    repoName,

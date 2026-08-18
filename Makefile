@@ -79,11 +79,9 @@ vet: ## Run go vet
 lint: ## Run golangci-lint (requires golangci-lint to be installed)
 	@echo "Running golangci-lint..."
 	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run --timeout 5m ./...; \
-		echo "Linting passed"; \
+		golangci-lint run --timeout 5m ./... && echo "Linting passed"; \
 	elif [ -x "$(shell go env GOPATH)/bin/golangci-lint" ]; then \
-		$(shell go env GOPATH)/bin/golangci-lint run --timeout 5m ./...; \
-		echo "Linting passed"; \
+		$(shell go env GOPATH)/bin/golangci-lint run --timeout 5m ./... && echo "Linting passed"; \
 	else \
 		echo "golangci-lint not found. Install it with: make install-tools"; \
 		exit 1; \

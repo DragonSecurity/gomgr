@@ -23,6 +23,10 @@ const (
 // what a ruleset covers when the config does not narrow it.
 const refSelectorAll = "~ALL"
 
+// bypassActorSelf marks the app gomgr is authenticated as, so an imported
+// ruleset does not pin the numeric ID of whichever app happened to run it.
+const bypassActorSelf = "self"
+
 // rulesetChange carries a planned ruleset mutation. Spec is the resolved
 // configuration (preset expanded, references resolved as far as planning could
 // see them) rather than a finished github.RepositoryRuleset, because a bypass

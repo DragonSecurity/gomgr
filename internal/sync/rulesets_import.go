@@ -394,7 +394,7 @@ func bypassActorsToConfig(actors []*github.BypassActor, l *importLookup) []confi
 			}
 		case config.BypassActorTypeIntegration:
 			if id != 0 && id == l.appID {
-				entry.App = "self"
+				entry.App = bypassActorSelf
 			} else {
 				entry.App = strconv.FormatInt(id, 10)
 			}

@@ -33,6 +33,30 @@ const (
 	permPush     = "push"
 	permMaintain = "maintain"
 	permAdmin    = "admin"
+	// permRead is GitHub's name for permPull in some API responses.
+	permRead = "read"
+)
+
+// Repository visibilities. GitHub rejects anything else.
+const (
+	visPublic   = "public"
+	visPrivate  = "private"
+	visInternal = "internal"
+)
+
+// Change scopes, joining the ones already declared next to the code that plans
+// them (scopeOrgRuleset, scopeRepoSettings, scopeRepoFilePR and friends).
+const (
+	scopeRepo         = "repo"
+	scopeRepoFile     = "repo-file"
+	scopeRepoPin      = "repo-pin"
+	scopeRepoTemplate = "repo-template"
+	scopeRepoTopics   = "repo-topics"
+	scopeTeam         = "team"
+	scopeTeamMember   = "team-member"
+	scopeTeamRepo     = "team-repo"
+	scopeOrgMember    = "org-member"
+	scopeCustomRole   = "custom-role"
 )
 
 const (
@@ -93,10 +117,10 @@ type repoSettings struct {
 }
 
 var validVisibilities = map[string]bool{
-	"":         true,
-	"public":   true,
-	"private":  true,
-	"internal": true,
+	"":          true,
+	visPublic:   true,
+	visPrivate:  true,
+	visInternal: true,
 }
 
 // validateTopic checks if a topic name meets GitHub requirements:
@@ -383,9 +407,9 @@ func planTeams(_ context.Context, _ *gh.Client, cfg *config.Root, st *State) ([]
 	for slug, want := range desired {
 		if _, ok := actualBySlug[slug]; !ok {
 			out = append(out, util.Change{
-				Scope:  "team",
+				Scope:  scopeTeam,
 				Target: slug,
-				Action: "create",
+				Action: util.ActionCreate,
 				Details: map[string]any{
 					"org":         st.Org,
 					"name":        want.Name,
@@ -413,9 +437,9 @@ func planTeams(_ context.Context, _ *gh.Client, cfg *config.Root, st *State) ([]
 		}
 		if needsUpdate {
 			out = append(out, util.Change{
-				Scope:   "team",
+				Scope:   scopeTeam,
 				Target:  slug,
-				Action:  "update",
+				Action:  util.ActionUpdate,
 				Details: updateDetails,
 			})
 		}
@@ -511,9 +535,9 @@ func planTeamMembership(ctx context.Context, c *gh.Client, st *State, desiredByS
 				continue
 			}
 			out = append(out, util.Change{
-				Scope:   "team-member",
+				Scope:   scopeTeamMember,
 				Target:  slug,
-				Action:  "ensure",
+				Action:  util.ActionEnsure,
 				Details: teamMemberChange{Org: org, Slug: slug, User: user, Role: role},
 			})
 		}
@@ -810,7 +834,7 @@ func planTeamCleanups(st *State, org string, desired map[string]config.TeamConfi
 	var out []util.Change
 	for _, at := range st.ActualTeams {
 		if _, ok := desired[at.GetSlug()]; !ok {
-			out = append(out, util.Change{Scope: "team", Target: at.GetSlug(), Action: "delete", Details: map[string]any{"org": org, "slug": at.GetSlug()}})
+			out = append(out, util.Change{Scope: scopeTeam, Target: at.GetSlug(), Action: util.ActionDelete, Details: map[string]any{"org": org, "slug": at.GetSlug()}})
 		}
 	}
 	return out, nil
@@ -866,7 +890,7 @@ func planMemberCleanups(ctx context.Context, c *gh.Client, org string) ([]util.C
 	for _, u := range members {
 		login := strings.ToLower(u.GetLogin())
 		if !inAnyTeam[login] {
-			out = append(out, util.Change{Scope: "org-member", Target: login, Action: "remove", Details: map[string]any{"org": org, "user": login}})
+			out = append(out, util.Change{Scope: scopeOrgMember, Target: login, Action: util.ActionRemove, Details: map[string]any{"org": org, "user": login}})
 		}
 	}
 	return out, nil
@@ -884,9 +908,9 @@ func planRepoCleanups(cfg *config.Root, st *State) ([]util.Change, []string, err
 			unmanagedRepos = append(unmanagedRepos, repo.GetName())
 			if cfg.App.DeleteUnmanagedRepos {
 				out = append(out, util.Change{
-					Scope:  "repo",
+					Scope:  scopeRepo,
 					Target: repoName,
-					Action: "delete",
+					Action: util.ActionDelete,
 					Details: map[string]any{
 						"org":  org,
 						"repo": repo.GetName(),
