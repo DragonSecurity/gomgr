@@ -51,6 +51,7 @@ go build -trimpath -ldflags "-s -X github.com/DragonSecurity/gomgr/internal/vers
 <config>/
 ├─ app.yaml
 ├─ org.yaml
+├─ repos.yaml        # optional: repository definitions
 └─ teams/
    └─ platform-team.yaml
 ```
@@ -215,10 +216,87 @@ file that should exist in every managed repo.
 - **`only`** (optional): list of `path.Match` globs against the repo name.
   Empty/omitted matches every repo.
 
+Two entries in `app.files` may not share a `path:` — that is refused at load
+time. `only:` selects which repositories get a file; it is not a way to make one
+repository's version of a file beat another's. For that, see the per-repository
+`files:` below.
+
 Legacy `add_default_readme` and `add_renovate_config` still work — at load
 time they are converted into FileSpec entries and prepended to `files:`. If
 you list the same `path:` yourself, your entry overrides the legacy one, so
 you can keep the flags on and still supply a custom README.
+
+### `repos.yaml`
+
+`repos.yaml` holds repository *definitions* — everything about a repository
+that is not some team's permission on it:
+
+```yaml
+repos:
+  apikit:
+    topics: [backend, api]
+    visibility: private
+    files:
+      - path: .github/renovate.json
+        reconcile: true
+        content: |
+          { "extends": ["github>acme/renovate-presets", "acme/renovate-presets:generators"] }
+```
+
+The team file then says only who holds what:
+
+```yaml
+repositories:
+  apikit: admin
+```
+
+**Why it is a separate file.** A team entry was saying two different things at
+once. `permission` belongs to the *(team, repo)* pair — several teams holding
+different access to one repository is the point of teams. Everything else
+describes the repository itself. Keeping both in one place meant a repository
+named by two teams had two definitions and no rule for which won.
+
+`permission:` is refused in `repos.yaml`: there is no team there for it to
+belong to.
+
+**Migrating.** Definitions in team files are still honored, so a configuration
+can move one repository at a time. A repository defined in *both* places is
+refused rather than resolved by precedence — a precedence rule being the thing
+this is getting rid of. A team entry that states only a permission is a grant,
+not a definition, so it never collides.
+
+`gomgr import rulesets` writes to `repos.yaml` when it defines the repository,
+and to the team file otherwise.
+
+#### Per-repository `files:`
+
+A repository's own `files:` entry replaces the `app.files` entry with the same
+`path:` for that repository alone:
+
+```yaml
+# app.yaml — what every repo gets
+files:
+  - path: .github/renovate.json
+    reconcile: true
+    content: |
+      { "extends": ["github>acme/renovate-presets"] }
+```
+
+```yaml
+# repos.yaml — apikit's exception
+repos:
+  apikit:
+    files:
+      - path: .github/renovate.json
+        reconcile: true
+        content: |
+          { "extends": ["github>acme/renovate-presets", "acme/renovate-presets:generators"] }
+```
+
+The override is stated by naming the repository, so there is no ordering rule to
+get wrong and nothing a YAML formatter can reorder. The org-wide entry keeps its
+position in the list; a file only one repository has is appended. `only:` is
+refused here — the entry already applies to just this repository.
 
 ### Repository visibility
 

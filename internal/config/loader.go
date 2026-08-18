@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -21,6 +22,19 @@ func Load(dir string) (*Root, error) {
 	if err := readYAML(filepath.Join(dir, "org.yaml"), &r.Org); err != nil {
 		return nil, err
 	}
+	// repos.yaml, optional: a configuration that has not moved its repository
+	// definitions out of its team files yet does not have one.
+	reposPath := filepath.Join(dir, "repos.yaml")
+	if _, statErr := os.Stat(reposPath); statErr == nil {
+		var rf ReposFile
+		if err := readYAML(reposPath, &rf); err != nil {
+			return nil, err
+		}
+		r.Repos = rf.Repos
+	} else if !os.IsNotExist(statErr) {
+		return nil, fmt.Errorf("read config file %s: %w", reposPath, statErr)
+	}
+
 	// teams/*.yaml
 	teamDir := filepath.Join(dir, "teams")
 	entries, err := os.ReadDir(teamDir)
@@ -112,6 +126,9 @@ func (r *Root) Validate() error {
 			if err := ValidateRulesets(ScopeRepo, where, rulesets); err != nil {
 				return err
 			}
+			if err := validateRepoFiles(where, val); err != nil {
+				return err
+			}
 		}
 		for _, u := range t.Maintainers {
 			if err := validateUsername(u); err != nil {
@@ -146,10 +163,101 @@ func (r *Root) Validate() error {
 	if err := r.App.FileChanges.Validate(); err != nil {
 		return err
 	}
-	if err := validateFileSpecs(r.App.Files); err != nil {
+	if err := validateFileSpecs("app.files", r.App.Files); err != nil {
+		return err
+	}
+	if err := r.validateRepoDefinitions(); err != nil {
 		return err
 	}
 	return nil
+}
+
+// validateRepoDefinitions checks repos.yaml. The entries take the same shape as
+// an advanced team entry and are held to the same rules, with one addition:
+// permission is refused, because repos.yaml has no team for it to belong to.
+func (r *Root) validateRepoDefinitions() error {
+	for _, repo := range sortedRepoKeys(r.Repos) {
+		val := r.Repos[repo]
+		if err := validateRepoName(repo); err != nil {
+			return fmt.Errorf("repos.yaml: %w", err)
+		}
+		m, ok := asStringMap(val)
+		if !ok {
+			return fmt.Errorf("repos.yaml: repo %q must be a mapping of settings, got %T", repo, val)
+		}
+		if err := RejectUnknownRepoKeys(m); err != nil {
+			return fmt.Errorf("repos.yaml, repo %q: %w", repo, err)
+		}
+		if _, has := m["permission"]; has {
+			return fmt.Errorf("repos.yaml, repo %q: permission belongs to a team, not to the repository — "+
+				"declare it under `repositories:` in teams/<team>.yaml", repo)
+		}
+		rulesets, err := repoRulesets(val)
+		if err != nil {
+			return fmt.Errorf("repos.yaml, repo %q: %w", repo, err)
+		}
+		where := fmt.Sprintf("repos.yaml, repo %q", repo)
+		if err := ValidateRulesets(ScopeRepo, where, rulesets); err != nil {
+			return err
+		}
+		if err := validateRepoFiles(where, val); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateRepoFiles checks a repository's own `files:` block. Beyond the rules
+// every file list is held to, `only:` is refused here: the entry is already
+// attached to one repository, so a filter on top of that is either redundant or
+// says the opposite of where it is written, and there is no reading of the
+// second that is worth keeping.
+func validateRepoFiles(where string, val any) error {
+	files, err := RepoFileSpecs(val)
+	if err != nil {
+		return fmt.Errorf("%s: %w", where, err)
+	}
+	for i, f := range files {
+		if len(f.Only) > 0 {
+			return fmt.Errorf("%s files[%d] (%s): `only:` does not belong on a repository's own file — "+
+				"the entry already applies to just this repository", where, i, f.Path)
+		}
+	}
+	return validateFileSpecs(where+" files", files)
+}
+
+// sortedRepoKeys keeps validation errors stable across runs, since a map is
+// walked in whatever order Go feels like.
+func sortedRepoKeys(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// RepoFileSpecs reads the `files:` block off a repository entry.
+func RepoFileSpecs(val any) ([]FileSpec, error) {
+	m, ok := asStringMap(val)
+	if !ok {
+		return nil, nil
+	}
+	raw, has := m["files"]
+	if !has {
+		return nil, nil
+	}
+	// Round-trip through YAML rather than hand-walking the map: FileSpec is a
+	// plain struct and this keeps one definition of how it decodes.
+	b, err := yaml.Marshal(raw)
+	if err != nil {
+		return nil, fmt.Errorf("files: %w", err)
+	}
+	var specs []FileSpec
+	if err := yaml.Unmarshal(b, &specs); err != nil {
+		return nil, fmt.Errorf("files: %w", err)
+	}
+	return specs, nil
 }
 
 // repoRulesets pulls the `rulesets:` block out of a repository entry in
@@ -187,17 +295,17 @@ func asStringMap(v any) (map[string]any, bool) {
 // validateFileSpecs ensures every templated file has a path and content and
 // that no two specs target the same path (which would make apply order
 // ambiguous).
-func validateFileSpecs(files []FileSpec) error {
+func validateFileSpecs(where string, files []FileSpec) error {
 	seen := map[string]bool{}
 	for i, f := range files {
 		if strings.TrimSpace(f.Path) == "" {
-			return fmt.Errorf("app.files[%d]: path must not be empty", i)
+			return fmt.Errorf("%s[%d]: path must not be empty", where, i)
 		}
 		if strings.TrimSpace(f.Content) == "" {
-			return fmt.Errorf("app.files[%d] (%s): content must not be empty", i, f.Path)
+			return fmt.Errorf("%s[%d] (%s): content must not be empty", where, i, f.Path)
 		}
 		if seen[f.Path] {
-			return fmt.Errorf("app.files[%d]: duplicate path %q", i, f.Path)
+			return fmt.Errorf("%s[%d]: duplicate path %q", where, i, f.Path)
 		}
 		seen[f.Path] = true
 	}

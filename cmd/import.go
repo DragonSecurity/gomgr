@@ -163,16 +163,16 @@ func writeImport(dir string, result *insync.ImportResult) error {
 	}
 
 	for _, repo := range result.RepoNames() {
-		path, err := config.FindTeamFileForRepo(dir, repo)
+		path, container, err := config.FindRepoDefinitionFile(dir, repo)
 		if err != nil {
 			return err
 		}
 		if path == "" {
 			// ImportRulesets only reports repos the config knows about, so a
 			// miss here means the config changed under us mid-run.
-			return fmt.Errorf("repository %q is no longer declared in any team file", repo)
+			return fmt.Errorf("repository %q is no longer declared in repos.yaml or any team file", repo)
 		}
-		if err := config.InsertRepoRulesets(path, repo, specs(result.Repos[repo])); err != nil {
+		if err := config.InsertRepoRulesets(path, container, repo, specs(result.Repos[repo])); err != nil {
 			return err
 		}
 		touched[path] += len(result.Repos[repo])

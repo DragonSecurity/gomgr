@@ -89,6 +89,7 @@ type repoSettings struct {
 	codeowners []string
 	rulesets   []config.RulesetConfig
 	settings   config.RepoSettingsConfig
+	files      []config.FileSpec
 }
 
 var validVisibilities = map[string]bool{
@@ -223,6 +224,14 @@ func parseRepoConfig(val any) (repoSettings, error) {
 				}
 				settings.codeowners = append(settings.codeowners, coStr)
 			}
+		}
+
+		if _, has := m["files"]; has {
+			specs, err := config.RepoFileSpecs(m)
+			if err != nil {
+				return settings, err
+			}
+			settings.files = specs
 		}
 	}
 
@@ -540,6 +549,19 @@ func collectRepoSettings(cfg *config.Root, _ string) (allSettings map[string]rep
 	// declaredBy names the team that first stated a repo-level field, so a
 	// conflict can say which two files disagree.
 	declaredBy := map[string]string{}
+	// fromReposFile marks repositories repos.yaml defines, so a team file
+	// defining one too can be refused rather than merged.
+	fromReposFile := map[string]bool{}
+
+	for repo, val := range cfg.Repos {
+		r := strings.ToLower(repo)
+		settings, err := parseRepoConfig(val)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("invalid config for repo %s in repos.yaml: %w", repo, err)
+		}
+		allSettings[r] = settings
+		fromReposFile[r] = true
+	}
 
 	for _, t := range cfg.Team {
 		slug := t.ResolvedSlug()
@@ -552,6 +574,13 @@ func collectRepoSettings(cfg *config.Root, _ string) (allSettings map[string]rep
 				return nil, nil, nil, fmt.Errorf("invalid config for repo %s in team %s: %w", repo, slug, err)
 			}
 			perTeam[slug+"/"+r] = settings
+
+			if fromReposFile[r] && statesRepoDefinition(settings) {
+				return nil, nil, nil, fmt.Errorf(
+					"repo %s is defined in repos.yaml and again in team %s — "+
+						"leave the permission in the team file and move the rest to repos.yaml",
+					repo, slug)
+			}
 
 			existing, seen := allSettings[r]
 			if !seen {

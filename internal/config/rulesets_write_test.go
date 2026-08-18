@@ -166,7 +166,7 @@ repositories:
   docs: pull
 `)
 
-	if err := InsertRepoRulesets(path, "infra", []RulesetConfig{adopted("Protect Main")}); err != nil {
+	if err := InsertRepoRulesets(path, "repositories", "infra", []RulesetConfig{adopted("Protect Main")}); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 
@@ -205,7 +205,7 @@ repositories:
   docs: pull
 `)
 
-	if err := InsertRepoRulesets(path, "infra", []RulesetConfig{adopted("Protect Main")}); err != nil {
+	if err := InsertRepoRulesets(path, "repositories", "infra", []RulesetConfig{adopted("Protect Main")}); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 
@@ -241,7 +241,7 @@ repositories:
   other: pull
 `)
 
-	if err := InsertRepoRulesets(path, "vulnerability-reports", []RulesetConfig{adopted("Protect Tags")}); err != nil {
+	if err := InsertRepoRulesets(path, "repositories", "vulnerability-reports", []RulesetConfig{adopted("Protect Tags")}); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 
@@ -265,7 +265,7 @@ repositories:
 
 func TestInsertRepoRulesetsUnknownRepo(t *testing.T) {
 	path := writeTemp(t, "team.yaml", "name: T\nrepositories:\n  infra: push\n")
-	err := InsertRepoRulesets(path, "nope", []RulesetConfig{adopted("x")})
+	err := InsertRepoRulesets(path, "repositories", "nope", []RulesetConfig{adopted("x")})
 	if err == nil || !strings.Contains(err.Error(), "not declared here") {
 		t.Fatalf("err = %v, want a complaint that the repo is not declared", err)
 	}

@@ -1315,3 +1315,127 @@ func TestDifferentPermissionsAreNotAConflict(t *testing.T) {
 		t.Fatalf("differing permissions are legitimate, got: %v", err)
 	}
 }
+
+// TestReposFileDefinitionApplies covers the split: a definition in repos.yaml
+// reaches the repository, while the team file keeps only the grant.
+func TestReposFileDefinitionApplies(t *testing.T) {
+	cfg := &config.Root{
+		Repos: map[string]any{
+			"apikit": map[string]any{
+				"topics":     []any{"backend"},
+				"visibility": "private",
+			},
+		},
+		Team: []config.TeamConfig{
+			{Name: "admins", Repositories: map[string]any{"apikit": "admin"}},
+		},
+	}
+
+	all, managed, perTeam, err := collectRepoSettings(cfg, "acme")
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	got := all["apikit"]
+	if len(got.topics) != 1 || got.topics[0] != "backend" {
+		t.Errorf("topics = %v, want [backend] from repos.yaml", got.topics)
+	}
+	if got.visibility != "private" {
+		t.Errorf("visibility = %q, want private from repos.yaml", got.visibility)
+	}
+	if !managed["apikit"] {
+		t.Error("a repo the team names should be managed")
+	}
+	perms, err := resolveTeamPerms(perTeam, all, "acme")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if perms["admins/apikit"] != "admin" {
+		t.Errorf("grant = %q, want admin from the team file", perms["admins/apikit"])
+	}
+}
+
+// TestReposFileOverlapIsRefused covers the migration rule. Both places are
+// honored so a config can move one repository at a time, but defining one in
+// both is refused rather than resolved by precedence — a precedence rule being
+// the thing the split exists to remove.
+func TestReposFileOverlapIsRefused(t *testing.T) {
+	cfg := &config.Root{
+		Repos: map[string]any{
+			"apikit": map[string]any{"topics": []any{"backend"}},
+		},
+		Team: []config.TeamConfig{
+			{Name: "admins", Repositories: map[string]any{
+				"apikit": map[string]any{"permission": "admin", "visibility": "private"},
+			}},
+		},
+	}
+	_, _, _, err := collectRepoSettings(cfg, "acme")
+	if err == nil {
+		t.Fatal("a repo defined in repos.yaml and a team file must be refused")
+	}
+	if !strings.Contains(err.Error(), "repos.yaml") || !strings.Contains(err.Error(), "admins") {
+		t.Errorf("error should name both places, got: %v", err)
+	}
+}
+
+// A team entry that says only which permission the team holds is a grant, not a
+// definition, so it never collides with repos.yaml.
+func TestReposFilePermissionOnlyEntryIsNotAnOverlap(t *testing.T) {
+	cfg := &config.Root{
+		Repos: map[string]any{"apikit": map[string]any{"topics": []any{"backend"}}},
+		Team: []config.TeamConfig{
+			{Name: "a", Repositories: map[string]any{"apikit": "pull"}},
+			{Name: "b", Repositories: map[string]any{"apikit": map[string]any{"permission": "admin"}}},
+		},
+	}
+	if _, _, _, err := collectRepoSettings(cfg, "acme"); err != nil {
+		t.Fatalf("permission-only entries are grants, not definitions: %v", err)
+	}
+}
+
+// TestSpecsForOverridesByPath covers the whole point of the exercise: a
+// repository states its own version of an org-wide file by naming itself, with
+// no ordering rule and no `only:` filter involved.
+func TestSpecsForOverridesByPath(t *testing.T) {
+	p := &repoPlanner{
+		fileSpecs: []config.FileSpec{
+			{Path: ".github/renovate.json", Content: "generic", Reconcile: true},
+			{Path: "LICENSE", Content: "MIT"},
+		},
+		settings: map[string]repoSettings{
+			"apikit": {files: []config.FileSpec{
+				{Path: ".github/renovate.json", Content: "special", Reconcile: true},
+				{Path: "CODEOWNERS", Content: "@team"},
+			}},
+			"other": {},
+		},
+	}
+
+	got := map[string]string{}
+	for _, s := range p.specsFor("apikit") {
+		got[s.Path] = s.Content
+	}
+	if got[".github/renovate.json"] != "special" {
+		t.Errorf("renovate.json = %q, want the repository's own version", got[".github/renovate.json"])
+	}
+	if got["LICENSE"] != "MIT" {
+		t.Errorf("LICENSE = %q, want the org-wide entry to survive", got["LICENSE"])
+	}
+	if got["CODEOWNERS"] != "@team" {
+		t.Errorf("CODEOWNERS = %q, want a repo-only file to be added", got["CODEOWNERS"])
+	}
+
+	// Order is the org-wide order, so the override does not move anything.
+	paths := []string{}
+	for _, s := range p.specsFor("apikit") {
+		paths = append(paths, s.Path)
+	}
+	if strings.Join(paths, ",") != ".github/renovate.json,LICENSE,CODEOWNERS" {
+		t.Errorf("order = %v, want the org-wide order with repo-only files appended", paths)
+	}
+
+	// A repository that overrides nothing is untouched.
+	if len(p.specsFor("other")) != 2 {
+		t.Errorf("a repo with no files of its own should get the org-wide list unchanged")
+	}
+}
