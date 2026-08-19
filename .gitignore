@@ -153,3 +153,8 @@ fabric.properties
 .env
 
 .pem
+
+# Local assistant tooling: a project profile describing this repo's security
+# posture and trust boundaries, plus review and design reports. Useful working
+# notes, but this repository is public and none of it is meant to be.
+.dragon-buddy/
