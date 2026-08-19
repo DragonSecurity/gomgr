@@ -411,10 +411,11 @@ func planTeams(_ context.Context, _ *gh.Client, cfg *config.Root, st *State) ([]
 				Target: slug,
 				Action: util.ActionCreate,
 				Details: map[string]any{
-					"org":         st.Org,
-					"name":        want.Name,
-					"privacy":     want.Privacy,
-					"description": want.Description,
+					"org":                  st.Org,
+					"name":                 want.Name,
+					"privacy":              want.Privacy,
+					"description":          want.Description,
+					"notification_setting": want.NotificationSetting,
 				},
 			})
 			continue
@@ -434,6 +435,10 @@ func planTeams(_ context.Context, _ *gh.Client, cfg *config.Root, st *State) ([]
 		if want.Privacy != "" && want.Privacy != existing.GetPrivacy() {
 			needsUpdate = true
 			updateDetails["privacy"] = want.Privacy
+		}
+		if want.NotificationSetting != "" && want.NotificationSetting != existing.GetNotificationSetting() {
+			needsUpdate = true
+			updateDetails["notification_setting"] = want.NotificationSetting
 		}
 		if needsUpdate {
 			out = append(out, util.Change{
