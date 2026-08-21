@@ -1282,9 +1282,9 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - { folder: "dragonsecurity/dragonsecurity", gom_version: "v0.12.2" }
-          - { folder: "dragonsecurity/dragondevcc",   gom_version: "v0.10.2" }
-          - { folder: "dragonsecurity/kamuses",       gom_version: "v0.10.2" }
+          - { folder: "dragonsecurity/dragonsecurity", gom_version: "v0.6.0" }
+          - { folder: "dragonsecurity/dragondevcc",   gom_version: "v0.6.0" }
+          - { folder: "dragonsecurity/kamuses",       gom_version: "v0.6.0" }
     continue-on-error: true  # allow other matrix jobs to finish if one fails
 
     steps:
@@ -1394,14 +1394,40 @@ The repository includes GitHub Actions workflows:
 
 ## Roadmap / TODO
 
-- Compare & update team fields (description/privacy/parents)
 - Optionally remove extra team members
-- Enterprise-level management: enterprise accounts, the orgs inside them, and
-  the policies that only exist at that tier
 - Optionally remove extra topics from repos (current behavior: union of all topics)
 - Custom default branch for file writes
 - Parallel apply with rate‑limit aware workers
 - More comprehensive plan diff output
+
+### Deferred: enterprise-level management
+
+Managing a GitHub **Enterprise** — the enterprise account, the organizations
+inside it, and the policies that exist only at that tier — has been looked at
+and deliberately deferred. The blocker is the scope, not the work:
+
+- **Listing an enterprise's organizations is GraphQL-only.** `GET
+  /enterprises/{slug}`, `/organizations` and `/orgs` all 404, and none of
+  go-github's 168 `EnterpriseService` methods list them.
+- **The read/write scope boundary is in the wrong place.** The org list needs
+  only `read:enterprise`, but useful reads past it do not — `GET
+  /enterprises/{slug}/apps/installable_organizations` is a pure read and still
+  wants `admin:enterprise`, as do the audit log, SSO/SAML identity and most
+  policy reads. A "read-only" enterprise integration does not stay read-only;
+  it pulls toward `admin:enterprise`, which can rewrite enterprise policy, add
+  and remove organizations, and reach billing. gomgr should not hold that
+  credential, and it certainly should not sit in CI.
+- **gomgr's auth model does not reach there anyway.** Under GitHub App auth,
+  `NewClientFromEnv` resolves a per-org *installation* token, which is
+  org-scoped by construction and cannot see the `enterprise` object at all.
+
+**To drive many organizations, use the job matrix** in
+[CI: Org sync workflow](#ci-org-sync-workflow-for-your-org-config-repo) above.
+A hand-maintained list of config folders belongs in the org-config repo rather
+than in the tool, and it needs no enterprise credential.
+
+Revisiting this needs its own risk review, and `admin:enterprise` is the first
+question to re-answer.
 
 ---
 

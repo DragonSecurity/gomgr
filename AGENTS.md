@@ -247,10 +247,21 @@ Each file defines a team with:
 The roadmap includes:
 
 - Optionally remove extra team members
-- Enterprise-level management (enterprise accounts and their orgs)
 - Parallel apply with rate-limit aware workers
 - More comprehensive plan diff output
 - Custom default branch for file writes
+
+**Deferred — enterprise-level management.** Managing the enterprise account and
+the organizations inside it was investigated and deliberately deferred. Listing
+an enterprise's organizations is GraphQL-only (no REST endpoint exists), and the
+enterprise tier does not split read from write usefully: reads past the bare org
+list — installable organizations, the audit log, SSO/SAML identity, most policy
+reads — require `admin:enterprise`, a scope that can rewrite enterprise policy,
+add and remove organizations, and reach billing. gomgr will not hold that scope.
+An App installation token is org-scoped by construction and cannot see the
+enterprise object either. Driving many organizations is done with a
+hand-maintained CI job matrix over config folders, in the org-config repo. See
+the README's *Deferred: enterprise-level management* for the full reasoning.
 
 ## Security Considerations
 
