@@ -94,6 +94,31 @@ func TestListInstallationsPaginates(t *testing.T) {
 	}
 }
 
+// An app can be installed on a personal account. gomgr can never act on one —
+// auth resolves through GetOrganizationInstallation, which 404s for a user — so
+// the two have to be distinguishable.
+func TestListInstallationsMarksUserAccounts(t *testing.T) {
+	srv := installationsServer(t, [][]map[string]any{{
+		{"id": 1, "account": map[string]any{"login": "AnOrg", "type": "Organization"}},
+		{"id": 2, "account": map[string]any{"login": "aperson", "type": "User"}},
+	}})
+
+	got, err := ListInstallations(context.Background(), clientFor(t, srv))
+	if err != nil {
+		t.Fatalf("ListInstallations: %v", err)
+	}
+	byOrg := map[string]Installation{}
+	for _, in := range got {
+		byOrg[in.Org] = in
+	}
+	if !byOrg["anorg"].IsOrg {
+		t.Error("an Organization installation should be marked as one")
+	}
+	if byOrg["aperson"].IsOrg {
+		t.Error("a User installation must not be marked as an organization")
+	}
+}
+
 func TestListInstallationsEmpty(t *testing.T) {
 	srv := installationsServer(t, [][]map[string]any{{}})
 
@@ -122,8 +147,8 @@ func TestAppClientWithoutCredentials(t *testing.T) {
 // nobody installed, and the answer to both is a list this credential can fetch.
 func TestNotInstalledErrorNamesTheInstalledOrgs(t *testing.T) {
 	srv := installationsServer(t, [][]map[string]any{{
-		{"id": 1, "account": map[string]any{"login": "dragondevcc"}},
-		{"id": 2, "account": map[string]any{"login": "dragonsecurity"}},
+		{"id": 1, "account": map[string]any{"login": "dragondevcc", "type": "Organization"}},
+		{"id": 2, "account": map[string]any{"login": "dragonsecurity", "type": "Organization"}},
 	}})
 
 	cause := errors.New("404 Not Found")
@@ -138,6 +163,26 @@ func TestNotInstalledErrorNamesTheInstalledOrgs(t *testing.T) {
 	}
 	if !errors.Is(err, cause) {
 		t.Error("the original cause must stay wrapped")
+	}
+}
+
+// The list answers "which organization did you mean?". A personal account in it
+// beside a failure to find an installation *for* that account reads as a
+// contradiction, and offers somewhere a config can never point.
+func TestNotInstalledErrorOmitsUserAccounts(t *testing.T) {
+	srv := installationsServer(t, [][]map[string]any{{
+		{"id": 1, "account": map[string]any{"login": "dragonsecurity", "type": "Organization"}},
+		{"id": 2, "account": map[string]any{"login": "allanice001", "type": "User"}},
+	}})
+
+	err := notInstalledError(context.Background(), clientFor(t, srv), "allanice001", errors.New("404 Not Found"))
+
+	msg := err.Error()
+	if !strings.Contains(msg, "dragonsecurity") {
+		t.Errorf("organizations should still be offered: %s", msg)
+	}
+	if strings.Contains(msg, "installed on:") && strings.Contains(msg[strings.Index(msg, "installed on:"):], "allanice001") {
+		t.Errorf("the user account must not be listed as somewhere to point: %s", msg)
 	}
 }
 
@@ -157,5 +202,24 @@ func TestNotInstalledErrorFallsBackWhenListingFails(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "installed on:") {
 		t.Errorf("no list should be claimed when it could not be fetched: %s", err)
+	}
+}
+
+// An app installed only on personal accounts leaves nothing to offer after
+// filtering. "installed on: " with an empty list after it is worse than not
+// offering one at all.
+func TestNotInstalledErrorOffersNoListWhenOnlyUserAccountsExist(t *testing.T) {
+	srv := installationsServer(t, [][]map[string]any{{
+		{"id": 1, "account": map[string]any{"login": "aperson", "type": "User"}},
+	}})
+
+	cause := errors.New("404 Not Found")
+	err := notInstalledError(context.Background(), clientFor(t, srv), "someorg", cause)
+
+	if strings.Contains(err.Error(), "installed on") {
+		t.Errorf("an empty list should not be offered: %s", err)
+	}
+	if !errors.Is(err, cause) {
+		t.Error("the original cause must survive")
 	}
 }

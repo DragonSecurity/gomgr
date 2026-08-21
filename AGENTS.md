@@ -226,6 +226,7 @@ Each file defines a team with:
 
 - **Dry-run Mode**: Preview changes without applying them (`--dry` flag)
 - **Reach Is Visible**: `gomgr installations` lists the organizations the App can reach and, with `--config-root`, both directions of drift against the config directories on disk — App credentials only, no enterprise scope
+- **Organizations Only**: gomgr never acts on a user account. An App installation on a personal account is reported and labelled, never treated as drift, and never offered as somewhere a configuration could point
 - **Stable Output**: Predictable output format for CI/CD validation
 - **Idempotent Operations**: Safe to run multiple times without side effects
 - **Least Privilege**: GitHub App authentication with minimal required permissions

@@ -1080,6 +1080,21 @@ only the one that failed.
 directory with an unrelated problem — a broken team file, an invalid ruleset —
 is still reported as configured. Use `gomgr validate` for that question.
 
+**gomgr manages organizations, not user accounts.** A GitHub App can be
+installed on a personal account, and gomgr can never act on one — authentication
+resolves through `GET /orgs/{org}/installation`, which answers 404 for a user.
+Such an installation is reported and labelled, never counted as a missing config
+directory, and never offered as somewhere a configuration could point:
+
+```console
+  -  allanice001                  user account — gomgr manages organizations only
+```
+
+It is shown rather than hidden on purpose. The installation is real and carries
+the app's full permissions against every repository on that account, so it is
+part of what the private key can reach even though gomgr will never use it. If
+nothing needs it, removing it narrows the key's blast radius.
+
 **This needs GitHub App credentials.** `GET /app/installations` authenticates as
 the app itself, and `GITHUB_TOKEN` cannot answer it: a personal access token
 authenticates a person, and a person has no app installations. It needs no

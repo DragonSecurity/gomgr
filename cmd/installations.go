@@ -16,6 +16,12 @@ import (
 
 var installationsRoot string
 
+// userAccountNote is what a personal-account installation is labeled with. It
+// is not filtered out: the installation is real and carries the app's full
+// permissions against that account's repositories, which is worth seeing even
+// though gomgr will never use it.
+const userAccountNote = "user account — gomgr manages organizations only"
+
 // installationsCmd reports which organizations the GitHub App can reach, and
 // where that disagrees with the configuration directories on disk.
 //
@@ -86,8 +92,12 @@ person, and a person has no app installations.`,
 		}
 
 		if installationsRoot == "" {
-			p("Installed on %d organization(s):\n", len(installs))
+			p("Installed on %d account(s):\n", len(installs))
 			for _, in := range installs {
+				if !in.IsOrg {
+					p("  %-30s installation=%-12d %s\n", in.Org, in.ID, userAccountNote)
+					continue
+				}
 				p("  %-30s installation=%-12d repositories=%s\n", in.Org, in.ID, in.RepositorySelection)
 			}
 			p("\nPass --config-root <dir> to compare this against the config directories on disk.\n")
@@ -122,10 +132,18 @@ func reportInstallationDrift(out io.Writer, installs []gh.Installation, dirs []c
 		installed[in.Org] = in
 	}
 
-	p("Installed on %d organization(s), %d config directory/ies found:\n\n", len(installs), len(dirs))
+	p("Installed on %d account(s), %d config directory/ies found:\n\n", len(installs), len(dirs))
 
-	var unmanaged, unreachable []string
+	var unmanaged, unreachable, userAccounts []string
 	for _, in := range installs {
+		// A user account is reported, never counted as drift: gomgr manages
+		// organizations, so no config directory could ever name one and
+		// listing it as missing would be an instruction to do the impossible.
+		if !in.IsOrg {
+			userAccounts = append(userAccounts, in.Org)
+			p("  -  %-28s %s\n", in.Org, userAccountNote)
+			continue
+		}
 		dirsFor := configured[in.Org]
 		switch {
 		case len(dirsFor) == 0:
@@ -158,6 +176,11 @@ func reportInstallationDrift(out io.Writer, installs []gh.Installation, dirs []c
 	}
 	if len(namelessDirs) > 0 {
 		p("%d config directory/ies whose app.yaml names no org.\n", len(namelessDirs))
+	}
+	if len(userAccounts) > 0 {
+		p("%d user account(s) the app is installed on: %s\n", len(userAccounts), strings.Join(userAccounts, ", "))
+		p("  gomgr cannot act on these, but the installation is real and carries the same\n")
+		p("  permissions against that account's repositories. Remove it if nothing needs it.\n")
 	}
 	if len(unmanaged) == 0 && len(unreachable) == 0 && len(namelessDirs) == 0 {
 		p("No drift: every installation has a config directory and every config directory is reachable.\n")

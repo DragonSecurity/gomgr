@@ -9,10 +9,15 @@ import (
 	"github.com/google/go-github/v90/github"
 )
 
-// Installation is one organization a GitHub App is installed on.
+// accountTypeOrganization is what GitHub calls an installation account that is
+// an organization, as opposed to a user.
+const accountTypeOrganization = "Organization"
+
+// Installation is one account a GitHub App is installed on.
 type Installation struct {
-	// Org is the organization's login, lowercased, because every other org
-	// name in gomgr is compared lowercased.
+	// Org is the account's login, lowercased, because every other org name in
+	// gomgr is compared lowercased. Named Org because that is what it is for
+	// every installation gomgr can act on — see IsOrg for the ones it cannot.
 	Org string
 	// ID is the installation ID, which is what the token endpoints want.
 	ID int64
@@ -20,6 +25,15 @@ type Installation struct {
 	// selected subset can be installed on the org and still be unable to see
 	// the repository a config names, so the two are not the same answer.
 	RepositorySelection string
+	// IsOrg reports whether this installation is on an organization rather
+	// than a user account.
+	//
+	// An app can be installed on a personal account, and gomgr can never act on
+	// one: auth resolves through GetOrganizationInstallation, which answers 404
+	// for a user. Such an installation is still worth reporting — it is real,
+	// and it carries the same permissions against that account's repositories —
+	// but it must not be offered as somewhere a configuration could point.
+	IsOrg bool
 }
 
 // ListInstallations returns every organization the authenticated GitHub App is
@@ -49,6 +63,7 @@ func ListInstallations(ctx context.Context, appClient *github.Client) ([]Install
 				Org:                 strings.ToLower(login),
 				ID:                  in.GetID(),
 				RepositorySelection: in.GetRepositorySelection(),
+				IsOrg:               in.GetAccount().GetType() == accountTypeOrganization,
 			})
 		}
 		if resp == nil || resp.NextPage == 0 {
