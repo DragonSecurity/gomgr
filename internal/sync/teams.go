@@ -58,6 +58,12 @@ const (
 	scopeOrgMember    = "org-member"
 	scopeCustomRole   = "custom-role"
 	scopeOrgOwner     = "org-owner"
+	// Archiving and un-archiving are separate scopes rather than one scope with
+	// two actions, because they have to run at opposite ends of the plan. An
+	// archived repository rejects writes, so un-archiving comes before the file
+	// and settings changes that follow, and archiving comes after them.
+	scopeRepoArchive   = "repo-archive"
+	scopeRepoUnarchive = "repo-unarchive"
 	// scopeRepoCollaborator covers a direct grant on a repository — the kind
 	// the "add collaborator" button makes, which belongs to no team.
 	scopeRepoCollaborator = "repo-collaborator"
@@ -66,12 +72,16 @@ const (
 const (
 	// Owners are promoted before anything else. An org that gomgr is bringing
 	// under management may not yet have an owner who can approve what follows.
-	precedenceOrgOwnerEnsure     = 3
-	precedenceCustomRoleCreate   = 5
-	precedenceCustomRoleUpdate   = 5
-	precedenceTeamCreate         = 10
-	precedenceTeamUpdate         = 15
-	precedenceRepoEnsure         = 10
+	precedenceOrgOwnerEnsure   = 3
+	precedenceCustomRoleCreate = 5
+	precedenceCustomRoleUpdate = 5
+	precedenceTeamCreate       = 10
+	precedenceTeamUpdate       = 15
+	precedenceRepoEnsure       = 10
+	// Before every write below: an archived repository rejects file, settings
+	// and topic changes, so a repository being un-archived this run has to stop
+	// being archived first or the rest of its plan fails.
+	precedenceRepoUnarchive      = 12
 	precedenceTeamRepoGrant      = 20
 	precedenceTeamMemberEnsure   = 30
 	precedenceRepoFileEnsure     = 40
@@ -80,6 +90,10 @@ const (
 	precedenceRepoTemplateEnsure = 46
 	precedenceRepoPinEnsure      = 47
 	precedenceRepoVisibility     = 48
+	// After every write above, for the mirror-image reason: archiving a
+	// repository this run has just written files to must not happen until those
+	// writes have landed.
+	precedenceRepoArchive = 50
 	// Rulesets go on last of the mutating changes. A guard rail that requires a
 	// pull request would otherwise reject the file writes above it, which push
 	// straight to the default branch in the same run.
@@ -125,6 +139,9 @@ type repoSettings struct {
 	template   bool
 	from       string
 	visibility string // "", "public", "private", or "internal"
+	// archived is nil when the configuration says nothing. Absent and false are
+	// different instructions: only an explicit false un-archives.
+	archived   *bool
 	codeowners []string
 	rulesets   []config.RulesetConfig
 	settings   config.RepoSettingsConfig
@@ -222,6 +239,12 @@ func parseRepoConfig(val any) (repoSettings, error) {
 		if from, ok := m["from"].(string); ok {
 			settings.from = from
 		}
+		if archived, ok := m["archived"].(bool); ok {
+			settings.archived = &archived
+		} else if _, has := m["archived"]; has {
+			return settings, fmt.Errorf("archived must be true or false, got %T", m["archived"])
+		}
+
 		if visibility, ok := m["visibility"].(string); ok {
 			if !validVisibilities[visibility] {
 				return settings, fmt.Errorf("invalid visibility %q (must be public, private, or internal)", visibility)
@@ -724,7 +747,7 @@ func collectRepoSettings(cfg *config.Root, _ string) (allSettings map[string]rep
 func statesRepoDefinition(s repoSettings) bool {
 	return len(s.topics) > 0 || s.pinned || s.template || s.from != "" ||
 		s.visibility != "" || len(s.codeowners) > 0 || len(s.rulesets) > 0 ||
-		!s.settings.IsEmpty()
+		s.archived != nil || !s.settings.IsEmpty()
 }
 
 // mergeRepoDefinition folds one team's declaration of a repository into what an
@@ -764,6 +787,12 @@ func mergeRepoDefinition(into, from repoSettings, repo, prevTeam, team string) (
 			return out, conflict("visibility", out.visibility, from.visibility)
 		}
 		out.visibility = from.visibility
+	}
+	if from.archived != nil {
+		if out.archived != nil && *out.archived != *from.archived {
+			return out, conflict("archived", *out.archived, *from.archived)
+		}
+		out.archived = from.archived
 	}
 	out.pinned = out.pinned || from.pinned
 	out.template = out.template || from.template
@@ -981,7 +1010,9 @@ func planRepoCleanups(cfg *config.Root, st *State) ([]util.Change, []string, err
 		repoName := strings.ToLower(repo.GetName())
 		if !st.ManagedRepos[repoName] {
 			unmanagedRepos = append(unmanagedRepos, repo.GetName())
-			if cfg.App.DeleteUnmanagedRepos {
+			// Archiving wins: it is the recoverable direction, and
+			// planUnmanagedArchive has already emitted the archive change.
+			if cfg.App.DeleteUnmanagedRepos && !cfg.App.ArchiveUnmanagedRepos {
 				out = append(out, util.Change{
 					Scope:  scopeRepo,
 					Target: repoName,
@@ -996,6 +1027,17 @@ func planRepoCleanups(cfg *config.Root, st *State) ([]util.Change, []string, err
 	}
 	if cfg.App.DryWarnings.WarnUnmanagedRepos && len(unmanagedRepos) > 0 {
 		warnings = append(warnings, fmt.Sprintf("Found %d unmanaged repositories: %v", len(unmanagedRepos), unmanagedRepos))
+	}
+	// Said only when it is about to matter. delete_unmanaged_repos is a real
+	// choice and stays one, but a run that is actually about to delete
+	// something should mention that the reversible option exists — a restore
+	// request is a worse afternoon than an un-archive.
+	if cfg.App.DeleteUnmanagedRepos && !cfg.App.ArchiveUnmanagedRepos && len(unmanagedRepos) > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"delete_unmanaged_repos will DELETE %d repositories on the next apply: %v. "+
+				"Deletion is recoverable for 90 days through GitHub support, and not at all after that. "+
+				"archive_unmanaged_repos does the same job reversibly if you only mean to park them.",
+			len(unmanagedRepos), unmanagedRepos))
 	}
 	return out, warnings, nil
 }
@@ -1027,7 +1069,7 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 		out = append(out, changes...)
 	}
 
-	if cfg.App.DeleteUnmanagedRepos || cfg.App.DryWarnings.WarnUnmanagedRepos {
+	if cfg.App.DeleteUnmanagedRepos || cfg.App.ArchiveUnmanagedRepos || cfg.App.DryWarnings.WarnUnmanagedRepos {
 		if ctx.Err() != nil {
 			return nil, nil, ctx.Err()
 		}
@@ -1037,6 +1079,10 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 		}
 		out = append(out, changes...)
 		warnings = append(warnings, w...)
+
+		archiveChanges, archiveWarnings := planUnmanagedArchive(cfg, st)
+		out = append(out, archiveChanges...)
+		warnings = append(warnings, archiveWarnings...)
 	}
 
 	return out, warnings, nil

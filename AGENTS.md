@@ -50,7 +50,9 @@ The gomgr agent can:
   - Mark repositories as templates for reuse
   - Support template inheritance (permission and topics)
   - Pin important repositories to organization profile (API limitation: must be done manually via web UI)
-  - Optionally delete unmanaged repositories
+  - Optionally archive unmanaged repositories (reversible; wins over deletion when both are set)
+  - Optionally delete unmanaged repositories — warns, on a run where it would act, that archiving is the recoverable alternative
+  - Declare a repository archived or un-archived via `archived:`; omitting the key never un-archives
   - Warn about repositories not defined in any team configuration
 
 - **Custom Repository Roles**
