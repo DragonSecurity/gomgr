@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -45,27 +46,9 @@ func NewClientFromEnv(ctx context.Context, app config.AppConfig) (*Client, strin
 		return &Client{REST: rest, httpClient: tc}, "PAT", nil
 	}
 	// App
-	appID := app.AppID
-	if v := os.Getenv("GITHUB_APP_ID"); v != "" && appID == 0 {
-		id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			// Silently ignoring this used to send a typo'd env var all the way
-			// to "no auth found", which says nothing about the actual mistake.
-			return nil, "", fmt.Errorf("GITHUB_APP_ID is not a number: %q", v)
-		}
-		appID = id
-	}
-	key := firstNonEmpty(app.PrivateKey, os.Getenv("GITHUB_APP_PRIVATE_KEY"))
-	if appID == 0 || key == "" {
-		return nil, "", missingAuthError(appID, key)
-	}
-	pemBytes, err := maybeReadPEM(key)
+	atr, err := appsTransport(app)
 	if err != nil {
 		return nil, "", err
-	}
-	atr, err := ghinstallation.NewAppsTransport(http.DefaultTransport, appID, pemBytes)
-	if err != nil {
-		return nil, "", fmt.Errorf("app transport: %w", err)
 	}
 	tmp, err := github.NewClient(github.WithHTTPClient(&http.Client{Transport: atr}))
 	if err != nil {
@@ -73,7 +56,7 @@ func NewClientFromEnv(ctx context.Context, app config.AppConfig) (*Client, strin
 	}
 	inst, _, err := tmp.Apps.GetOrganizationInstallation(ctx, app.Org)
 	if err != nil {
-		return nil, "", fmt.Errorf("find installation for org %q: %w", app.Org, err)
+		return nil, "", notInstalledError(ctx, tmp, app.Org, err)
 	}
 	itr := ghinstallation.NewFromAppsTransport(atr, inst.GetID())
 	httpClient := &http.Client{Transport: newRetryTransport(itr, defaultMaxRetries), Timeout: 30 * time.Second}
@@ -82,6 +65,89 @@ func NewClientFromEnv(ctx context.Context, app config.AppConfig) (*Client, strin
 		return nil, "", fmt.Errorf("new github client: %w", err)
 	}
 	return &Client{REST: rest, httpClient: httpClient}, "Github App", nil
+}
+
+// appsTransport builds the transport that authenticates as the GitHub App
+// itself — a signed JWT rather than an installation token.
+//
+// Two things need it. NewClientFromEnv uses it to look up an installation and
+// then trades it for an installation token. AppClient hands it out as-is, for
+// the handful of endpoints that answer to the app rather than to one of its
+// installations, /app/installations chief among them.
+func appsTransport(app config.AppConfig) (*ghinstallation.AppsTransport, error) {
+	appID := app.AppID
+	if v := os.Getenv("GITHUB_APP_ID"); v != "" && appID == 0 {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			// Silently ignoring this used to send a typo'd env var all the way
+			// to "no auth found", which says nothing about the actual mistake.
+			return nil, fmt.Errorf("GITHUB_APP_ID is not a number: %q", v)
+		}
+		appID = id
+	}
+	key := firstNonEmpty(app.PrivateKey, os.Getenv("GITHUB_APP_PRIVATE_KEY"))
+	if appID == 0 || key == "" {
+		return nil, missingAuthError(appID, key)
+	}
+	pemBytes, err := maybeReadPEM(key)
+	if err != nil {
+		return nil, err
+	}
+	atr, err := ghinstallation.NewAppsTransport(http.DefaultTransport, appID, pemBytes)
+	if err != nil {
+		return nil, fmt.Errorf("app transport: %w", err)
+	}
+	return atr, nil
+}
+
+// ErrNoAppCredentials reports that App credentials were not supplied, so there
+// is no app to ask about. Callers that only make sense under App auth test for
+// it rather than matching on the message.
+var ErrNoAppCredentials = errors.New("no GitHub App credentials")
+
+// AppClient returns a client authenticated as the GitHub App itself, for the
+// endpoints that belong to the app rather than to one of its installations.
+//
+// It never falls back to GITHUB_TOKEN: a personal access token authenticates a
+// person, and a person has no app installations, so a PAT here would produce a
+// confusing 401 rather than an answer. Callers get ErrNoAppCredentials and can
+// say something useful instead.
+func AppClient(app config.AppConfig) (*github.Client, error) {
+	if app.AppID == 0 && os.Getenv("GITHUB_APP_ID") == "" {
+		return nil, ErrNoAppCredentials
+	}
+	atr, err := appsTransport(app)
+	if err != nil {
+		return nil, err
+	}
+	return github.NewClient(github.WithHTTPClient(&http.Client{
+		Transport: newRetryTransport(atr, defaultMaxRetries),
+		Timeout:   30 * time.Second,
+	}))
+}
+
+// notInstalledError explains a failed installation lookup by naming the
+// organizations the app *is* installed on.
+//
+// "find installation for org X" on its own is true and useless: it does not
+// distinguish a typo in app.yaml from an app nobody has installed yet, and the
+// answer to both is a list this credential can already fetch. The list is a
+// best effort — if fetching it also fails, the original error is what matters
+// and is returned alone.
+func notInstalledError(ctx context.Context, appClient *github.Client, org string, cause error) error {
+	installs, _, listErr := appClient.Apps.ListInstallations(ctx, &github.ListOptions{PerPage: 100})
+	if listErr != nil || len(installs) == 0 {
+		return fmt.Errorf("find installation for org %q: %w", org, cause)
+	}
+	logins := make([]string, 0, len(installs))
+	for _, in := range installs {
+		if login := in.GetAccount().GetLogin(); login != "" {
+			logins = append(logins, login)
+		}
+	}
+	sort.Strings(logins)
+	return fmt.Errorf("find installation for org %q: %w (this app is installed on: %s)",
+		org, cause, strings.Join(logins, ", "))
 }
 
 // missingAuthError explains which half of the App credentials is missing, and

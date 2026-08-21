@@ -29,6 +29,7 @@ func runCmd(t *testing.T, args ...string) (stdout, stderr string, err error) {
 	auditLog = false
 	teamName = ""
 	outFile = ""
+	installationsRoot = ""
 	resetFlagsChanged(rootCmd)
 
 	outBuf := &bytes.Buffer{}
