@@ -122,7 +122,20 @@ func PrintSummary(p Plan) {
 	}
 
 	if len(p.Changes) == 0 {
-		fmt.Println("No changes required - configuration is in sync")
+		// "in sync" is a claim about the configuration matching GitHub, and a
+		// warning is evidence against it: unmanaged rulesets, unmanaged repos,
+		// owners nobody declared, direct grants beyond team access. Returning
+		// here without printing them was how gomgr came to report a clean run
+		// while holding the reasons it was not one — and a steady-state
+		// organization plans no changes almost every time, so this was the
+		// normal case, not the edge one.
+		if len(p.Warnings) == 0 {
+			fmt.Println("No changes required - configuration is in sync")
+			fmt.Println("\n" + "================================================================")
+			return
+		}
+		fmt.Println("No changes required, but the configuration does not describe everything on GitHub")
+		printWarnings(p.Warnings)
 		fmt.Println("\n" + "================================================================")
 		return
 	}
@@ -163,14 +176,22 @@ func PrintSummary(p Plan) {
 		fmt.Printf("  %-20s %d\n", action+":", count)
 	}
 
-	if len(p.Warnings) > 0 {
-		fmt.Printf("\nWarnings: %d\n", len(p.Warnings))
-		for _, w := range p.Warnings {
-			fmt.Printf("  - %s\n", w)
-		}
-	}
+	printWarnings(p.Warnings)
 
 	fmt.Println("\n" + "================================================================")
+}
+
+// printWarnings renders the plan's warnings, or nothing when there are none.
+// Extracted so the no-changes path and the changes path cannot drift apart
+// again — they did, and the no-changes path was the one that printed nothing.
+func printWarnings(warnings []string) {
+	if len(warnings) == 0 {
+		return
+	}
+	fmt.Printf("\nWarnings: %d\n", len(warnings))
+	for _, w := range warnings {
+		fmt.Printf("  - %s\n", w)
+	}
 }
 
 // printStatePair prints a single state comparison line with delta
