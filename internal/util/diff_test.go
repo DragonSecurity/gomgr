@@ -252,3 +252,55 @@ func TestPlanHasChanges(t *testing.T) {
 		t.Error("a plan with a change has changes")
 	}
 }
+
+// A steady-state organization plans no changes almost every run, so the
+// no-changes path is the normal case. Returning early from it discarded every
+// warning gomgr had produced — unmanaged rulesets, unmanaged repositories,
+// owners nobody declared, direct grants beyond team access — while printing
+// "configuration is in sync", which is the opposite of what the warnings said.
+func TestPrintSummaryShowsWarningsWhenThereAreNoChanges(t *testing.T) {
+	out := capturePrint(t, func() {
+		PrintSummary(Plan{
+			Changes:  nil,
+			Warnings: []string{"Found 1 unmanaged rulesets on myorg/gomgr: [main]"},
+		})
+	})
+
+	if !strings.Contains(out, "unmanaged rulesets") {
+		t.Errorf("the warning must survive an empty plan:\n%s", out)
+	}
+	if !strings.Contains(out, "Warnings: 1") {
+		t.Errorf("expected the warning count:\n%s", out)
+	}
+	// Claiming sync while holding evidence against it is the bug, not just the
+	// missing lines.
+	if strings.Contains(out, "configuration is in sync") {
+		t.Errorf("must not claim sync while warning that it is not:\n%s", out)
+	}
+}
+
+func TestPrintSummaryStillReportsACleanRun(t *testing.T) {
+	out := capturePrint(t, func() {
+		PrintSummary(Plan{})
+	})
+
+	if !strings.Contains(out, "configuration is in sync") {
+		t.Errorf("no changes and no warnings really is a clean run:\n%s", out)
+	}
+	if strings.Contains(out, "Warnings") {
+		t.Errorf("nothing to warn about, so no warnings block:\n%s", out)
+	}
+}
+
+func TestPrintSummaryStillShowsWarningsAlongsideChanges(t *testing.T) {
+	out := capturePrint(t, func() {
+		PrintSummary(Plan{
+			Changes:  []Change{{Scope: "team", Target: "backend", Action: ActionCreate}},
+			Warnings: []string{"Found 2 unmanaged repositories: [a b]"},
+		})
+	})
+
+	if !strings.Contains(out, "unmanaged repositories") {
+		t.Errorf("the path that already worked must keep working:\n%s", out)
+	}
+}
