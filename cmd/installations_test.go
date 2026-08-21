@@ -22,7 +22,7 @@ func drift(t *testing.T, installs []gh.Installation, dirs []config.OrgDir) strin
 // applied to it, and without this nothing says so.
 func TestDriftReportsInstalledButUnconfigured(t *testing.T) {
 	out := drift(t,
-		[]gh.Installation{{Org: "alpha", ID: 1}, {Org: "orphan", ID: 2}},
+		[]gh.Installation{{Org: "alpha", ID: 1, IsOrg: true}, {Org: "orphan", ID: 2, IsOrg: true}},
 		[]config.OrgDir{{Dir: "orgs/alpha", Org: "alpha"}},
 	)
 
@@ -38,7 +38,7 @@ func TestDriftReportsInstalledButUnconfigured(t *testing.T) {
 // fails at authentication, late and with nothing pointing at the cause.
 func TestDriftReportsConfiguredButUnreachable(t *testing.T) {
 	out := drift(t,
-		[]gh.Installation{{Org: "alpha", ID: 1}},
+		[]gh.Installation{{Org: "alpha", ID: 1, IsOrg: true}},
 		[]config.OrgDir{{Dir: "orgs/alpha", Org: "alpha"}, {Dir: "orgs/ghost", Org: "ghost"}},
 	)
 
@@ -52,7 +52,7 @@ func TestDriftReportsConfiguredButUnreachable(t *testing.T) {
 
 func TestDriftReportsCleanState(t *testing.T) {
 	out := drift(t,
-		[]gh.Installation{{Org: "alpha", ID: 1}},
+		[]gh.Installation{{Org: "alpha", ID: 1, IsOrg: true}},
 		[]config.OrgDir{{Dir: "orgs/alpha", Org: "alpha"}},
 	)
 
@@ -68,7 +68,7 @@ func TestDriftReportsCleanState(t *testing.T) {
 
 func TestDriftReportsANamelessConfigDir(t *testing.T) {
 	out := drift(t,
-		[]gh.Installation{{Org: "alpha", ID: 1}},
+		[]gh.Installation{{Org: "alpha", ID: 1, IsOrg: true}},
 		[]config.OrgDir{{Dir: "orgs/alpha", Org: "alpha"}, {Dir: "orgs/broken", Org: ""}},
 	)
 
@@ -81,12 +81,53 @@ func TestDriftReportsANamelessConfigDir(t *testing.T) {
 // define the same organization — so both paths get shown rather than one.
 func TestDriftShowsEveryDirectoryForAnOrg(t *testing.T) {
 	out := drift(t,
-		[]gh.Installation{{Org: "alpha", ID: 1}},
+		[]gh.Installation{{Org: "alpha", ID: 1, IsOrg: true}},
 		[]config.OrgDir{{Dir: "orgs/alpha", Org: "alpha"}, {Dir: "orgs/alpha-copy", Org: "alpha"}},
 	)
 
 	if !strings.Contains(out, "orgs/alpha,") && !strings.Contains(out, "orgs/alpha-copy") {
 		t.Errorf("both directories should appear:\n%s", out)
+	}
+}
+
+// A user account cannot have a config directory, so reporting it as missing one
+// would be an instruction to do the impossible. It is still shown: the
+// installation is real and carries the app's permissions against that account.
+func TestDriftReportsUserAccountsSeparately(t *testing.T) {
+	out := drift(t,
+		[]gh.Installation{
+			{Org: "alpha", ID: 1, IsOrg: true},
+			{Org: "aperson", ID: 2, IsOrg: false},
+		},
+		[]config.OrgDir{{Dir: "orgs/alpha", Org: "alpha"}},
+	)
+
+	if !strings.Contains(out, "aperson") {
+		t.Errorf("the user installation is real and should be shown:\n%s", out)
+	}
+	if strings.Contains(out, "aperson") && strings.Contains(out, "nothing configures: aperson") {
+		t.Errorf("a user account is not unconfigured drift:\n%s", out)
+	}
+	if !strings.Contains(out, "user account(s) the app is installed on") {
+		t.Errorf("expected a separate summary line for user accounts:\n%s", out)
+	}
+	if !strings.Contains(out, "Remove it if nothing needs it") {
+		t.Errorf("the blast-radius note is the reason to show it at all:\n%s", out)
+	}
+}
+
+// With only an org installation and a matching directory, nothing about user
+// accounts should appear at all.
+func TestDriftSaysNothingAboutUserAccountsWhenThereAreNone(t *testing.T) {
+	out := drift(t,
+		[]gh.Installation{{Org: "alpha", ID: 1, IsOrg: true}},
+		[]config.OrgDir{{Dir: "orgs/alpha", Org: "alpha"}},
+	)
+	if strings.Contains(out, "user account") {
+		t.Errorf("no user installations, so no note:\n%s", out)
+	}
+	if !strings.Contains(out, "No drift") {
+		t.Errorf("expected a clean report:\n%s", out)
 	}
 }
 

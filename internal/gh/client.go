@@ -136,14 +136,27 @@ func AppClient(app config.AppConfig) (*github.Client, error) {
 // and is returned alone.
 func notInstalledError(ctx context.Context, appClient *github.Client, org string, cause error) error {
 	installs, _, listErr := appClient.Apps.ListInstallations(ctx, &github.ListOptions{PerPage: 100})
-	if listErr != nil || len(installs) == 0 {
+	if listErr != nil {
 		return fmt.Errorf("find installation for org %q: %w", org, cause)
 	}
+	// Organizations only. This list answers "which organization did you mean?",
+	// and the app may also be installed on a personal account — listing that
+	// beside a failure to find an installation *for* it reads as a
+	// contradiction, and offers somewhere a configuration can never point.
 	logins := make([]string, 0, len(installs))
 	for _, in := range installs {
+		if in.GetAccount().GetType() != accountTypeOrganization {
+			continue
+		}
 		if login := in.GetAccount().GetLogin(); login != "" {
 			logins = append(logins, login)
 		}
+	}
+	// Filtering can leave nothing — an app installed only on personal accounts,
+	// or a response without account types. "installed on: " with an empty list
+	// after it is worse than not offering one.
+	if len(logins) == 0 {
+		return fmt.Errorf("find installation for org %q: %w", org, cause)
 	}
 	sort.Strings(logins)
 	return fmt.Errorf("find installation for org %q: %w (this app is installed on: %s)",
