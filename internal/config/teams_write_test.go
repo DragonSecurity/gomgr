@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func sampleTeam() TeamConfig {
@@ -132,5 +134,49 @@ func TestWriteTeamFileCreatesTeamsDirectory(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "teams")); err != nil {
 		t.Errorf("teams directory was not created: %v", err)
+	}
+}
+
+// A nested team's file has to carry the nesting, or importing an organization
+// and syncing it straight back would flatten the hierarchy.
+func TestWriteTeamFileRecordsParents(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := WriteTeamFile(dir, TeamConfig{
+		Name:    "Oncall",
+		Privacy: "closed",
+		Parents: []string{"platform"},
+	}); err != nil {
+		t.Fatalf("WriteTeamFile: %v", err)
+	}
+
+	b, err := os.ReadFile(filepath.Join(dir, "teams", "oncall.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "parents:") || !strings.Contains(string(b), "platform") {
+		t.Errorf("the nesting must survive the round trip, got:\n%s", b)
+	}
+
+	var back TeamConfig
+	if err := yaml.Unmarshal(b, &back); err != nil {
+		t.Fatal(err)
+	}
+	if back.ParentSlug() != "platform" {
+		t.Errorf("re-read parent = %q, want platform", back.ParentSlug())
+	}
+}
+
+// An un-nested team must not gain an empty key it never asked for.
+func TestWriteTeamFileOmitsParentsWhenThereIsNone(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := WriteTeamFile(dir, TeamConfig{Name: "Solo", Privacy: "closed"}); err != nil {
+		t.Fatalf("WriteTeamFile: %v", err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "teams", "solo.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "parents:") {
+		t.Errorf("expected no parents key, got:\n%s", b)
 	}
 }

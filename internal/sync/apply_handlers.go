@@ -61,11 +61,34 @@ func applyTeamCreate(ctx context.Context, c *gh.Client, ch util.Change) error {
 	if nv := detailString(d, "notification_setting"); nv != "" {
 		newTeam.NotificationSetting = github.Ptr(nv)
 	}
+	// The plan names the parent by slug, because at plan time the parent may
+	// not exist yet and so has no ID to name it by. hierarchyOrder guarantees
+	// it has been created by the time this runs.
+	if parent := detailString(d, "parent"); parent != "" {
+		id, err := parentTeamID(ctx, c, org, parent)
+		if err != nil {
+			return fmt.Errorf("create team %q: %w", name, err)
+		}
+		newTeam.ParentTeamID = github.Ptr(id)
+	}
 	_, _, err = c.REST.Teams.CreateTeam(ctx, org, newTeam)
 	if err != nil {
 		return fmt.Errorf("create team %q: %w", name, err)
 	}
 	return nil
+}
+
+// parentTeamID resolves a team slug to the numeric ID the team endpoints want
+// for a parent.
+func parentTeamID(ctx context.Context, c *gh.Client, org, slug string) (int64, error) {
+	team, _, err := c.REST.Teams.GetTeamBySlug(ctx, org, slug)
+	if err != nil {
+		return 0, fmt.Errorf("resolve parent team %q: %w", slug, err)
+	}
+	if team.GetID() == 0 {
+		return 0, fmt.Errorf("resolve parent team %q: GitHub returned no team ID", slug)
+	}
+	return team.GetID(), nil
 }
 
 func applyTeamUpdate(ctx context.Context, c *gh.Client, ch util.Change) error {
@@ -90,7 +113,18 @@ func applyTeamUpdate(ctx context.Context, c *gh.Client, ch util.Change) error {
 	if nv := detailString(d, "notification_setting"); nv != "" {
 		newTeam.NotificationSetting = github.Ptr(nv)
 	}
-	_, _, err = c.REST.Teams.EditTeamBySlug(ctx, org, slug, newTeam, false)
+	// parent_team_id carries omitempty, so leaving it nil preserves whatever
+	// nesting the team already has. Clearing one takes the separate
+	// removeParent argument, which is why the planner distinguishes the two.
+	removeParent := detailBool(d, "remove_parent")
+	if parent := detailString(d, "parent"); parent != "" && !removeParent {
+		id, err := parentTeamID(ctx, c, org, parent)
+		if err != nil {
+			return fmt.Errorf("update team %q: %w", slug, err)
+		}
+		newTeam.ParentTeamID = github.Ptr(id)
+	}
+	_, _, err = c.REST.Teams.EditTeamBySlug(ctx, org, slug, newTeam, removeParent)
 	if err != nil {
 		return fmt.Errorf("update team %q: %w", slug, err)
 	}
@@ -416,6 +450,63 @@ func applyRepoDelete(ctx context.Context, c *gh.Client, ch util.Change) error {
 	_, err = c.REST.Repositories.Delete(ctx, org, repo)
 	if err != nil {
 		return fmt.Errorf("delete repo %q in org %q: %w", repo, org, err)
+	}
+	return nil
+}
+
+// applyOrgOwnerEnsure promotes a login to organization owner. The same endpoint
+// invites someone who is not yet a member, which is what makes an owner list
+// usable to bootstrap an org rather than only to describe one.
+func applyOrgOwnerEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
+	d, err := extractDetails(ch)
+	if err != nil {
+		return err
+	}
+	org := detailString(d, "org")
+	user := detailString(d, "user")
+	_, _, err = c.REST.Organizations.EditOrgMembership(ctx, user, org, &github.Membership{
+		Role: github.Ptr(orgRoleAdmin),
+	})
+	if err != nil {
+		return fmt.Errorf("make %q an owner of org %q: %w", user, org, err)
+	}
+	return nil
+}
+
+// applyOrgOwnerRemove drops an owner to plain member. It does not remove them
+// from the organization: losing admin and losing the account's access are
+// different decisions, and RemoveMembersWithoutTeam is where the second one is
+// made.
+func applyOrgOwnerRemove(ctx context.Context, c *gh.Client, ch util.Change) error {
+	d, err := extractDetails(ch)
+	if err != nil {
+		return err
+	}
+	org := detailString(d, "org")
+	user := detailString(d, "user")
+	_, _, err = c.REST.Organizations.EditOrgMembership(ctx, user, org, &github.Membership{
+		Role: github.Ptr(orgRoleMember),
+	})
+	if err != nil {
+		return fmt.Errorf("demote owner %q of org %q to member: %w", user, org, err)
+	}
+	return nil
+}
+
+// applyRepoCollaboratorRemove revokes one direct grant on one repository. Team
+// membership and the organization's default repository permission are unaffected
+// — this removes only the grant that was attached to the person by hand.
+func applyRepoCollaboratorRemove(ctx context.Context, c *gh.Client, ch util.Change) error {
+	d, err := extractDetails(ch)
+	if err != nil {
+		return err
+	}
+	org := detailString(d, "org")
+	repo := detailString(d, "repo")
+	user := detailString(d, "user")
+	_, err = c.REST.Repositories.RemoveCollaborator(ctx, org, repo, user)
+	if err != nil {
+		return fmt.Errorf("revoke direct access of %q on %s/%s: %w", user, org, repo, err)
 	}
 	return nil
 }

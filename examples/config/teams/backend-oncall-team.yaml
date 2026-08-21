@@ -1,0 +1,31 @@
+name: Backend Oncall
+slug: backend-oncall
+description: The rotation that carries the pager for the backend services
+privacy: closed
+
+# Nested under Backend Team. Neither team may be `secret` — GitHub refuses to
+# put a secret team at either end of a hierarchy, and gomgr refuses to load a
+# config that asks for it rather than failing halfway through an apply.
+#
+# Nesting grants access, not membership: this team inherits every repository
+# permission backend-team holds, and the two rosters stay separate. The
+# inherited grants are not repeated below, because GitHub applies them — gomgr
+# sets the relationship and lets it.
+parents:
+  - Backend Team
+
+maintainers:
+  - alice-backend-lead
+
+members:
+  - david-developer
+  - emma-engineer
+
+repositories:
+  # Admin here, above what the parent grants, because the rotation needs to be
+  # able to change alerting without waiting for a lead.
+  backend-runbooks:
+    permission: admin
+    topics:
+      - oncall
+      - documentation

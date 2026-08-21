@@ -210,7 +210,10 @@ func TestImportTeamsRecordsSlugWhenNotDerivable(t *testing.T) {
 	}
 }
 
-func TestImportTeamsReportsNesting(t *testing.T) {
+// A `parents:` entry has to name a team the configuration defines. When the
+// parent is not among the files this import writes, the child's side of the
+// relationship would not load, so the nesting is reported instead.
+func TestImportTeamsReportsNestingItCannotWrite(t *testing.T) {
 	server := teamImportServer(t, []teamFixture{
 		{slug: "child", name: "Child", privacy: "closed", parent: "parent-team"},
 	}, nil)
@@ -224,9 +227,75 @@ func TestImportTeamsReportsNesting(t *testing.T) {
 	if result.Teams[0].Parent != "parent-team" {
 		t.Errorf("Parent = %q, want parent-team so the caller can warn about it", result.Teams[0].Parent)
 	}
-	// gomgr does not manage hierarchy, so the written config must not imply it does.
+	if !result.Teams[0].ParentUnwritable {
+		t.Error("a parent with no file of its own is not writable and must be flagged")
+	}
 	if len(result.Teams[0].Config.Parents) != 0 {
-		t.Error("parents must not be written into a file gomgr will not act on")
+		t.Error("writing a parent the config does not define produces a directory that will not load")
+	}
+}
+
+// When both ends of the nesting are being imported, the relationship is
+// expressible and gets written — and the result must load.
+func TestImportTeamsWritesNestingItCanExpress(t *testing.T) {
+	server := teamImportServer(t, []teamFixture{
+		{slug: "platform", name: "Platform", privacy: "closed"},
+		{slug: "oncall", name: "Oncall", privacy: "closed", parent: "platform"},
+	}, nil)
+	defer server.Close()
+
+	result, err := ImportTeams(context.Background(), newTestClient(t, server),
+		&config.Root{App: config.AppConfig{Org: "myorg"}})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+
+	var child config.TeamConfig
+	var teams []config.TeamConfig
+	for _, tm := range result.Teams {
+		teams = append(teams, tm.Config)
+		if tm.Config.ResolvedSlug() == "oncall" {
+			child = tm.Config
+			if tm.ParentUnwritable {
+				t.Error("both ends are being imported, so the nesting is writable")
+			}
+		}
+	}
+	if child.ParentSlug() != "platform" {
+		t.Fatalf("expected parents: [platform], got %v", child.Parents)
+	}
+
+	// The point of writing it is that the directory still loads.
+	root := &config.Root{App: config.AppConfig{Org: "myorg"}, Team: teams}
+	if err := root.Validate(); err != nil {
+		t.Errorf("the imported set must validate as a whole: %v", err)
+	}
+}
+
+// A secret team cannot be nested at either end, so its relationship is reported
+// rather than written into a config gomgr would then refuse to load.
+func TestImportTeamsWillNotWriteSecretNesting(t *testing.T) {
+	server := teamImportServer(t, []teamFixture{
+		{slug: "platform", name: "Platform", privacy: "closed"},
+		{slug: "hush", name: "Hush", privacy: "secret", parent: "platform"},
+	}, nil)
+	defer server.Close()
+
+	result, err := ImportTeams(context.Background(), newTestClient(t, server),
+		&config.Root{App: config.AppConfig{Org: "myorg"}})
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	for _, tm := range result.Teams {
+		if tm.Config.ResolvedSlug() != "hush" {
+			continue
+		}
+		if len(tm.Config.Parents) != 0 {
+			t.Error("a secret team must not be given a parents: line")
+		}
+		if !tm.ParentUnwritable {
+			t.Error("the dropped nesting must be reported")
+		}
 	}
 }
 

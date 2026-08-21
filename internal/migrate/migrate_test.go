@@ -390,3 +390,84 @@ create_repo: true
 		t.Error("dropped a flag that should have carried across")
 	}
 }
+
+// The Python layout says nesting as `parent: <Team Name>`; gomgr says it as a
+// one-element `parents:` list. Before this was mapped, the key was reported as
+// unmapped and the child silently lost the parent's repository access.
+func TestRun_ConvertsParentToParents(t *testing.T) {
+	from := writeSrc(t, "myorg", map[string]string{
+		"org.yaml": orgYAML,
+		"app.yaml": "create_repo: true\n",
+		"teams/all-teams.yaml": `Platform:
+  description: platform
+  member:
+    - alice
+  repos:
+    api: push
+Platform Oncall:
+  parent: Platform
+  member:
+    - bob
+  repos:
+    runbooks: admin
+`,
+	})
+
+	res, to, err := run(t, from)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.Lossy() {
+		t.Errorf("parent is mapped now, so nothing should be reported as lost: %+v", res.Orgs)
+	}
+	if got := res.Orgs[0].Nested; got != 1 {
+		t.Errorf("expected 1 nested team reported, got %d", got)
+	}
+
+	child := readTeam(t, to, "myorg", "platform-oncall")
+	if got := child.ParentSlug(); got != "platform" {
+		t.Errorf("expected parent slug platform, got %q", got)
+	}
+
+	// The whole converted directory must load, which is what proves the parent
+	// actually resolves against the other team file.
+	root, err := config.Load(filepath.Join(to, "myorg"))
+	if err != nil {
+		t.Fatalf("converted config does not load: %v", err)
+	}
+	if err := root.Validate(); err != nil {
+		t.Fatalf("converted config does not validate: %v", err)
+	}
+}
+
+// A nested team cannot be secret at either end. The org-level default is the
+// likely source, since it lands on teams that never mentioned privacy — so this
+// is refused during conversion rather than left for the first `gomgr validate`.
+func TestRun_RefusesSecretNestedTeam(t *testing.T) {
+	from := writeSrc(t, "myorg", map[string]string{
+		"org.yaml": `org_name: myorg
+org_owners:
+  - svc-account
+defaults:
+  team:
+    privacy: secret
+`,
+		"app.yaml": "create_repo: true\n",
+		"teams/all-teams.yaml": `Platform:
+  member:
+    - alice
+Platform Oncall:
+  parent: Platform
+  member:
+    - bob
+`,
+	})
+
+	_, _, err := run(t, from)
+	if err == nil {
+		t.Fatal("a secret team in a hierarchy should be refused during conversion")
+	}
+	if !strings.Contains(err.Error(), "secret") {
+		t.Errorf("the refusal should say why, got %v", err)
+	}
+}

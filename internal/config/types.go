@@ -17,6 +17,8 @@ type AppConfig struct {
 		WarnUnmanagedRepos        bool `yaml:"warn_unmanaged_repos"`
 		WarnUnmanagedCustomRoles  bool `yaml:"warn_unmanaged_custom_roles"`
 		WarnUnmanagedRulesets     bool `yaml:"warn_unmanaged_rulesets"`
+		WarnUnmanagedOwners       bool `yaml:"warn_unmanaged_owners"`
+		WarnExcessCollaborators   bool `yaml:"warn_excess_collaborators"`
 	} `yaml:"dry_warnings"`
 	RemoveMembersWithoutTeam   bool `yaml:"remove_members_without_team"`
 	DeleteUnconfiguredTeams    bool `yaml:"delete_unconfigured_teams"`
@@ -25,6 +27,39 @@ type AppConfig struct {
 	DeleteUnmanagedRulesets    bool `yaml:"delete_unmanaged_rulesets"`
 	DeleteStaleCodeowners      bool `yaml:"delete_stale_codeowners"`
 	CreateRepo                 bool `yaml:"create_repo"`
+
+	// DemoteUnconfiguredOwners drops an organization owner that org.yaml does
+	// not list back to plain member. Off by default, and inert unless
+	// org.owners names at least one login: an empty list means "gomgr does not
+	// manage owners here", never "this organization should have none". The
+	// authenticated user is never demoted by their own run, because an
+	// organization whose last owner demotes themselves cannot be repaired
+	// through the API that did it.
+	//
+	// A demoted owner becomes an ordinary member, which puts them in reach of
+	// RemoveMembersWithoutTeam on the same run if they belong to no team.
+	DemoteUnconfiguredOwners bool `yaml:"demote_unconfigured_owners"`
+
+	// RemoveExcessCollaborators revokes a direct repository grant that gives
+	// someone more access than their team membership and the organization's
+	// default repository permission already do.
+	//
+	// This is the one thing that closes the door the GitHub UI opens: a
+	// repository's "add collaborator" button grants access that no YAML file
+	// mentions, and no other part of gomgr looks at it. Revoking a direct
+	// grant leaves team-derived access untouched, so someone who should have
+	// push through a team keeps push; only the grant stapled on beside it goes.
+	//
+	// Off by default. With DryWarnings.WarnExcessCollaborators set instead,
+	// the same grants are reported and left alone.
+	RemoveExcessCollaborators bool `yaml:"remove_excess_collaborators"`
+
+	// IgnoreArchived skips archived repositories when planning team permission
+	// grants. GitHub refuses to change permissions on an archived repository,
+	// so a configuration that still names one plans a grant that fails on every
+	// run. Off by default, because silently skipping a repository is also a way
+	// to not notice that it was archived out from under the config.
+	IgnoreArchived bool `yaml:"ignore_archived"`
 
 	// ReconcileVisibility allows gomgr to change the visibility of a repository
 	// that already exists, and only one that explicitly declares a visibility.
@@ -124,6 +159,14 @@ type RepoConfig struct {
 	Files []FileSpec `yaml:"files,omitempty"`
 }
 
+// The two values GitHub accepts for a team's privacy. A secret team cannot
+// take part in a hierarchy at either end, which is why the name is needed
+// somewhere both the loader and the team validation can see it.
+const (
+	privacyClosed = "closed"
+	privacySecret = "secret"
+)
+
 // The two values GitHub accepts for a team's notification setting. They are
 // compared against what the API reports and sent back to it, so they are
 // constants rather than literals repeated at each end.
@@ -133,11 +176,27 @@ const (
 )
 
 type TeamConfig struct {
-	Name        string   `yaml:"name"`
-	Slug        string   `yaml:"slug,omitempty"`
-	Description string   `yaml:"description,omitempty"`
-	Privacy     string   `yaml:"privacy,omitempty"` // closed, secret
-	Parents     []string `yaml:"parents,omitempty"`
+	Name        string `yaml:"name"`
+	Slug        string `yaml:"slug,omitempty"`
+	Description string `yaml:"description,omitempty"`
+	Privacy     string `yaml:"privacy,omitempty"` // closed, secret
+
+	// Parents nests this team under another. GitHub allows exactly one parent,
+	// so at most one entry is accepted; the field stays a list because it
+	// always was one, and a config that wrote `parents: []` should keep
+	// loading. The entry may be a team name or a slug — it is resolved to a
+	// slug against the other teams in the config.
+	//
+	// Nesting grants access rather than membership: a child team inherits the
+	// repository permissions of every team above it, while the members of the
+	// two teams stay separate rosters. gomgr sets the relationship and lets
+	// GitHub apply the inheritance; it does not write the parent's grants onto
+	// the child.
+	//
+	// Neither a parent nor a child may be `secret` — GitHub rejects the
+	// combination — which loader validation reports rather than discovering at
+	// apply time.
+	Parents []string `yaml:"parents,omitempty"`
 
 	// NotificationSetting is "notifications_enabled" or
 	// "notifications_disabled". Empty leaves GitHub's setting alone, which for
@@ -212,5 +271,22 @@ func (t TeamConfig) ResolvedSlug() string {
 	if t.Slug != "" {
 		return t.Slug
 	}
-	return strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
+	return Slugify(t.Name)
+}
+
+// Slugify turns a team name into the slug GitHub would derive from it.
+func Slugify(name string) string {
+	return strings.ToLower(strings.ReplaceAll(name, " ", "-"))
+}
+
+// ParentSlug returns the slug of the team this one is nested under, or "" when
+// it is not nested. Validation has already rejected more than one entry, so
+// only the first is consulted.
+func (t TeamConfig) ParentSlug() string {
+	for _, p := range t.Parents {
+		if p = strings.TrimSpace(p); p != "" {
+			return Slugify(p)
+		}
+	}
+	return ""
 }

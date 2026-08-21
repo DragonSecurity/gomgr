@@ -26,6 +26,7 @@ type State struct {
 	CurrentRepoPerms   int
 	CurrentCustomRoles int
 	CurrentRulesets    int
+	CurrentOwners      int
 
 	// Desired state from config
 	DesiredTeams       int
@@ -34,9 +35,25 @@ type State struct {
 	DesiredRepoPerms   int
 	DesiredCustomRoles int
 	DesiredRulesets    int
+	DesiredOwners      int
 
 	// RepoWarnings are advisories raised while planning repository settings.
 	RepoWarnings []string
+
+	// teamMembers caches every team's membership, keyed by slug then by
+	// lowercased login. Three planners want it — team cleanups, member
+	// cleanups and collaborator enforcement — and it costs a request per team,
+	// so it is fetched at most once per run and only when something asks.
+	teamMembers map[string]map[string]bool
+
+	// teamRepos caches every team's repository permissions, keyed by slug then
+	// by lowercased repository name. Fetched on the same terms as teamMembers.
+	teamRepos map[string]map[string]string
+
+	// defaultRepoPermission is the organization-wide baseline every member
+	// holds on every repository: permNone, read, write or admin. Empty until
+	// something asks for it.
+	defaultRepoPermission string
 }
 
 func BuildPlan(ctx context.Context, c *gh.Client, cfg *config.Root) (util.Plan, error) {
@@ -46,6 +63,13 @@ func BuildPlan(ctx context.Context, c *gh.Client, cfg *config.Root) (util.Plan, 
 	// Prefetch teams and repos once to avoid duplicate API calls
 	if err := prefetchState(ctx, c, st); err != nil {
 		return plan, fmt.Errorf("prefetch state: %w", err)
+	}
+
+	// Owners come first: bringing an unmanaged org under management may mean
+	// there is nobody yet who can approve the rest of the run.
+	ownerChanges, ownerWarnings, err := planOrgOwners(ctx, c, cfg, st)
+	if err != nil {
+		return plan, fmt.Errorf("plan org owners: %w", err)
 	}
 
 	// Custom roles must be created before teams/repos use them
@@ -81,6 +105,14 @@ func BuildPlan(ctx context.Context, c *gh.Client, cfg *config.Root) (util.Plan, 
 		return plan, fmt.Errorf("plan repo rulesets: %w", err)
 	}
 
+	// Direct collaborator grants are compared last, because what someone is
+	// entitled to depends on the repositories and teams the steps above have
+	// resolved.
+	collaboratorChanges, collaboratorWarnings, err := planCollaborators(ctx, c, cfg, st, desiredBySlug)
+	if err != nil {
+		return plan, fmt.Errorf("plan collaborators: %w", err)
+	}
+
 	cleanupChanges, warnings, err := planCleanups(ctx, c, cfg, st, desiredBySlug)
 	if err != nil {
 		return plan, fmt.Errorf("plan cleanups: %w", err)
@@ -91,15 +123,19 @@ func BuildPlan(ctx context.Context, c *gh.Client, cfg *config.Root) (util.Plan, 
 		return plan, fmt.Errorf("plan custom role cleanups: %w", err)
 	}
 
+	plan.Changes = append(plan.Changes, ownerChanges...)
 	plan.Changes = append(plan.Changes, customRoleChanges...)
 	plan.Changes = append(plan.Changes, teamChanges...)
 	plan.Changes = append(plan.Changes, memChanges...)
 	plan.Changes = append(plan.Changes, repoChanges...)
 	plan.Changes = append(plan.Changes, orgRulesetChanges...)
 	plan.Changes = append(plan.Changes, repoRulesetChanges...)
+	plan.Changes = append(plan.Changes, collaboratorChanges...)
 	plan.Changes = append(plan.Changes, cleanupChanges...)
 	plan.Changes = append(plan.Changes, customRoleCleanups...)
 	plan.Warnings = append(warnings, roleWarnings...)
+	plan.Warnings = append(plan.Warnings, ownerWarnings...)
+	plan.Warnings = append(plan.Warnings, collaboratorWarnings...)
 	plan.Warnings = append(plan.Warnings, orgRulesetWarnings...)
 	plan.Warnings = append(plan.Warnings, repoRulesetWarnings...)
 	plan.Warnings = append(plan.Warnings, st.RepoWarnings...)
@@ -129,6 +165,10 @@ func BuildPlan(ctx context.Context, c *gh.Client, cfg *config.Root) (util.Plan, 
 		Rulesets: util.StatePair{
 			Current: st.CurrentRulesets,
 			Desired: st.DesiredRulesets,
+		},
+		Owners: util.StatePair{
+			Current: st.CurrentOwners,
+			Desired: st.DesiredOwners,
 		},
 	}
 

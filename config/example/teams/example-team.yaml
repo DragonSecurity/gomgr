@@ -1,6 +1,13 @@
 name: Platform Team
 description: Core platform engineers
 privacy: closed
+# Nest this team under another by naming it here. GitHub allows one parent, so
+# at most one entry is accepted, and neither team may be `secret`. The child
+# inherits the parent's repository access; the two member lists stay separate.
+# Access is granted through teams — there is no key here for handing an
+# individual direct access to a repository, by design. See
+# `remove_excess_collaborators` in app.yaml for what happens to grants made
+# that way in the GitHub UI.
 parents: []
 maintainers:
   - allanice001
@@ -18,11 +25,6 @@ repositories:
       - go-template
     codeowners:
       - allanice001
-    contributors:
-      permissions: push
-      members:
-        - "@DragonSecurity/development-team"
-        - octocat
   
   # Advanced config with topics and pinning
   api:

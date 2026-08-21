@@ -12,7 +12,9 @@ A fast, idempotent **GitHub Organization Manager** written in Go. Define your or
 ## Highlights
 
 - ✅ YAML-driven org config (`app.yaml`, `org.yaml`, `teams/*.yaml`)
-- ✅ Teams, maintainers, members (idempotent add/update)
+- ✅ Teams, maintainers, members (idempotent add/update), with **nested teams** — a child inherits the parent's repository access
+- ✅ **Organization owners**: `org.owners` is applied, not just validated — promote from YAML, optionally demote what YAML does not list
+- ✅ **Direct collaborators**: find and revoke repository access granted outside a team — the door the GitHub UI's "add collaborator" button opens
 - ✅ Repo permission grants (pull/triage/push/maintain/admin)
 - ✅ **Rulesets**: org-wide and repo-specific guard rails (branch protection, tag protection, push rules) with built-in presets — see [Rulesets & guard rails](#rulesets--guard-rails)
 - ✅ **Adopt what's already there**: `gomgr import teams` / `gomgr import rulesets` bootstrap an unmanaged org into YAML, comments in your config left intact — see [Adopting an existing organization](#adopting-an-existing-organization)
@@ -148,6 +150,8 @@ dry_warnings:
   warn_unmanaged_repos: true         # warn about repos not defined in any team
   warn_unmanaged_custom_roles: true  # warn about custom roles not in org.yaml
   warn_unmanaged_rulesets: true      # warn about rulesets not defined in YAML
+  warn_unmanaged_owners: true        # warn about org owners not listed in org.yaml
+  warn_excess_collaborators: true    # warn about direct repo grants beyond team access
 
 # Optional enforcement / extras:
 remove_members_without_team: true   # remove org members not in any team
@@ -156,6 +160,13 @@ delete_unmanaged_repos: false       # delete repos not defined in any team (DEST
 delete_unmanaged_custom_roles: false # delete custom roles not in org.yaml (DESTRUCTIVE!)
 delete_unmanaged_rulesets: false    # delete rulesets not in YAML (removes guard rails!)
 create_repo: true                   # create repos if missing when referenced by teams
+ignore_archived: false              # skip archived repos when granting team access
+
+# Drop an org owner that org.yaml does not list back to plain member.
+demote_unconfigured_owners: false
+
+# Revoke a direct repository grant that exceeds team-derived access.
+remove_excess_collaborators: false
 
 # Sign every commit gomgr writes with a Signed-off-by trailer. Required when
 # the org enforces DCO via a ruleset `commit_message_pattern` rule — gomgr
@@ -200,6 +211,60 @@ files:
     content: |
       * @{{.Org}}/platform-team
 ```
+
+### Owners, collaborators and the doors around the config
+
+Three of the flags above decide how much of the organization the YAML is
+actually allowed to be the truth about.
+
+**`demote_unconfigured_owners`** drops an organization owner that `org.yaml`
+does not list back to plain member. Two things bound it:
+
+- It is **inert unless `org.yaml` names at least one owner.** An empty list
+  means *gomgr does not manage owners here* — never *this organization should
+  have none*. A config that loses the key to a bad edit must not be able to
+  strip every administrator from an org, including the account you would need
+  to put one back.
+- **The account the run authenticates as is never demoted.** An owner that
+  demotes itself cannot undo it through the API that did it. Under GitHub App
+  auth there is no user behind the token, so the exemption does not apply and
+  every extra owner is fair game.
+
+Demotion leaves the account in the organization. If it belongs to no team and
+`remove_members_without_team` is also on, the same run then removes it — the
+two flags compose, deliberately, and in that order.
+
+**`remove_excess_collaborators`** is the one that closes the door the GitHub UI
+opens. A repository's *add collaborator* button grants access no YAML file
+mentions; without this, that grant outlives every sync that claims the
+configuration is authoritative. gomgr compares each **direct** grant against
+what the person is already entitled to and revokes only the surplus:
+
+| | counts toward entitlement |
+|---|---|
+| Membership of a team that holds the repo | ✅ including teams gomgr does not manage |
+| A team this run is about to create | ✅ so a first sync does not revoke what it is replacing |
+| A parent team's grants, via `parents:` | ✅ nesting grants access down the chain |
+| The org's `default_repository_permission` | ✅ push in a `write`-default org confers nothing |
+| Being an organization owner | ✅ owners hold admin everywhere; exempt |
+
+It **only ever removes**. There is no key for granting someone direct access —
+the way to give access is to put them in a team. Revoking a direct grant leaves
+team-derived access untouched, so someone who should have push through a team
+keeps push.
+
+⚠️ **Outside collaborators are in no team, so they are entitled to nothing** and
+every direct grant they hold is excess. That is the intended reading of *all
+access flows through teams*, and it is why this takes its own flag rather than
+riding along with another. Run it as
+`warn_excess_collaborators` first and read the list.
+
+**`ignore_archived`** skips archived repositories when planning team grants.
+GitHub refuses a permission change on an archived repository, so a config that
+still names one plans a grant that fails on every run. It is off by default
+because silently skipping a repository is also a way to not notice it was
+archived out from under the config — with the flag on, each skip is reported as
+a warning rather than passed over.
 
 ### Files & templating (`app.files`)
 
@@ -320,6 +385,10 @@ repositories:
 ### `org.yaml`
 Define organization owners and custom repository roles:
 ```yaml
+# Applied, not just validated: anyone here who is not an owner is promoted.
+# Owners GitHub reports that are NOT here are left alone unless
+# `demote_unconfigured_owners` is set in app.yaml. An empty or absent list
+# means gomgr does not manage owners for this org.
 owners:
   - alice
   - bob
@@ -363,7 +432,11 @@ slug: platform-team            # optional; default = kebab(name)
 description: Core platform engineers
 privacy: closed                # closed | secret
 notification_setting: notifications_disabled   # notifications_enabled | notifications_disabled
-parents: []                    # (future enhancement)
+# Nest this team under another. GitHub allows exactly one parent, so at most
+# one entry is accepted, and neither team may be `secret`. The child inherits
+# the parent's repository access; the two member rosters stay separate. Name
+# the parent by team name or slug — both resolve.
+parents: []                    # e.g. [Platform Team]
 
 # Multiple maintainers (team leads, senior engineers)
 maintainers:
@@ -940,11 +1013,15 @@ Review with `git status` and `git diff`, then commit and open a pull request.
   bytes.
 - **The result is validated and reloaded** before the command reports success.
 
-Two things it deliberately does not do:
+- **Nesting is written where it can be expressed.** A team whose parent is
+  *also* being imported gets a `parents:` line. A team whose parent is not —
+  because an existing file already declares it, or because either end is
+  `secret`, which GitHub will not nest — is reported instead, because a
+  `parents:` entry naming a team the config does not define produces a
+  directory that fails to load.
 
-- **Team hierarchy is reported, not written.** gomgr does not manage nested
-  teams, so a team with a parent is flagged as a warning rather than given a
-  `parents:` line that nothing would act on.
+One thing it deliberately does not do:
+
 - **Repositories reached by no team are reported, not adopted.** A repository
   only enters gomgr's config by being granted to a team, so there is no
   meaningful place to put one that no team reaches. **If
@@ -1318,7 +1395,9 @@ The repository includes GitHub Actions workflows:
 ## Roadmap / TODO
 
 - Compare & update team fields (description/privacy/parents)
-- Optionally remove extra team members / revoke extra repo perms
+- Optionally remove extra team members
+- Enterprise-level management: enterprise accounts, the orgs inside them, and
+  the policies that only exist at that tier
 - Optionally remove extra topics from repos (current behavior: union of all topics)
 - Custom default branch for file writes
 - Parallel apply with rate‑limit aware workers

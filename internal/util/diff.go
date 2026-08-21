@@ -31,6 +31,7 @@ type StateStats struct {
 	RepoPermissions StatePair `json:"repo_permissions"`
 	CustomRoles     StatePair `json:"custom_roles"`
 	Rulesets        StatePair `json:"rulesets"`
+	Owners          StatePair `json:"owners"`
 }
 
 type StatePair struct {
@@ -116,6 +117,7 @@ func PrintSummary(p Plan) {
 		printStatePair("Repo Permissions:", p.Stats.RepoPermissions)
 		printStatePair("Custom Roles:", p.Stats.CustomRoles)
 		printStatePair("Rulesets:", p.Stats.Rulesets)
+		printStatePair("Owners:", p.Stats.Owners)
 		fmt.Println()
 	}
 
