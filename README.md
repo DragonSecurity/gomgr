@@ -1039,6 +1039,54 @@ Grant them to a team before your next sync.
 That warning is the reason to run `import teams` *before* your first sync
 against an organization gomgr has not managed before.
 
+### `gomgr installations`
+
+Which organizations can this GitHub App actually reach, and where does that
+disagree with the config directories on disk?
+
+```console
+$ gomgr installations --app-id 1719369 --private-key ./app.pem
+Installed on 10 organization(s):
+  dragonsecurity                 installation=79081765     repositories=all
+  kamuses                        installation=86404675     repositories=all
+  ...
+```
+
+Point it at a directory of config directories and it compares the two:
+
+```console
+$ gomgr installations --app-id 1719369 --private-key ./app.pem --config-root ./orgs
+Installed on 10 organization(s), 3 config directory/ies found:
+
+  ok dragonsecurity               orgs/dragonsecurity
+  ok kamuses                      orgs/kamuses
+  ?  scalelock                    installed, no config directory
+  !  old-project                  configured in orgs/old-project, app NOT installed
+
+1 organization(s) the app reaches that nothing configures: scalelock
+  Nothing is applied to these. gomgr only acts on an organization a config directory names.
+1 configured organization(s) the app cannot reach: old-project
+  A sync against these fails at authentication. Install the app, or remove the directory.
+```
+
+Both directions are worth knowing. An organization the app reaches that nothing
+configures is one somebody onboarded and nobody wrote config for — gomgr is
+silent about it, because gomgr only acts on organizations a config directory
+names. A configured organization the app cannot reach fails at authentication,
+and the message now names the organizations it *is* installed on rather than
+only the one that failed.
+
+`--config-root` reads just the `org:` key from each `app.yaml` it finds, so a
+directory with an unrelated problem — a broken team file, an invalid ruleset —
+is still reported as configured. Use `gomgr validate` for that question.
+
+**This needs GitHub App credentials.** `GET /app/installations` authenticates as
+the app itself, and `GITHUB_TOKEN` cannot answer it: a personal access token
+authenticates a person, and a person has no app installations. It needs no
+enterprise scope and no second credential, which is what makes it the honest
+answer to "what does this reach" — see
+[Deferred: enterprise-level management](#deferred-enterprise-level-management).
+
 ### Suggested order
 
 ```bash
@@ -1229,6 +1277,12 @@ Use a classic PAT with scopes:
   Adopts rulesets that exist on GitHub but are not in your YAML. Prints them by
   default; `--write` splices them into your config files. See
   [Adopting rulesets that already exist](#adopting-rulesets-that-already-exist).
+
+- `gomgr installations [-c <config>] [--config-root <dir>]`  
+  Lists the organizations this GitHub App is installed on. With
+  `--config-root`, reports both directions of drift against the config
+  directories found there. App credentials only — no enterprise scope. See
+  [`gomgr installations`](#gomgr-installations).
 
 - `gomgr setup-team -n "Team Name" -c <config> [-f out/path.yaml]`  
   Bootstraps a team YAML.
@@ -1425,6 +1479,8 @@ and deliberately deferred. The blocker is the scope, not the work:
 [CI: Org sync workflow](#ci-org-sync-workflow-for-your-org-config-repo) above.
 A hand-maintained list of config folders belongs in the org-config repo rather
 than in the tool, and it needs no enterprise credential.
+[`gomgr installations`](#gomgr-installations) tells you what that list should
+contain, using the App credentials you already have.
 
 Revisiting this needs its own risk review, and `admin:enterprise` is the first
 question to re-answer.
