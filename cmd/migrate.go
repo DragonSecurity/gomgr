@@ -49,9 +49,9 @@ private_key on the result deliberately.`,
 		out := cmd.OutOrStdout()
 		p := func(format string, a ...any) { _, _ = fmt.Fprintf(out, format, a...) }
 
-		teams, grants := 0, 0
+		teams, grants, nested := 0, 0, 0
 		for _, o := range res.Orgs {
-			p("%-40s org=%-30s teams=%-3d grants=%d\n", o.Dir, o.Org, o.Teams, o.Grants)
+			p("%-40s org=%-30s teams=%-3d grants=%-3d nested=%d\n", o.Dir, o.Org, o.Teams, o.Grants, o.Nested)
 			for _, d := range o.Dropped {
 				p("    dropped:  %s\n", d)
 			}
@@ -60,9 +60,10 @@ private_key on the result deliberately.`,
 			}
 			teams += o.Teams
 			grants += o.Grants
+			nested += o.Nested
 		}
-		p("\nConverted %d organizations, %d teams, %d repository grants into %s\n",
-			len(res.Orgs), teams, grants, migrateTo)
+		p("\nConverted %d organizations, %d teams (%d nested), %d repository grants into %s\n",
+			len(res.Orgs), teams, nested, grants, migrateTo)
 
 		if res.Lossy() {
 			p("\nSome of the source did not survive the conversion — see the lines above.\n")

@@ -57,9 +57,16 @@ const (
 	scopeTeamRepo     = "team-repo"
 	scopeOrgMember    = "org-member"
 	scopeCustomRole   = "custom-role"
+	scopeOrgOwner     = "org-owner"
+	// scopeRepoCollaborator covers a direct grant on a repository — the kind
+	// the "add collaborator" button makes, which belongs to no team.
+	scopeRepoCollaborator = "repo-collaborator"
 )
 
 const (
+	// Owners are promoted before anything else. An org that gomgr is bringing
+	// under management may not yet have an owner who can approve what follows.
+	precedenceOrgOwnerEnsure     = 3
 	precedenceCustomRoleCreate   = 5
 	precedenceCustomRoleUpdate   = 5
 	precedenceTeamCreate         = 10
@@ -81,6 +88,14 @@ const (
 	precedenceRepoRulesetCreate = 62
 	precedenceRepoRulesetUpdate = 62
 	precedenceRepoFileDelete    = 80
+	// Direct collaborator grants go before member removal: revoking a grant
+	// from someone this run is also about to remove from the org is wasted, but
+	// removing them first makes the revoke 404.
+	precedenceRepoCollaboratorRemove = 83
+	// Demotion sits between the two. A demoted owner becomes an ordinary
+	// member, and an ordinary member in no team is what precedenceOrgMemberRemove
+	// removes — so the ordering is what makes the two flags compose.
+	precedenceOrgOwnerRemove    = 84
 	precedenceOrgMemberRemove   = 85
 	precedenceOrgRulesetDelete  = 86
 	precedenceRepoRulesetDelete = 86
@@ -404,19 +419,30 @@ func planTeams(_ context.Context, _ *gh.Client, cfg *config.Root, st *State) ([]
 	st.CurrentTeams = len(st.ActualTeams)
 	st.DesiredTeams = len(desired)
 
-	for slug, want := range desired {
+	// Parents before children, and a stable order otherwise. Ranging over the
+	// map directly emitted the same plan in a different order on every run,
+	// which made two dry runs of an unchanged config look like different plans;
+	// it would also create a child before its parent existed, roughly half the
+	// time.
+	for _, slug := range hierarchyOrder(desired) {
+		want := desired[slug]
+		parent := want.ParentSlug()
 		if _, ok := actualBySlug[slug]; !ok {
+			details := map[string]any{
+				"org":                  st.Org,
+				"name":                 want.Name,
+				"privacy":              want.Privacy,
+				"description":          want.Description,
+				"notification_setting": want.NotificationSetting,
+			}
+			if parent != "" {
+				details["parent"] = parent
+			}
 			out = append(out, util.Change{
-				Scope:  scopeTeam,
-				Target: slug,
-				Action: util.ActionCreate,
-				Details: map[string]any{
-					"org":                  st.Org,
-					"name":                 want.Name,
-					"privacy":              want.Privacy,
-					"description":          want.Description,
-					"notification_setting": want.NotificationSetting,
-				},
+				Scope:   scopeTeam,
+				Target:  slug,
+				Action:  util.ActionCreate,
+				Details: details,
 			})
 			continue
 		}
@@ -440,6 +466,18 @@ func planTeams(_ context.Context, _ *gh.Client, cfg *config.Root, st *State) ([]
 			needsUpdate = true
 			updateDetails["notification_setting"] = want.NotificationSetting
 		}
+		// Re-parenting is stated as the parent's slug, or as an explicit
+		// removal. The apply side cannot tell "leave it alone" from "clear it"
+		// out of an absent value, and GitHub's default for an omitted
+		// parent_team_id is to leave it alone — so an un-nesting has to say so.
+		if currentParent := existing.GetParent().GetSlug(); currentParent != parent {
+			needsUpdate = true
+			if parent == "" {
+				updateDetails["remove_parent"] = true
+			} else {
+				updateDetails["parent"] = parent
+			}
+		}
 		if needsUpdate {
 			out = append(out, util.Change{
 				Scope:   scopeTeam,
@@ -460,8 +498,10 @@ func planTeamMembership(ctx context.Context, c *gh.Client, st *State, desiredByS
 	totalDesiredMembers := 0
 
 	validatedUsers := map[string]bool{}
+	var pendingInvites []string
 
-	for slug, want := range desiredBySlug {
+	for _, slug := range hierarchyOrder(desiredBySlug) {
+		want := desiredBySlug[slug]
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -508,6 +548,16 @@ func planTeamMembership(ctx context.Context, c *gh.Client, st *State, desiredByS
 			return nil, err
 		}
 
+		// Someone already invited to this team is not a member yet, so the
+		// membership listings above do not mention them. Re-issuing the
+		// invitation on every run is how a config that names a person who
+		// never accepts turns into a weekly reminder from GitHub, so a pending
+		// invitation counts as the role already being ensured.
+		invited, err := pendingTeamInvitations(ctx, c, org, slug)
+		if err != nil {
+			return nil, err
+		}
+
 		// desired role map
 		wantRole := map[string]string{}
 		for _, u := range want.Maintainers {
@@ -539,6 +589,10 @@ func planTeamMembership(ctx context.Context, c *gh.Client, st *State, desiredByS
 			if got[user] == role {
 				continue
 			}
+			if _, already := got[user]; !already && invited[user] {
+				pendingInvites = append(pendingInvites, fmt.Sprintf("%s (%s)", user, slug))
+				continue
+			}
 			out = append(out, util.Change{
 				Scope:   scopeTeamMember,
 				Target:  slug,
@@ -553,6 +607,39 @@ func planTeamMembership(ctx context.Context, c *gh.Client, st *State, desiredByS
 	st.CurrentTeamMembers = totalCurrentMembers
 	st.DesiredTeamMembers = totalDesiredMembers
 
+	if len(pendingInvites) > 0 {
+		sort.Strings(pendingInvites)
+		st.RepoWarnings = append(st.RepoWarnings, fmt.Sprintf(
+			"%d team invitation(s) still pending, left alone rather than re-sent: %v",
+			len(pendingInvites), pendingInvites))
+	}
+
+	return out, nil
+}
+
+// pendingTeamInvitations returns the logins with an unaccepted invitation to a
+// team, lowercased. A team that does not exist yet has none, which is a fact
+// rather than a failure.
+func pendingTeamInvitations(ctx context.Context, c *gh.Client, org, slug string) (map[string]bool, error) {
+	out := map[string]bool{}
+	if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
+		invites, resp, err := c.REST.Teams.ListPendingTeamInvitationsBySlug(ctx, org, slug, opts)
+		if err != nil {
+			var ghErr *github.ErrorResponse
+			if errors.As(err, &ghErr) && ghErr.Response != nil && ghErr.Response.StatusCode == http.StatusNotFound {
+				return &github.Response{}, nil
+			}
+			return nil, err
+		}
+		for _, inv := range invites {
+			if login := inv.GetLogin(); login != "" {
+				out[strings.ToLower(login)] = true
+			}
+		}
+		return resp, nil
+	}); err != nil {
+		return nil, fmt.Errorf("list pending invitations for team %q: %w", slug, err)
+	}
 	return out, nil
 }
 
@@ -846,8 +933,9 @@ func planTeamCleanups(st *State, org string, desired map[string]config.TeamConfi
 }
 
 // planMemberCleanups generates remove changes for org members not in any team.
-func planMemberCleanups(ctx context.Context, c *gh.Client, org string) ([]util.Change, error) {
+func planMemberCleanups(ctx context.Context, c *gh.Client, st *State) ([]util.Change, error) {
 	var out []util.Change
+	org := st.Org
 	memOpt := &github.ListMembersOptions{
 		Role:        roleMember,
 		ListOptions: github.ListOptions{PerPage: defaultPerPage},
@@ -864,32 +952,14 @@ func planMemberCleanups(ctx context.Context, c *gh.Client, org string) ([]util.C
 	}); err != nil {
 		return nil, err
 	}
-	inAnyTeam := map[string]bool{}
-	var allTeams []*github.Team
-	if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
-		ts, resp, err := c.REST.Teams.ListTeams(ctx, org, opts)
-		if err != nil {
-			return nil, err
-		}
-		allTeams = append(allTeams, ts...)
-		return resp, nil
-	}); err != nil {
+	byTeam, err := st.allTeamMembers(ctx, c)
+	if err != nil {
 		return nil, err
 	}
-	for _, t := range allTeams {
-		tmOpt := &github.TeamListTeamMembersOptions{Role: "all", ListOptions: github.ListOptions{PerPage: defaultPerPage}}
-		if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
-			tmOpt.ListOptions = *opts
-			us, resp, err := c.REST.Teams.ListTeamMembersBySlug(ctx, org, t.GetSlug(), tmOpt)
-			if err != nil {
-				return nil, err
-			}
-			for _, u := range us {
-				inAnyTeam[strings.ToLower(u.GetLogin())] = true
-			}
-			return resp, nil
-		}); err != nil {
-			return nil, err
+	inAnyTeam := map[string]bool{}
+	for _, logins := range byTeam {
+		for login := range logins {
+			inAnyTeam[login] = true
 		}
 	}
 	for _, u := range members {
@@ -950,7 +1020,7 @@ func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State
 		if ctx.Err() != nil {
 			return nil, nil, ctx.Err()
 		}
-		changes, err := planMemberCleanups(ctx, c, org)
+		changes, err := planMemberCleanups(ctx, c, st)
 		if err != nil {
 			return nil, nil, err
 		}

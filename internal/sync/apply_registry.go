@@ -79,6 +79,7 @@ func buildDefaultRegistry() *HandlerRegistry {
 	r := NewHandlerRegistry()
 
 	// Creation / mutation phase (low precedence = runs first).
+	r.Register(scopeOrgOwner, util.ActionEnsure, precedenceOrgOwnerEnsure, HandlerFunc(applyOrgOwnerEnsure))
 	r.Register(scopeCustomRole, util.ActionCreate, precedenceCustomRoleCreate, HandlerFunc(applyCustomRoleNoop))
 	r.Register(scopeCustomRole, util.ActionUpdate, precedenceCustomRoleUpdate, HandlerFunc(applyCustomRoleNoop))
 	r.Register(scopeTeam, util.ActionCreate, precedenceTeamCreate, HandlerFunc(applyTeamCreate))
@@ -100,6 +101,8 @@ func buildDefaultRegistry() *HandlerRegistry {
 
 	// Cleanup phase (high precedence = runs last).
 	r.Register(scopeRepoFile, util.ActionDelete, precedenceRepoFileDelete, HandlerFunc(applyRepoFileDelete))
+	r.Register(scopeRepoCollaborator, util.ActionRemove, precedenceRepoCollaboratorRemove, HandlerFunc(applyRepoCollaboratorRemove))
+	r.Register(scopeOrgOwner, util.ActionRemove, precedenceOrgOwnerRemove, HandlerFunc(applyOrgOwnerRemove))
 	r.Register(scopeOrgMember, util.ActionRemove, precedenceOrgMemberRemove, HandlerFunc(applyOrgMemberRemove))
 	r.Register(scopeOrgRuleset, util.ActionDelete, precedenceOrgRulesetDelete, HandlerFunc(applyOrgRulesetDelete))
 	r.Register(scopeRepoRuleset, util.ActionDelete, precedenceRepoRulesetDelete, HandlerFunc(applyRepoRulesetDelete))

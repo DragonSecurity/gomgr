@@ -12,14 +12,31 @@ The gomgr agent can:
 
 - **Team Management**
   - Create and configure teams with specified privacy levels
+  - Nest teams via `parents:` — one parent, neither end `secret`; the child
+    inherits the parent's repository access and GitHub applies the inheritance
   - Assign team maintainers and members
   - Optionally delete teams not defined in configuration
   - Warn about unmanaged teams
 
 - **Member Management**
   - Add members to teams with appropriate roles
+  - Treat a pending team invitation as already-ensured rather than re-sending it
   - Optionally remove members not assigned to any team
   - Warn about members without team assignments
+
+- **Organization Owners**
+  - Promote anyone `org.yaml` lists who is not already an owner
+  - Optionally demote owners `org.yaml` does not list, never the authenticated
+    account, and never at all when the owner list is empty
+  - Warn about owners not listed in configuration
+
+- **Direct Collaborators**
+  - Find repository access granted outside a team — what the GitHub UI's
+    "add collaborator" button creates
+  - Optionally revoke only the surplus over team membership, parent-team
+    inheritance and the org's default repository permission; owners exempt
+  - One-way: gomgr never creates a direct grant, because access flows through
+    teams
 
 - **Repository Permissions**
   - Grant team-level repository access (pull/triage/push/maintain/admin)
@@ -61,8 +78,9 @@ The gomgr agent can:
     description, privacy, maintainers, members, and each team's repository
     grants with the permission held
   - Never overwrites an existing team file
-  - Reports team hierarchy rather than writing a `parents:` field gomgr would
-    not act on
+  - Writes `parents:` when both ends of the nesting are being imported;
+    reports it otherwise, because an entry naming a team the config does not
+    define will not load
   - Reports repositories no team reaches, and shouts when
     `delete_unmanaged_repos` means the next sync would delete them
   - Members and maintainers are sorted, so re-importing produces the same bytes
@@ -170,15 +188,16 @@ Agents are configured through YAML files in a config directory:
 Defines the target organization, authentication method, and behavioral flags:
 - Organization name
 - GitHub App credentials or PAT
-- Warning flags for dry-run mode (unmanaged teams, members without teams, unmanaged repos, unmanaged custom roles)
-- Optional enforcement features (remove members, delete teams, delete unmanaged repos, delete custom roles, create repos)
+- Warning flags for dry-run mode (unmanaged teams, members without teams, unmanaged repos, unmanaged custom roles, unmanaged owners, excess collaborators)
+- Optional enforcement features (remove members, delete teams, delete unmanaged repos, delete custom roles, create repos, demote unconfigured owners, revoke excess collaborators, skip archived repos)
 - Renovate configuration injection
 - Default README injection (optional)
 
 ### `org.yaml` - Organization Metadata
 Defines organization owners, custom repository roles (GitHub Enterprise Cloud)
 and organization-wide rulesets:
-- List of organization owners
+- List of organization owners — applied, not merely validated. An empty list
+  means owners are unmanaged, never that the org should have none.
 - Custom repository role definitions with base roles and permissions
 - Ruleset definitions: the guard rails every matching repository inherits
 
@@ -186,6 +205,7 @@ and organization-wide rulesets:
 Each file defines a team with:
 - Name and slug
 - Description and privacy level
+- `parents:` — at most one entry, naming the team this one nests under
 - Maintainers and members
 - Repository access permissions with optional advanced configuration:
   - Simple string permission (backward compatible): `repo: push`
@@ -209,6 +229,9 @@ Each file defines a team with:
 - **Idempotent Operations**: Safe to run multiple times without side effects
 - **Least Privilege**: GitHub App authentication with minimal required permissions
 - **Fail-safe Warnings**: Alerts about unmanaged resources before cleanup
+- **No Self-demotion**: The account a run authenticates as is never dropped from owner, because that cannot be undone through the API that did it
+- **Empty Owner List Is Inert**: An absent or empty `org.owners` disables owner management rather than emptying the owner set
+- **Hierarchy Validated Offline**: Unknown parents, cycles, more than one parent, and `secret` teams in a nesting are all refused at load rather than partway through an apply
 - **Self-lockout Detection**: Warns when a ruleset would reject gomgr's own file-sync pushes, before the sync runs into it
 - **Report-only Rulesets**: `enforcement: evaluate` records what a new guard rail would have blocked without blocking it
 
@@ -223,8 +246,8 @@ Each file defines a team with:
 
 The roadmap includes:
 
-- Compare and update team fields (description, privacy, parents)
-- Optionally remove extra team members or revoke excess permissions
+- Optionally remove extra team members
+- Enterprise-level management (enterprise accounts and their orgs)
 - Parallel apply with rate-limit aware workers
 - More comprehensive plan diff output
 - Custom default branch for file writes

@@ -97,9 +97,63 @@ func readYAML(path string, out any) error {
 	return nil
 }
 
+// validateTeamHierarchy checks the `parents:` relationships across the whole
+// team set: that a named parent exists, that nothing is its own ancestor, and
+// that no team involved in a nesting is secret.
+//
+// All three are things GitHub would otherwise report one team at a time, at
+// apply time, after some of the run has already landed. A cycle in particular
+// never reaches GitHub at all — it deadlocks the ordering gomgr applies teams
+// in — so it has to be caught here.
+func (r *Root) validateTeamHierarchy() error {
+	bySlug := make(map[string]TeamConfig, len(r.Team))
+	for _, t := range r.Team {
+		bySlug[t.ResolvedSlug()] = t
+	}
+
+	parentOf := map[string]string{}
+	for _, t := range r.Team {
+		parent := t.ParentSlug()
+		if parent == "" {
+			continue
+		}
+		slug := t.ResolvedSlug()
+		if parent == slug {
+			return fmt.Errorf("team %q lists itself as its parent", t.Name)
+		}
+		pt, ok := bySlug[parent]
+		if !ok {
+			return fmt.Errorf("team %q names parent %q, which no team file defines", t.Name, t.Parents[0])
+		}
+		// GitHub refuses to nest a secret team in either direction, so both
+		// ends of the relationship are checked from the child, which is the
+		// only place that knows the pair.
+		if t.Privacy == privacySecret {
+			return fmt.Errorf("team %q is secret and cannot be nested under %q; GitHub does not allow secret teams in a hierarchy", t.Name, pt.Name)
+		}
+		if pt.Privacy == privacySecret {
+			return fmt.Errorf("team %q is nested under %q, which is secret; GitHub does not allow secret teams in a hierarchy", t.Name, pt.Name)
+		}
+		parentOf[slug] = parent
+	}
+
+	for slug := range parentOf {
+		seen := map[string]bool{slug: true}
+		chain := []string{slug}
+		for cur := parentOf[slug]; cur != ""; cur = parentOf[cur] {
+			if seen[cur] {
+				return fmt.Errorf("team hierarchy has a cycle: %s -> %s", strings.Join(chain, " -> "), cur)
+			}
+			seen[cur] = true
+			chain = append(chain, cur)
+		}
+	}
+	return nil
+}
+
 // Validate checks that the loaded configuration is semantically correct.
 func (r *Root) Validate() error {
-	validPrivacy := map[string]bool{"": true, "closed": true, "secret": true}
+	validPrivacy := map[string]bool{"": true, privacyClosed: true, privacySecret: true}
 	validNotificationSetting := map[string]bool{
 		"": true, NotificationsEnabled: true, NotificationsDisabled: true,
 	}
@@ -147,6 +201,12 @@ func (r *Root) Validate() error {
 				return fmt.Errorf("team %q member: %w", t.Name, err)
 			}
 		}
+		if len(t.Parents) > 1 {
+			return fmt.Errorf("team %q lists %d parents; GitHub allows at most one", t.Name, len(t.Parents))
+		}
+	}
+	if err := r.validateTeamHierarchy(); err != nil {
+		return err
 	}
 	for _, cr := range r.Org.CustomRoles {
 		if cr.Name == "" {

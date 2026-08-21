@@ -294,15 +294,21 @@ func ExplainFileRoutes(ctx context.Context, c *gh.Client, cfg *config.Root) []st
 				out = append(out, fmt.Sprintf("%-26s ERROR %v", repo, err))
 				continue
 			}
-			route := "direct"
+			route := routeDirect
 			if r.UsePullRequest {
-				route = "pull request"
+				route = routePullRequest
 			}
 			out = append(out, fmt.Sprintf("%-26s %-12s %s", repo+"@"+branch, route, r.Reason))
 		}
 	}
 	return out
 }
+
+// How a file change reaches a branch, as shown in the routing table.
+const (
+	routeDirect      = "direct"
+	routePullRequest = "pull request"
+)
 
 // fileRouter decides the route for one repository and branch.
 type fileRouter func(repo, branch string) (fileRoute, error)

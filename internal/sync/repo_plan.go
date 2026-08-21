@@ -118,6 +118,13 @@ func newRepoPlanner(ctx context.Context, c *gh.Client, cfg *config.Root, st *Sta
 	return p, nil
 }
 
+// archived reports whether GitHub says this repository is archived. A
+// repository this run is about to create is not.
+func (p *repoPlanner) archived(key string) bool {
+	r, ok := p.repos[key]
+	return ok && r.GetArchived()
+}
+
 // planRepoPerms plans everything that follows from a team naming a repository:
 // the repository itself, the grant, its topics, pins, templates, codeowners,
 // files, settings and visibility.
@@ -273,6 +280,16 @@ func (p *repoPlanner) planRepoCreation(repo, key string, settings repoSettings) 
 func (p *repoPlanner) planGrant(slug, repo, key string) (util.Change, bool) {
 	permission := p.teamPerms[slug+"/"+key]
 	if permission == "" {
+		return util.Change{}, false
+	}
+	// GitHub refuses to change team access on an archived repository, so a
+	// config that still names one plans a grant that fails on every run. Under
+	// ignore_archived the grant is skipped and said out loud, because a
+	// repository quietly archived out from under the config is exactly the
+	// thing worth hearing about.
+	if p.cfg.App.IgnoreArchived && p.archived(key) {
+		p.st.RepoWarnings = append(p.st.RepoWarnings, fmt.Sprintf(
+			"skipping %s grant to %q: repository is archived", repo, slug))
 		return util.Change{}, false
 	}
 	return util.Change{

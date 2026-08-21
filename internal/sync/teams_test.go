@@ -1490,3 +1490,79 @@ func TestPlanTeams_NotificationSetting(t *testing.T) {
 		t.Error("an unset notification_setting still planned a change")
 	}
 }
+
+// A pending invitation means the person has already been asked. Planning the
+// same add again re-sends the invitation on every run, which is how a config
+// naming someone who never accepts turns into a weekly reminder from GitHub.
+func TestPlanTeamMembershipSkipsPendingInvitations(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		enc := json.NewEncoder(w)
+		switch {
+		case r.URL.Path == "/orgs/myorg/teams/backend/members":
+			_ = enc.Encode([]map[string]any{})
+		case r.URL.Path == "/orgs/myorg/teams/backend/invitations":
+			_ = enc.Encode([]map[string]any{{"login": "Slowpoke"}})
+		case strings.HasPrefix(r.URL.Path, "/users/"):
+			_ = enc.Encode(map[string]any{"login": strings.TrimPrefix(r.URL.Path, "/users/")})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	st := &State{Org: "myorg"}
+	desired := map[string]config.TeamConfig{
+		"backend": {Name: "Backend", Slug: "backend", Members: []string{"slowpoke", "eager"}},
+	}
+
+	changes, err := planTeamMembership(context.Background(), newTestClient(t, server), st, desired)
+	if err != nil {
+		t.Fatalf("planTeamMembership: %v", err)
+	}
+
+	if len(changes) != 1 {
+		t.Fatalf("expected only the uninvited member to be planned, got %+v", changes)
+	}
+	if d, ok := changes[0].Details.(teamMemberChange); !ok || d.User != "eager" {
+		t.Errorf("expected eager to be added, got %+v", changes[0].Details)
+	}
+	if len(st.RepoWarnings) != 1 || !strings.Contains(st.RepoWarnings[0], "slowpoke") {
+		t.Errorf("the pending invitation should be reported, got %v", st.RepoWarnings)
+	}
+}
+
+// Someone who is already a member at the wrong role is corrected even if an
+// invitation is somehow also on file — the membership is the stronger fact.
+func TestPlanTeamMembershipStillFixesRoleOfExistingMember(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		enc := json.NewEncoder(w)
+		switch {
+		case r.URL.Path == "/orgs/myorg/teams/backend/members" && r.URL.Query().Get("role") == "member":
+			_ = enc.Encode([]map[string]any{{"login": "alice"}})
+		case r.URL.Path == "/orgs/myorg/teams/backend/members":
+			_ = enc.Encode([]map[string]any{})
+		case r.URL.Path == "/orgs/myorg/teams/backend/invitations":
+			_ = enc.Encode([]map[string]any{{"login": "alice"}})
+		case strings.HasPrefix(r.URL.Path, "/users/"):
+			_ = enc.Encode(map[string]any{"login": strings.TrimPrefix(r.URL.Path, "/users/")})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	desired := map[string]config.TeamConfig{
+		"backend": {Name: "Backend", Slug: "backend", Maintainers: []string{"alice"}},
+	}
+
+	changes, err := planTeamMembership(context.Background(), newTestClient(t, server), &State{Org: "myorg"}, desired)
+	if err != nil {
+		t.Fatalf("planTeamMembership: %v", err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("expected the role correction to survive, got %+v", changes)
+	}
+	if d := changes[0].Details.(teamMemberChange); d.Role != roleMaintainer {
+		t.Errorf("expected a promotion to maintainer, got %q", d.Role)
+	}
+}

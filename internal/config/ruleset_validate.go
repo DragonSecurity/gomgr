@@ -36,15 +36,19 @@ var validGroupingStrategies = map[string]bool{
 	"headgreen": true,
 }
 
+// thresholdNone is the alert threshold that lets everything through. Both
+// threshold sets accept it, which is the only reason it is named.
+const thresholdNone = "none"
+
 var validAlertsThresholds = map[string]bool{
-	"none":                true,
+	thresholdNone:         true,
 	"errors":              true,
 	"errors_and_warnings": true,
 	"all":                 true,
 }
 
 var validSecurityAlertsThresholds = map[string]bool{
-	"none":             true,
+	thresholdNone:      true,
 	"critical":         true,
 	"high_or_higher":   true,
 	"medium_or_higher": true,

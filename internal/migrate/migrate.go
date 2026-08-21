@@ -64,6 +64,8 @@ type OrgResult struct {
 	Org    string
 	Teams  int
 	Grants int
+	// Nested counts the teams that carried a parent across.
+	Nested int
 	// Dropped is everything in the source that is not in the output.
 	Dropped []string
 	// Unmapped names source keys gomgr has no equivalent for. Distinct from
@@ -117,13 +119,17 @@ type pyTeam struct {
 	Maintainer          []string           `yaml:"maintainer"`
 	Member              []string           `yaml:"member"`
 	Repos               map[string]*string `yaml:"repos"`
+	// Parent names the team this one is nested under. The Python layout says
+	// it as a team name and allows one; gomgr says it as a one-element
+	// `parents:` list, and resolves the name to a slug the same way.
+	Parent string `yaml:"parent"`
 }
 
 // knownTeamKeys is what pyTeam consumes. Anything else in a team entry is
 // reported rather than silently discarded.
 var knownTeamKeys = map[string]bool{
 	"description": true, "privacy": true, "notification_setting": true,
-	"maintainer": true, "member": true, "repos": true,
+	"maintainer": true, "member": true, "repos": true, "parent": true,
 }
 
 // outFiles is a converted org directory held in memory. Nothing reaches disk
@@ -299,6 +305,20 @@ func convertOrg(src, dirName string, opts Options) (outFiles, OrgResult, error) 
 		// explicit value on every team that did not state its own.
 		tc.Privacy = firstNonEmpty(pt.Privacy, org.Defaults.Team.Privacy)
 		tc.NotificationSetting = firstNonEmpty(pt.NotificationSetting, org.Defaults.Team.NotificationSetting)
+		if parent := strings.TrimSpace(pt.Parent); parent != "" {
+			tc.Parents = []string{parent}
+			// A nested team cannot be secret on either side. The org-level
+			// default is the likely source when it happens, since it applies to
+			// teams that never mentioned privacy at all, and a config gomgr
+			// refuses to load is a worse outcome than saying so here.
+			if tc.Privacy == "secret" {
+				return out, res, fmt.Errorf(
+					"%s: team %q is nested under %q but resolves to privacy \"secret\", which GitHub does not allow "+
+						"in a hierarchy — set privacy on that team in the source, or change defaults.team.privacy",
+					dirName, name, parent)
+			}
+			res.Nested++
+		}
 
 		repos := map[string]any{}
 		repoNames := make([]string, 0, len(pt.Repos))

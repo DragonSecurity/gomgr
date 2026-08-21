@@ -18,9 +18,15 @@ import (
 // ImportedTeam is a team that exists on GitHub, rendered as configuration.
 type ImportedTeam struct {
 	Config config.TeamConfig
-	// Parent is the slug of the team this one is nested under, if any. gomgr
-	// does not manage team hierarchy, so this is reported rather than written.
+	// Parent is the slug of the team this one is nested under, if any. It is
+	// written into Config.Parents once the whole scan is in, because a parent
+	// is only expressible when the file that defines it is also being written
+	// — an import that adopts a child whose parent is already declared, or is
+	// not being imported, has nowhere to point.
 	Parent string
+	// ParentUnwritable is set when Parent names a team this import will not
+	// produce a file for, so the nesting is reported instead of recorded.
+	ParentUnwritable bool
 }
 
 // SkippedTeam is a team that could not be turned into configuration.
@@ -108,6 +114,8 @@ func ImportTeams(ctx context.Context, c *gh.Client, cfg *config.Root) (*TeamImpo
 	sort.Slice(result.Teams, func(i, j int) bool {
 		return result.Teams[i].Config.ResolvedSlug() < result.Teams[j].Config.ResolvedSlug()
 	})
+
+	resolveImportedParents(result, declared)
 
 	// Repositories no team reaches have nowhere to live in the configuration,
 	// and under delete_unmanaged_repos they are what the next sync deletes.
@@ -239,6 +247,45 @@ func ungrantedRepos(ctx context.Context, c *gh.Client, org string, granted map[s
 	return out, nil
 }
 
+// resolveImportedParents turns each team's observed parent into a `parents:`
+// line, but only where the resulting configuration would actually load.
+//
+// A `parents:` entry has to name a team the configuration defines. That holds
+// when the parent is also being imported. It does not when the parent is a team
+// some existing file already declares — the import does not touch those files,
+// so writing the child's side of a relationship whose other side gomgr cannot
+// see would produce a directory that fails validation on the next load. Those
+// are reported instead, which is the same treatment nesting used to get
+// unconditionally.
+//
+// GitHub will not nest a secret team at either end, so a secret team's nesting
+// cannot be written either; it is reported for the same reason.
+func resolveImportedParents(result *TeamImportResult, declared map[string]bool) {
+	importable := make(map[string]bool, len(result.Teams))
+	secret := map[string]bool{}
+	for _, t := range result.Teams {
+		slug := t.Config.ResolvedSlug()
+		importable[slug] = true
+		if t.Config.Privacy == "secret" {
+			secret[slug] = true
+		}
+	}
+	for i := range result.Teams {
+		parent := result.Teams[i].Parent
+		if parent == "" {
+			continue
+		}
+		self := result.Teams[i].Config.ResolvedSlug()
+		writable := importable[parent] && !declared[strings.ToLower(parent)] &&
+			!secret[parent] && !secret[self]
+		if !writable {
+			result.Teams[i].ParentUnwritable = true
+			continue
+		}
+		result.Teams[i].Config.Parents = []string{parent}
+	}
+}
+
 // validateTeamConfig runs one imported team through the checks a hand-written
 // team file gets, so anything gomgr's schema cannot express is reported rather
 // than written out and rediscovered on the next load.
@@ -254,9 +301,10 @@ func validateTeamConfig(team config.TeamConfig) error {
 // files it writes.
 func LogTeamImportWarnings(result *TeamImportResult) {
 	for _, t := range result.Teams {
-		if t.Parent != "" {
-			util.Warnf("team %q is nested under %q; gomgr does not manage team hierarchy, so the imported file does not record it",
-				t.Config.ResolvedSlug(), t.Parent)
+		if t.ParentUnwritable {
+			util.Warnf("team %q is nested under %q, which this import does not write a file for; "+
+				"the imported file does not record the nesting — add `parents: [%s]` by hand once %[2]q is in the config",
+				t.Config.ResolvedSlug(), t.Parent, t.Parent)
 		}
 	}
 }
