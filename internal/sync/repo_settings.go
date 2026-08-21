@@ -113,6 +113,7 @@ func newRepoDetailFetcher(c *gh.Client) repoDetailFetcher {
 // is what extends that to the repositories it did not create, which are exactly
 // the ones quietly missing them.
 func planRepoSettings(ctx context.Context, fetch repoDetailFetcher, cfg *config.Root, bySettings map[string]repoSettings, existingRepos map[string]*github.Repository) ([]util.Change, []string, error) {
+	unarchiving := unarchivingThisRun(bySettings)
 	var out []util.Change
 	var warnings []string
 
@@ -133,7 +134,10 @@ func planRepoSettings(ctx context.Context, fetch repoDetailFetcher, cfg *config.
 			}
 			current = full
 		}
-		if current.GetArchived() {
+		// A repository this run is about to un-archive is not skipped: the
+		// un-archive is planned at a lower precedence, so it has already
+		// happened by the time these settings apply.
+		if current.GetArchived() && !unarchiving[repo] {
 			warnings = append(warnings, fmt.Sprintf("Skipping settings for archived repository %s", repo))
 			continue
 		}
@@ -189,6 +193,7 @@ func planRepoSettings(ctx context.Context, fetch repoDetailFetcher, cfg *config.
 // a disclosed one cannot be undisclosed, so this is the one setting that gets a
 // second lock rather than a comment.
 func planRepoVisibility(cfg *config.Root, bySettings map[string]repoSettings, existingRepos map[string]*github.Repository) ([]util.Change, []string) {
+	unarchiving := unarchivingThisRun(bySettings)
 	var out []util.Change
 	var warnings []string
 
@@ -211,7 +216,8 @@ func planRepoVisibility(cfg *config.Root, bySettings map[string]repoSettings, ex
 				repo, current.GetVisibility(), want))
 			continue
 		}
-		if current.GetArchived() {
+		// Same reasoning as settings: an un-archive planned this run runs first.
+		if current.GetArchived() && !unarchiving[repo] {
 			warnings = append(warnings, fmt.Sprintf("Skipping visibility for archived repository %s", repo))
 			continue
 		}

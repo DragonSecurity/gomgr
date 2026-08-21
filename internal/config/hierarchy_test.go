@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func teamsRoot(teams ...TeamConfig) *Root {
 	return &Root{App: AppConfig{Org: "myorg"}, Team: teams}
@@ -112,5 +115,44 @@ func TestParentSlug(t *testing.T) {
 				t.Errorf("want %q, got %q", tc.want, got)
 			}
 		})
+	}
+}
+
+// Omitting `archived:` and setting it to false are different instructions, so
+// the parsed value has to distinguish them.
+func TestArchivedIsThreeStated(t *testing.T) {
+	cases := map[string]*bool{
+		"absent": nil,
+		"true":   boolp(true),
+		"false":  boolp(false),
+	}
+	for name, want := range cases {
+		t.Run(name, func(t *testing.T) {
+			rc := RepoConfig{}
+			if want != nil {
+				rc.Archived = want
+			}
+			switch {
+			case want == nil && rc.Archived != nil:
+				t.Error("an absent key must stay nil")
+			case want != nil && (rc.Archived == nil || *rc.Archived != *want):
+				t.Errorf("want %v, got %v", *want, rc.Archived)
+			}
+		})
+	}
+}
+
+func boolp(b bool) *bool { return &b }
+
+// A repository entry may say archived; an unknown key beside it is still
+// refused, so the key really is part of the schema.
+func TestArchivedIsAKnownRepoKey(t *testing.T) {
+	if err := RejectUnknownRepoKeys(map[string]any{"archived": true}); err != nil {
+		t.Fatalf("archived should be a known key: %v", err)
+	}
+	if err := RejectUnknownRepoKeys(map[string]any{"archives": true}); err == nil {
+		t.Fatal("a near-miss should still be refused")
+	} else if !strings.Contains(err.Error(), "archived") {
+		t.Errorf("the suggestion should point at archived: %v", err)
 	}
 }

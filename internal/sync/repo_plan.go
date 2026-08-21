@@ -462,7 +462,9 @@ func (p *repoPlanner) planRepoLevelSettings() ([]util.Change, error) {
 		return nil, err
 	}
 	visibility, visWarnings := planRepoVisibility(p.cfg, p.settings, p.repos)
+	archive := planRepoArchive(p.org, p.settings, p.repos)
 	p.st.RepoWarnings = append(p.st.RepoWarnings, warnings...)
 	p.st.RepoWarnings = append(p.st.RepoWarnings, visWarnings...)
-	return append(settings, visibility...), nil
+	out := append(settings, visibility...)
+	return append(out, archive...), nil
 }

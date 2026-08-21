@@ -156,6 +156,7 @@ dry_warnings:
 # Optional enforcement / extras:
 remove_members_without_team: true   # remove org members not in any team
 delete_unconfigured_teams: true     # delete teams not defined in YAML
+archive_unmanaged_repos: false      # archive repos not defined in any team (reversible)
 delete_unmanaged_repos: false       # delete repos not defined in any team (DESTRUCTIVE!)
 delete_unmanaged_custom_roles: false # delete custom roles not in org.yaml (DESTRUCTIVE!)
 delete_unmanaged_rulesets: false    # delete rulesets not in YAML (removes guard rails!)
@@ -211,6 +212,54 @@ files:
     content: |
       * @{{.Org}}/platform-team
 ```
+
+### Archiving instead of deleting
+
+**`archive_unmanaged_repos`** is the reversible sibling of
+`delete_unmanaged_repos`. Both act on repositories no team names; one parks
+them, the other removes them.
+
+Reach for archiving first. An archived repository can be un-archived by anyone
+with admin on it. A deleted one is 90 days of GitHub support at best, and gone
+after that. A configuration that has merely drifted — someone created a
+repository last week and nobody has declared it yet — costs an un-archive
+rather than a restore request.
+
+`delete_unmanaged_repos` remains a first-class option, because deleting really
+is what you sometimes mean. It just says so out loud, and only on a run where
+it is about to act:
+
+```
+delete_unmanaged_repos will DELETE 2 repositories on the next apply: [autobot dragon-invoice].
+Deletion is recoverable for 90 days through GitHub support, and not at all after that.
+archive_unmanaged_repos does the same job reversibly if you only mean to park them.
+```
+
+**Setting both is not an error.** Archiving wins, nothing is deleted, and the
+run reports that the delete flag was ignored — being wrong in the direction
+somebody can undo is the point of having it.
+
+#### Declaring a repository archived
+
+Separately, a repository a team *does* name can declare its own state, in
+`repos.yaml` or on the team entry:
+
+```yaml
+repos:
+  old-prototype:
+    archived: true
+```
+
+Absent and `false` are different instructions. **Omitting the key leaves GitHub
+alone**, so a repository somebody archived by hand stays archived until a
+config says otherwise in as many words — gomgr never un-archives by omission.
+An explicit `archived: false` does un-archive.
+
+Ordering is handled for you: an archived repository rejects writes, so an
+un-archive runs *before* that repository's file, settings and topic changes,
+and an archive runs *after* them. A repository being un-archived this run is
+not skipped by the planners that otherwise refuse to touch archived
+repositories.
 
 ### Owners, collaborators and the doors around the config
 

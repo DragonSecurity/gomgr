@@ -1566,3 +1566,34 @@ func TestPlanTeamMembershipStillFixesRoleOfExistingMember(t *testing.T) {
 		t.Errorf("expected a promotion to maintainer, got %q", d.Role)
 	}
 }
+
+func TestParseRepoConfigArchived(t *testing.T) {
+	got, err := parseRepoConfig(map[string]any{"permission": "admin", "archived": true})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got.archived == nil || !*got.archived {
+		t.Errorf("archived: true should parse, got %v", got.archived)
+	}
+
+	got, err = parseRepoConfig(map[string]any{"archived": false})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got.archived == nil || *got.archived {
+		t.Errorf("archived: false is an instruction, not an absence: %v", got.archived)
+	}
+
+	got, err = parseRepoConfig(map[string]any{"permission": "admin"})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got.archived != nil {
+		t.Errorf("saying nothing must stay nil, got %v", *got.archived)
+	}
+
+	// A string where a bool belongs is a typo, not an instruction.
+	if _, err := parseRepoConfig(map[string]any{"archived": "yes"}); err == nil {
+		t.Error("a non-boolean archived should be refused")
+	}
+}

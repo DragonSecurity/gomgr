@@ -54,6 +54,21 @@ type AppConfig struct {
 	// the same grants are reported and left alone.
 	RemoveExcessCollaborators bool `yaml:"remove_excess_collaborators"`
 
+	// ArchiveUnmanagedRepos archives a repository no team names, instead of
+	// leaving it alone.
+	//
+	// This is the reversible sibling of DeleteUnmanagedRepos, and the one to
+	// reach for first. An archived repository can be un-archived by anyone with
+	// admin on it; a deleted one is ninety days of GitHub support at best and
+	// gone at worst. A configuration that has drifted — a repository created
+	// last week that nobody has declared yet — costs an un-archive rather than
+	// a restore request.
+	//
+	// If both this and DeleteUnmanagedRepos are set, this one wins and the
+	// deletion is reported as skipped. Being wrong in the recoverable direction
+	// is the point of having it.
+	ArchiveUnmanagedRepos bool `yaml:"archive_unmanaged_repos"`
+
 	// IgnoreArchived skips archived repositories when planning team permission
 	// grants. GitHub refuses to change permissions on an archived repository,
 	// so a configuration that still names one plans a grant that fails on every
@@ -145,7 +160,14 @@ type CustomRoleConfig struct {
 }
 
 type RepoConfig struct {
-	Permission string             `yaml:"permission,omitempty"` // pull|triage|push|maintain|admin
+	Permission string `yaml:"permission,omitempty"` // pull|triage|push|maintain|admin
+
+	// Archived declares whether this repository should be archived. It is a
+	// pointer because omitting it and setting it to false are different
+	// instructions: an absent key leaves GitHub's state alone, so a repository
+	// somebody archived by hand stays archived until a configuration says
+	// otherwise in as many words. Un-archiving never happens by omission.
+	Archived   *bool              `yaml:"archived,omitempty"`
 	Topics     []string           `yaml:"topics,omitempty"`
 	Pinned     bool               `yaml:"pinned,omitempty"`
 	Rulesets   []RulesetConfig    `yaml:"rulesets,omitempty"`
