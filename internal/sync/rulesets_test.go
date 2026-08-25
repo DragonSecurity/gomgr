@@ -331,7 +331,7 @@ func TestPlanRulesetSetCreatesUpdatesAndSkips(t *testing.T) {
 	args := rulesetScopeArgs{scope: scopeOrgRuleset, org: "myorg", orgLevel: true}
 
 	t.Run("creates what is missing", func(t *testing.T) {
-		changes, err := planRulesetSet(context.Background(), args, []config.RulesetConfig{baseline, tags}, nil, testLookup())
+		changes, _, err := planRulesetSet(context.Background(), args, []config.RulesetConfig{baseline, tags}, nil, testLookup())
 		if err != nil {
 			t.Fatalf("plan: %v", err)
 		}
@@ -347,7 +347,7 @@ func TestPlanRulesetSetCreatesUpdatesAndSkips(t *testing.T) {
 
 	t.Run("skips what already matches", func(t *testing.T) {
 		existing := roundTripThroughAPI(t, inSync, nil)
-		changes, err := planRulesetSet(context.Background(), args, []config.RulesetConfig{baseline},
+		changes, _, err := planRulesetSet(context.Background(), args, []config.RulesetConfig{baseline},
 			[]*github.RepositoryRuleset{existing}, testLookup())
 		if err != nil {
 			t.Fatalf("plan: %v", err)
@@ -358,7 +358,7 @@ func TestPlanRulesetSetCreatesUpdatesAndSkips(t *testing.T) {
 	})
 
 	t.Run("updates what has drifted", func(t *testing.T) {
-		changes, err := planRulesetSet(context.Background(), args, []config.RulesetConfig{baseline},
+		changes, _, err := planRulesetSet(context.Background(), args, []config.RulesetConfig{baseline},
 			[]*github.RepositoryRuleset{drifted}, testLookup())
 		if err != nil {
 			t.Fatalf("plan: %v", err)
@@ -382,7 +382,7 @@ func TestPlanRulesetSetCreatesUpdatesAndSkips(t *testing.T) {
 			BypassActors: []config.BypassActorConfig{{Type: "Team", Team: "not-created-yet"}},
 		}
 		existing := roundTripThroughAPI(t, inSync, nil)
-		changes, err := planRulesetSet(context.Background(), args, []config.RulesetConfig{withNewTeam},
+		changes, _, err := planRulesetSet(context.Background(), args, []config.RulesetConfig{withNewTeam},
 			[]*github.RepositoryRuleset{existing}, testLookup())
 		if err != nil {
 			t.Fatalf("plan: %v", err)
