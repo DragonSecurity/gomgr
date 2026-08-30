@@ -96,9 +96,15 @@ func newRepoPlanner(ctx context.Context, c *gh.Client, cfg *config.Root, st *Sta
 	// A definition applies to a repository some team names. One that matches no
 	// team entry is inert, and silently ignoring a block someone wrote is how
 	// configuration drifts away from what it looks like it says.
+	//
+	// Inert, not unowned: naming it here keeps it out of the archive and delete
+	// cleanups, so the warning says so rather than leaving "nothing is applied
+	// to it" to be read as "gomgr does not know about it".
 	for _, repo := range sortedKeys(p.managedReposFromDefinitions(cfg)) {
 		st.RepoWarnings = append(st.RepoWarnings, fmt.Sprintf(
-			"repos.yaml defines %q but no team names it, so nothing is applied to it", repo))
+			"repos.yaml defines %q but no team names it, so nothing is applied to it "+
+				"(it is left alone by archive_unmanaged_repos and delete_unmanaged_repos; "+
+				"give a team a permission on it to make the definition take effect)", repo))
 	}
 
 	p.fileSpecs = materializeFileSpecs(cfg.App)

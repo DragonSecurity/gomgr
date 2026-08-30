@@ -96,15 +96,20 @@ func unarchivingThisRun(bySettings map[string]repoSettings) map[string]bool {
 // This is the reversible sibling of deleting them. When both flags are set this
 // one wins: being wrong in the direction somebody can undo is the whole reason
 // to have it, and the deletion is reported rather than silently dropped.
+//
+// A repository repos.yaml names is left alone even though no team manages it,
+// for the reason declaredInReposFile gives.
 func planUnmanagedArchive(cfg *config.Root, st *State) ([]util.Change, []string) {
 	if !cfg.App.ArchiveUnmanagedRepos {
 		return nil, nil
 	}
 	var out []util.Change
 	var archived []string
+	declared := declaredInReposFile(cfg)
 	for _, repo := range st.ActualRepos {
 		name := repo.GetName()
-		if st.ManagedRepos[strings.ToLower(name)] || repo.GetArchived() {
+		key := strings.ToLower(name)
+		if st.ManagedRepos[key] || declared[key] || repo.GetArchived() {
 			continue
 		}
 		archived = append(archived, name)

@@ -1005,25 +1005,33 @@ func planRepoCleanups(cfg *config.Root, st *State) ([]util.Change, []string, err
 	var out []util.Change
 	var warnings []string
 	org := st.Org
+	declared := declaredInReposFile(cfg)
 	var unmanagedRepos []string
+	var spared []string
 	for _, repo := range st.ActualRepos {
 		repoName := strings.ToLower(repo.GetName())
-		if !st.ManagedRepos[repoName] {
-			unmanagedRepos = append(unmanagedRepos, repo.GetName())
-			// Archiving wins: it is the recoverable direction, and
-			// planUnmanagedArchive has already emitted the archive change.
-			if cfg.App.DeleteUnmanagedRepos && !cfg.App.ArchiveUnmanagedRepos {
-				out = append(out, util.Change{
-					Scope:  scopeRepo,
-					Target: repoName,
-					Action: util.ActionDelete,
-					Details: map[string]any{
-						"org":  org,
-						"repo": repo.GetName(),
-					},
-				})
-			}
+		if st.ManagedRepos[repoName] || declared[repoName] {
+			continue
 		}
+		unmanagedRepos = append(unmanagedRepos, repo.GetName())
+		// Archiving wins: it is the recoverable direction, and
+		// planUnmanagedArchive has already emitted the archive change.
+		if !cfg.App.DeleteUnmanagedRepos || cfg.App.ArchiveUnmanagedRepos {
+			continue
+		}
+		if repo.GetArchived() {
+			spared = append(spared, repo.GetName())
+			continue
+		}
+		out = append(out, util.Change{
+			Scope:  scopeRepo,
+			Target: repoName,
+			Action: util.ActionDelete,
+			Details: map[string]any{
+				"org":  org,
+				"repo": repo.GetName(),
+			},
+		})
 	}
 	if cfg.App.DryWarnings.WarnUnmanagedRepos && len(unmanagedRepos) > 0 {
 		warnings = append(warnings, fmt.Sprintf("Found %d unmanaged repositories: %v", len(unmanagedRepos), unmanagedRepos))
@@ -1032,14 +1040,54 @@ func planRepoCleanups(cfg *config.Root, st *State) ([]util.Change, []string, err
 	// choice and stays one, but a run that is actually about to delete
 	// something should mention that the reversible option exists — a restore
 	// request is a worse afternoon than an un-archive.
-	if cfg.App.DeleteUnmanagedRepos && !cfg.App.ArchiveUnmanagedRepos && len(unmanagedRepos) > 0 {
+	deleting := len(unmanagedRepos) - len(spared)
+	if cfg.App.DeleteUnmanagedRepos && !cfg.App.ArchiveUnmanagedRepos && deleting > 0 {
+		doomed := make([]string, 0, deleting)
+		sparedSet := make(map[string]bool, len(spared))
+		for _, name := range spared {
+			sparedSet[name] = true
+		}
+		for _, name := range unmanagedRepos {
+			if !sparedSet[name] {
+				doomed = append(doomed, name)
+			}
+		}
 		warnings = append(warnings, fmt.Sprintf(
 			"delete_unmanaged_repos will DELETE %d repositories on the next apply: %v. "+
 				"Deletion is recoverable for 90 days through GitHub support, and not at all after that. "+
 				"archive_unmanaged_repos does the same job reversibly if you only mean to park them.",
-			len(unmanagedRepos), unmanagedRepos))
+			len(doomed), doomed))
+	}
+	if len(spared) > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"Leaving %d archived unmanaged repositories alone: %v. "+
+				"delete_unmanaged_repos does not delete a repository that is already archived — archiving is "+
+				"how a repository gets parked, so switching this org from archive_unmanaged_repos to "+
+				"delete_unmanaged_repos must not sweep away everything the earlier setting parked. "+
+				"Delete one by hand if you mean it.",
+			len(spared), spared))
 	}
 	return out, warnings, nil
+}
+
+// declaredInReposFile returns the repositories repos.yaml names, lowercased.
+//
+// These are not "managed" — nothing is applied to a repository no team names,
+// and repo_plan warns about exactly that — but they are written down, and the
+// cleanup paths must not act on a repository the configuration names. Deleting
+// a repository because its own definition file is the only place it appears is
+// the worst reading of "unmanaged" available.
+//
+// This deliberately does not widen State.ManagedRepos, which also drives
+// collaborator entitlement and CODEOWNERS deletion: those should keep meaning
+// "a team names it", and quietly extending them here would start revoking
+// direct grants on repositories nobody asked gomgr to govern.
+func declaredInReposFile(cfg *config.Root) map[string]bool {
+	out := make(map[string]bool, len(cfg.Repos))
+	for repo := range cfg.Repos {
+		out[strings.ToLower(repo)] = true
+	}
+	return out
 }
 
 func planCleanups(ctx context.Context, c *gh.Client, cfg *config.Root, st *State, desired map[string]config.TeamConfig) ([]util.Change, []string, error) {

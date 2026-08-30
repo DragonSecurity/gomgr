@@ -40,7 +40,7 @@ func planOrgRulesets(ctx context.Context, c *gh.Client, cfg *config.Root, st *St
 	st.CurrentRulesets += len(existing)
 	st.DesiredRulesets += len(cfg.Org.Rulesets)
 
-	lookup := newPlanLookup(cfg, st)
+	lookup := newPlanLookup(c, st)
 	changes, err := planRulesetSet(ctx, rulesetScopeArgs{
 		scope:    scopeOrgRuleset,
 		org:      org,
@@ -88,7 +88,7 @@ func planRepoRulesets(ctx context.Context, c *gh.Client, cfg *config.Root, st *S
 		existingRepos[strings.ToLower(r.GetName())] = true
 	}
 
-	lookup := newPlanLookup(cfg, st)
+	lookup := newPlanLookup(c, st)
 
 	for _, repo := range sortedKeys(bySettings) {
 		settings := bySettings[repo]

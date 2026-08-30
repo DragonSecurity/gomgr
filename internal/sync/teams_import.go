@@ -46,9 +46,14 @@ type TeamImportResult struct {
 	// Ungranted lists repositories in the organization that no team — declared
 	// or imported — grants access to. They have no home in the configuration.
 	Ungranted []string
-	// DeletionRisk is true when Ungranted is non-empty and the configuration
-	// has delete_unmanaged_repos set, which means the next sync would delete
-	// exactly those repositories.
+	// WouldDelete is the subset of Ungranted the next sync would actually
+	// delete: not named by repos.yaml, and not already archived. Both of those
+	// are spared by planRepoCleanups, so naming them here would be a threat
+	// gomgr does not carry out.
+	WouldDelete []string
+	// DeletionRisk is true when WouldDelete is non-empty and the configuration
+	// would act on it — delete_unmanaged_repos set, and archive_unmanaged_repos
+	// not, since archiving wins over deleting.
 	DeletionRisk bool
 }
 
@@ -119,12 +124,13 @@ func ImportTeams(ctx context.Context, c *gh.Client, cfg *config.Root) (*TeamImpo
 
 	// Repositories no team reaches have nowhere to live in the configuration,
 	// and under delete_unmanaged_repos they are what the next sync deletes.
-	ungranted, err := ungrantedRepos(ctx, c, org, granted)
+	ungranted, wouldDelete, err := ungrantedRepos(ctx, c, org, granted, declaredInReposFile(cfg))
 	if err != nil {
 		return nil, err
 	}
 	result.Ungranted = ungranted
-	result.DeletionRisk = len(ungranted) > 0 && cfg.App.DeleteUnmanagedRepos
+	result.WouldDelete = wouldDelete
+	result.DeletionRisk = len(wouldDelete) > 0 && cfg.App.DeleteUnmanagedRepos && !cfg.App.ArchiveUnmanagedRepos
 
 	return result, nil
 }
@@ -217,13 +223,14 @@ func teamRepoPermissions(ctx context.Context, c *gh.Client, org, slug string) (m
 }
 
 // ungrantedRepos returns the organization's repositories that no team reaches.
-func ungrantedRepos(ctx context.Context, c *gh.Client, org string, granted map[string]bool) ([]string, error) {
+func ungrantedRepos(ctx context.Context, c *gh.Client, org string, granted, declared map[string]bool) ([]string, []string, error) {
 	lowered := make(map[string]bool, len(granted))
 	for repo := range granted {
 		lowered[strings.ToLower(repo)] = true
 	}
 
 	var out []string
+	var wouldDelete []string
 	repoOpt := &github.RepositoryListByOrgOptions{
 		ListOptions: github.ListOptions{PerPage: defaultPerPage},
 		Type:        "all",
@@ -235,16 +242,22 @@ func ungrantedRepos(ctx context.Context, c *gh.Client, org string, granted map[s
 			return nil, err
 		}
 		for _, r := range repos {
-			if !lowered[strings.ToLower(r.GetName())] {
-				out = append(out, r.GetName())
+			key := strings.ToLower(r.GetName())
+			if lowered[key] {
+				continue
+			}
+			out = append(out, r.GetName())
+			if !declared[key] && !r.GetArchived() {
+				wouldDelete = append(wouldDelete, r.GetName())
 			}
 		}
 		return resp, nil
 	}); err != nil {
-		return nil, fmt.Errorf("list repos for %s: %w", org, err)
+		return nil, nil, fmt.Errorf("list repos for %s: %w", org, err)
 	}
 	sort.Strings(out)
-	return out, nil
+	sort.Strings(wouldDelete)
+	return out, wouldDelete, nil
 }
 
 // resolveImportedParents turns each team's observed parent into a `parents:`

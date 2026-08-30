@@ -58,10 +58,16 @@ type refLookup struct {
 }
 
 // newPlanLookup builds a lookup backed purely by the prefetched state.
-func newPlanLookup(cfg *config.Root, st *State) *refLookup {
+//
+// The app ID comes from the authenticated client rather than the config so
+// that planning and applying agree about what `app: self` resolves to. They
+// used not to: the plan read the config while the apply read nothing at all,
+// which is a disagreement that can only surface after the run has started
+// mutating.
+func newPlanLookup(c *gh.Client, st *State) *refLookup {
 	l := &refLookup{
 		org:   st.Org,
-		appID: cfg.App.ResolvedAppID(),
+		appID: clientAppID(c),
 		teams: make(map[string]int64, len(st.ActualTeams)),
 		repos: make(map[string]int64, len(st.ActualRepos)),
 	}
@@ -79,10 +85,20 @@ func newPlanLookup(cfg *config.Root, st *State) *refLookup {
 func newApplyLookup(org string, c *gh.Client) *refLookup {
 	return &refLookup{
 		org:    org,
+		appID:  clientAppID(c),
 		teams:  map[string]int64{},
 		repos:  map[string]int64{},
 		client: c,
 	}
+}
+
+// clientAppID reports the app the client authenticated as, tolerating a nil
+// client so a lookup can still be built in a context that has none.
+func clientAppID(c *gh.Client) int64 {
+	if c == nil {
+		return 0
+	}
+	return c.AppID
 }
 
 func (l *refLookup) teamID(ctx context.Context, slug string) (int64, error) {
@@ -124,7 +140,9 @@ func (l *refLookup) repoID(ctx context.Context, name string) (int64, error) {
 func (l *refLookup) integrationID(app string) (int64, error) {
 	if strings.EqualFold(app, "self") {
 		if l.appID == 0 {
-			return 0, fmt.Errorf("app: self needs app.app_id (or GITHUB_APP_ID) to be set; it has no meaning under PAT auth")
+			return 0, fmt.Errorf("app: self means the GitHub App gomgr authenticated as, and this run has none " +
+				"(set app.app_id or GITHUB_APP_ID with a private key; under PAT auth there is no app to exempt, " +
+				"so name a numeric app ID instead)")
 		}
 		return l.appID, nil
 	}
