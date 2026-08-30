@@ -41,7 +41,7 @@ func planOrgRulesets(ctx context.Context, c *gh.Client, cfg *config.Root, st *St
 	st.DesiredRulesets += len(cfg.Org.Rulesets)
 
 	lookup := newPlanLookup(c, st)
-	changes, err := planRulesetSet(ctx, rulesetScopeArgs{
+	changes, setWarnings, err := planRulesetSet(ctx, rulesetScopeArgs{
 		scope:    scopeOrgRuleset,
 		org:      org,
 		orgLevel: true,
@@ -50,6 +50,7 @@ func planOrgRulesets(ctx context.Context, c *gh.Client, cfg *config.Root, st *St
 		return nil, nil, err
 	}
 	out = append(out, changes...)
+	warnings = append(warnings, setWarnings...)
 
 	deletes, unmanaged := planRulesetCleanup(rulesetScopeArgs{
 		scope:    scopeOrgRuleset,
@@ -111,11 +112,12 @@ func planRepoRulesets(ctx context.Context, c *gh.Client, cfg *config.Root, st *S
 		}
 
 		args := rulesetScopeArgs{scope: scopeRepoRuleset, org: org, repo: repo}
-		changes, err := planRulesetSet(ctx, args, settings.rulesets, existing, lookup)
+		changes, setWarnings, err := planRulesetSet(ctx, args, settings.rulesets, existing, lookup)
 		if err != nil {
 			return nil, nil, err
 		}
 		out = append(out, changes...)
+		warnings = append(warnings, setWarnings...)
 
 		deletes, unmanaged := planRulesetCleanup(args, settings.rulesets, existing, cfg.App.DeleteUnmanagedRulesets)
 		out = append(out, deletes...)
@@ -146,20 +148,35 @@ func (a rulesetScopeArgs) target(name string) string {
 
 // planRulesetSet emits the create and update changes needed to bring existing
 // in line with desired. Rulesets are matched by name, case-insensitively.
-func planRulesetSet(ctx context.Context, args rulesetScopeArgs, desired []config.RulesetConfig, existing []*github.RepositoryRuleset, lookup *refLookup) ([]util.Change, error) {
+func planRulesetSet(ctx context.Context, args rulesetScopeArgs, desired []config.RulesetConfig, existing []*github.RepositoryRuleset, lookup *refLookup) ([]util.Change, []string, error) {
 	byName := map[string]*github.RepositoryRuleset{}
 	for _, rs := range existing {
 		byName[strings.ToLower(rs.Name)] = rs
 	}
 
+	var warnings []string
 	var out []util.Change
 	for _, raw := range desired {
 		spec, err := raw.Resolve()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		current, exists := byName[strings.ToLower(spec.Name)]
+
+		// A declared ruleset whose live counterpart carries a rule gomgr cannot
+		// express is the dangerous case: apply replaces the whole ruleset from
+		// configuration, so that rule is deleted on this run. The import refuses
+		// to adopt such a ruleset, but a hand-written declaration, or one that
+		// grew a rule in the web interface after being adopted, arrives here.
+		if exists {
+			if unmodeled := unmodeledRuleTypes(current.Rules); len(unmodeled) > 0 {
+				warnings = append(warnings, fmt.Sprintf(
+					"Ruleset %q on %s carries %s that gomgr cannot express; applying this configuration would DELETE %s. "+
+						"Remove the ruleset from your configuration to leave it alone.",
+					spec.Name, args.target(spec.Name), plural("rule type", unmodeled), pronounFor(unmodeled)))
+			}
+		}
 
 		action := util.ActionCreate
 		var id int64
@@ -174,7 +191,7 @@ func planRulesetSet(ctx context.Context, args rulesetScopeArgs, desired []config
 			if buildErr == nil {
 				same, err := rulesetMatches(current, built)
 				if err != nil {
-					return nil, fmt.Errorf("compare ruleset %q: %w", spec.Name, err)
+					return nil, nil, fmt.Errorf("compare ruleset %q: %w", spec.Name, err)
 				}
 				if same {
 					continue
@@ -195,7 +212,7 @@ func planRulesetSet(ctx context.Context, args rulesetScopeArgs, desired []config
 			},
 		})
 	}
-	return out, nil
+	return out, warnings, nil
 }
 
 // planRulesetCleanup finds rulesets on GitHub that the config does not declare.
