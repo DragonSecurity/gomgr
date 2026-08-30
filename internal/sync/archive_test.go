@@ -289,7 +289,7 @@ func TestDeleteSparesAnAlreadyArchivedRepo(t *testing.T) {
 
 // A repository repos.yaml names is written down. Nothing is applied to it until
 // a team names it too — repo_plan warns about that — but "no team names it" is
-// not a licence to delete or archive a repository the configuration declares.
+// not a reason to delete or archive a repository the configuration declares.
 func TestCleanupsSpareARepoReposYamlDeclares(t *testing.T) {
 	for _, tc := range []struct {
 		name             string
