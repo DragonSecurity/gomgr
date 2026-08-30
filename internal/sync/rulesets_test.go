@@ -11,6 +11,7 @@ import (
 	"github.com/google/go-github/v90/github"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
+	"github.com/DragonSecurity/gomgr/internal/gh"
 	"github.com/DragonSecurity/gomgr/internal/util"
 )
 
@@ -151,7 +152,7 @@ func TestBuildBypassActorSelfNeedsAppID(t *testing.T) {
 	l := testLookup()
 	l.appID = 0
 	_, err := buildRuleset(context.Background(), spec, true, "", l)
-	if err == nil || !strings.Contains(err.Error(), "app_id") {
+	if err == nil || !strings.Contains(err.Error(), "app: self") {
 		t.Fatalf("err = %v, want a complaint about the missing app ID", err)
 	}
 }
@@ -893,5 +894,47 @@ func TestApplySucceedsWhenGitHubAppliesTheChange(t *testing.T) {
 	}
 	if err := applyOrgRulesetUpsert(context.Background(), newTestClient(t, server), ch); err != nil {
 		t.Fatalf("an echoed-back ruleset must verify clean: %v", err)
+	}
+}
+
+// TestApplyLookupResolvesSelf pins the fix for the failure that only ever
+// showed up in production: the plan resolved `app: self` from the config while
+// the apply lookup carried no app ID at all, so every ruleset with a self
+// bypass planned cleanly and then failed the moment it was applied — a dry run
+// could not see it, and --continue-on-error reported it as an apply error with
+// a message about configuration.
+func TestApplyLookupResolvesSelf(t *testing.T) {
+	l := newApplyLookup("myorg", &gh.Client{AppID: 1719369})
+
+	id, err := l.integrationID("self")
+	if err != nil {
+		t.Fatalf("integrationID(self): %v", err)
+	}
+	if id != 1719369 {
+		t.Errorf("id = %d, want the client's app ID 1719369", id)
+	}
+}
+
+// TestApplyLookupSelfUnderPATFails is the other half: a PAT-authenticated
+// client is not an app, so "self" has nothing to resolve to and must say so.
+func TestApplyLookupSelfUnderPATFails(t *testing.T) {
+	l := newApplyLookup("myorg", &gh.Client{})
+
+	if _, err := l.integrationID("self"); err == nil {
+		t.Fatal("integrationID(self) with no app succeeded, want an error")
+	}
+}
+
+// TestPlanLookupTakesAppIDFromClient keeps the two lookups on the same source.
+// Reading the app ID from the config here would let a plan resolve "self" that
+// the apply cannot, which is exactly the split this fix closed.
+func TestPlanLookupTakesAppIDFromClient(t *testing.T) {
+	st := &State{Org: "myorg"}
+
+	if got := newPlanLookup(&gh.Client{AppID: 4242}, st).appID; got != 4242 {
+		t.Errorf("appID = %d, want 4242", got)
+	}
+	if got := newPlanLookup(&gh.Client{}, st).appID; got != 0 {
+		t.Errorf("appID under PAT auth = %d, want 0", got)
 	}
 }

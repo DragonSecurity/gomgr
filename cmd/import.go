@@ -299,20 +299,25 @@ func reportTeamSkips(result *insync.TeamImportResult) {
 		return
 	}
 
-	// A repository no team reaches is not merely undocumented: under
-	// delete_unmanaged_repos it is what the next sync deletes.
-	if result.DeletionRisk {
-		fmt.Printf("\n⚠  No team reaches %s in this organization, and\n"+
-			"delete_unmanaged_repos is set. THE NEXT SYNC WOULD DELETE THEM:\n",
-			plural(len(result.Ungranted), "repository", "repositories"))
-	} else {
-		fmt.Printf("\nNo team reaches %s, so nothing in your configuration\n"+
-			"covers them:\n", plural(len(result.Ungranted), "repository", "repositories"))
-	}
+	fmt.Printf("\nNo team reaches %s, so nothing in your configuration\n"+
+		"covers them:\n", plural(len(result.Ungranted), "repository", "repositories"))
 	for _, repo := range result.Ungranted {
 		fmt.Printf("  - %s\n", repo)
 	}
 	fmt.Println("Grant them to a team before your next sync.")
+
+	// A repository no team reaches is not merely undocumented: under
+	// delete_unmanaged_repos it is what the next sync deletes. Named
+	// separately from the list above, because the two are not the same set —
+	// a repository repos.yaml declares, or one that is already archived, is
+	// reached by no team and still left alone.
+	if result.DeletionRisk {
+		fmt.Printf("\n⚠  delete_unmanaged_repos is set, so THE NEXT SYNC WOULD DELETE %s:\n",
+			plural(len(result.WouldDelete), "repository", "repositories"))
+		for _, repo := range result.WouldDelete {
+			fmt.Printf("  - %s\n", repo)
+		}
+	}
 }
 
 func writeTeamImport(dir string, result *insync.TeamImportResult) error {

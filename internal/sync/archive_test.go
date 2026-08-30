@@ -252,3 +252,69 @@ func TestUnarchivingThisRun(t *testing.T) {
 		t.Errorf("only an explicit false counts: %+v", got)
 	}
 }
+
+// An archived repository is a parked one, and parking is what
+// archive_unmanaged_repos does. Deleting it on a later run would turn a
+// deliberate switch from the reversible option to the destructive one into a
+// sweep of everything the reversible option had already parked.
+func TestDeleteSparesAnAlreadyArchivedRepo(t *testing.T) {
+	changes, warnings, err := planRepoCleanups(archiveCfg(false, true), unmanagedState())
+	if err != nil {
+		t.Fatalf("planRepoCleanups: %v", err)
+	}
+
+	var deleted []string
+	for _, ch := range changes {
+		if ch.Action == util.ActionDelete {
+			deleted = append(deleted, ch.Target)
+		}
+	}
+	if len(deleted) != 1 || deleted[0] != "stray" {
+		t.Errorf("deleted = %v, want only the unarchived stray", deleted)
+	}
+
+	var said bool
+	for _, w := range warnings {
+		if strings.Contains(w, "already-parked") && strings.Contains(w, "Leaving") {
+			said = true
+		}
+		if strings.Contains(w, "will DELETE") && strings.Contains(w, "already-parked") {
+			t.Errorf("the deletion warning must count only what is actually deleted: %v", w)
+		}
+	}
+	if !said {
+		t.Errorf("skipping a repository must be reported, not silent: %v", warnings)
+	}
+}
+
+// A repository repos.yaml names is written down. Nothing is applied to it until
+// a team names it too — repo_plan warns about that — but "no team names it" is
+// not a reason to delete or archive a repository the configuration declares.
+func TestCleanupsSpareARepoReposYamlDeclares(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		archive, del     bool
+		wantChangeCounts int
+	}{
+		{name: "delete", del: true},
+		{name: "archive", archive: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := archiveCfg(tc.archive, tc.del)
+			cfg.Repos = map[string]any{"Stray": map[string]any{"visibility": "private"}}
+			st := unmanagedState()
+
+			deletes, _, err := planRepoCleanups(cfg, st)
+			if err != nil {
+				t.Fatalf("planRepoCleanups: %v", err)
+			}
+			archives, _ := planUnmanagedArchive(cfg, st)
+
+			for _, ch := range append(deletes, archives...) {
+				if ch.Target == "stray" {
+					t.Errorf("planned %s:%s on a repository repos.yaml declares", ch.Scope, ch.Action)
+				}
+			}
+		})
+	}
+}

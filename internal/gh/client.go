@@ -25,6 +25,12 @@ import (
 type Client struct {
 	REST       *github.Client
 	httpClient *http.Client
+	// AppID is the GitHub App this client authenticated as, and 0 under PAT
+	// auth, where there is no app. It is the only honest answer to "which app
+	// is gomgr?" — a config key or environment variable can name an app that
+	// this run is not actually authenticated as — so anything resolving the
+	// `app: self` bypass actor reads it from here rather than re-deriving it.
+	AppID int64
 	// GraphQLURL is the endpoint used by DoGraphQL. Empty means GitHub's public
 	// GraphQL API. Tests may override it to point at a local server.
 	GraphQLURL string
@@ -64,7 +70,7 @@ func NewClientFromEnv(ctx context.Context, app config.AppConfig) (*Client, strin
 	if err != nil {
 		return nil, "", fmt.Errorf("new github client: %w", err)
 	}
-	return &Client{REST: rest, httpClient: httpClient}, "Github App", nil
+	return &Client{REST: rest, httpClient: httpClient, AppID: atr.AppID()}, "Github App", nil
 }
 
 // appsTransport builds the transport that authenticates as the GitHub App

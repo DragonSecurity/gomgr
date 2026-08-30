@@ -239,6 +239,21 @@ archive_unmanaged_repos does the same job reversibly if you only mean to park th
 run reports that the delete flag was ignored — being wrong in the direction
 somebody can undo is the point of having it.
 
+**Two repositories neither flag touches:**
+
+- **One `repos.yaml` names.** "Unmanaged" means no team names it, and a
+  repository only takes effect once a team does — but a repository written into
+  `repos.yaml` is written down, and a definition file is not a reason to delete
+  the thing it defines. gomgr says so on the run instead: `repos.yaml defines
+  "x" but no team names it, so nothing is applied to it (it is left alone by
+  archive_unmanaged_repos and delete_unmanaged_repos)`.
+- **One that is already archived.** `delete_unmanaged_repos` does not delete a
+  repository that is archived already. Archiving is how a repository gets
+  parked, so switching an organization from `archive_unmanaged_repos` to
+  `delete_unmanaged_repos` must not sweep away everything the earlier setting
+  parked — nor everything somebody archived by hand years ago. The run reports
+  them and leaves them; delete one by hand if you mean it.
+
 #### Declaring a repository archived
 
 Separately, a repository a team *does* name can declare its own state, in
@@ -1074,15 +1089,22 @@ One thing it deliberately does not do:
 - **Repositories reached by no team are reported, not adopted.** A repository
   only enters gomgr's config by being granted to a team, so there is no
   meaningful place to put one that no team reaches. **If
-  `delete_unmanaged_repos` is set, those are exactly the repositories your next
-  sync deletes** — the import shouts about that case specifically:
+  `delete_unmanaged_repos` is set, those are the repositories your next sync
+  deletes** — the import shouts about that case specifically, naming only the
+  ones a sync would really delete, since a repository `repos.yaml` declares or
+  one that is already archived is reached by no team and still left alone:
 
 ```console
-⚠  No team reaches 2 repositories in this organization, and
-delete_unmanaged_repos is set. THE NEXT SYNC WOULD DELETE THEM:
+No team reaches 3 repositories, so nothing in your configuration
+covers them:
   - forgotten-service
   - old-prototype
+  - retired-2019
 Grant them to a team before your next sync.
+
+⚠  delete_unmanaged_repos is set, so THE NEXT SYNC WOULD DELETE 2 repositories:
+  - forgotten-service
+  - old-prototype
 ```
 
 That warning is the reason to run `import teams` *before* your first sync
