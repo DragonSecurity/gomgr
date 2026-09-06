@@ -158,3 +158,9 @@ fabric.properties
 # posture and trust boundaries, plus review and design reports. Useful working
 # notes, but this repository is public and none of it is meant to be.
 .dragon-buddy/
+session.txt
+
+# DragonGuard: local scan state (KEV cache, per-branch baseline snapshots)
+# and the goreleaser output directory.
+.dragon/
+dist/

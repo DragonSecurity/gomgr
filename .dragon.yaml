@@ -1,0 +1,57 @@
+version: dragonguard/v1
+project: gomgr
+
+# Asset context. This is what separates "CVSS 9.8" from "fix this today":
+# the same vulnerability is not the same problem in a public payments API and
+# in an internal batch job.
+asset:
+  name: gomgr
+  environment: production      # production | staging | development | test
+  criticality: medium          # critical | high | medium | low
+  internet_exposed: false
+  handles_pii: false
+  handles_payments: false
+  # owner: platform-team
+
+engines:
+  trivy:
+    enabled: true
+  opengrep:
+    enabled: true
+    # This list replaces the default rather than adding to it, so "builtin"
+    # keeps DragonGuard's own pack in play. Dropping it is a decision, not a
+    # side effect of naming a second ruleset.
+    #
+    # Point at your own rules too. Engine compatibility with Semgrep-format
+    # rules is not permission to redistribute someone else's ruleset; check
+    # the licence of any pack you bundle.
+    rules:
+      - builtin
+      - p/security-audit
+  gitleaks:
+    enabled: true
+
+# Go alone does not record which dependencies are build-only: a
+# code-generation tool sits in the same go.mod as the driver the server opens
+# at startup. Name what this project actually ships and the toolchain works out
+# the rest -- everything outside the closure of these packages is build-only.
+#
+# Leave it out and the scan says the question is unanswered, rather than
+# reporting that every dependency reaches production.
+# gomgr is a single binary: the only main package is the module root, and
+# ./cmd and ./internal reach production through it. Everything outside that
+# import closure -- the linters, the release tooling -- is build-only.
+ships:
+  - .
+
+policies:
+  - policies
+
+baseline: .dragon-baseline.yaml
+
+ignore:
+  - node_modules
+  - vendor
+  - .git
+
+state_dir: .dragon
