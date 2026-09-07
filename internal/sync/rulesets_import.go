@@ -110,6 +110,10 @@ func ImportRulesets(ctx context.Context, c *gh.Client, cfg *config.Root, opts Im
 			result.AlreadyDeclared++
 			continue
 		}
+		if reason := lossyReason(rs); reason != "" {
+			result.Skipped = append(result.Skipped, SkippedRuleset{Name: rs.Name, Reason: reason})
+			continue
+		}
 		spec := rulesetToConfig(rs, true, lookup)
 		if err := config.ValidateRulesets(config.ScopeOrg, "imported", []config.RulesetConfig{spec}); err != nil {
 			result.Skipped = append(result.Skipped, SkippedRuleset{Name: rs.Name, Reason: reasonOf(err)})
@@ -143,6 +147,10 @@ func ImportRulesets(ctx context.Context, c *gh.Client, cfg *config.Root, opts Im
 				result.AlreadyDeclared++
 				continue
 			}
+			if reason := lossyReason(rs); reason != "" {
+				result.Skipped = append(result.Skipped, SkippedRuleset{Repo: repo, Name: rs.Name, Reason: reason})
+				continue
+			}
 			spec := rulesetToConfig(rs, false, lookup)
 			if err := config.ValidateRulesets(config.ScopeRepo, "imported", []config.RulesetConfig{spec}); err != nil {
 				result.Skipped = append(result.Skipped, SkippedRuleset{Repo: repo, Name: rs.Name, Reason: reasonOf(err)})
@@ -162,6 +170,45 @@ func ImportRulesets(ctx context.Context, c *gh.Client, cfg *config.Root, opts Im
 	sort.Strings(result.Unmanaged)
 
 	return result, nil
+}
+
+// lossyReason reports why a ruleset must not be adopted, or "" when it can be.
+//
+// Adopting a ruleset gomgr cannot fully express is worse than not adopting it.
+// buildRuleset constructs the ruleset from configuration alone and
+// UpdateRuleset replaces what is on GitHub, so a rule that did not survive the
+// round trip is deleted on the next sync — silently, and from a guard rail
+// somebody is relying on.
+//
+// This check runs before validation because validation cannot tell the two
+// cases apart. A ruleset whose every rule is unmodeled arrives at the validator
+// with no rules at all, and is reported as "no rules enabled; a ruleset with no
+// rules enforces nothing" — which reads as "this ruleset is pointless, delete
+// it" when the truth is "gomgr cannot read this one". Acting on the first
+// reading deletes a working rule.
+func lossyReason(rs *github.RepositoryRuleset) string {
+	unmodeled := unmodeledRuleTypes(rs.Rules)
+	if len(unmodeled) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("gomgr cannot express %s, and adopting it without would delete %s on the next sync",
+		plural("rule type", unmodeled), pronounFor(unmodeled))
+}
+
+// plural renders a list as "rule type x" or "rule types x and y".
+func plural(noun string, items []string) string {
+	if len(items) == 1 {
+		return noun + " " + items[0]
+	}
+	return noun + "s " + strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
+}
+
+// pronounFor keeps the sentence readable for one item or several.
+func pronounFor(items []string) string {
+	if len(items) == 1 {
+		return "it"
+	}
+	return "them"
 }
 
 // reasonOf strips the scope and ruleset-name prefixes ValidateRulesets adds,
