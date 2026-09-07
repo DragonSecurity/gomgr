@@ -77,12 +77,22 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: dist
+          # Land every archive in dist/ itself. Without this each matrix job's
+          # artifact gets its own directory, and the checksum step records
+          # those directory names into checksums.txt.
+          merge-multiple: true
 
       - name: Generate checksums
         run: |
           cd dist
-          find . -type f \( -name "*.tar.gz" -o -name "*.zip" \) -print0 | xargs -0 -I {} sh -c 'sha256sum "{}" >> checksums.txt'
-          ls -la
+          # Bare filenames. sha256sum records whatever path it is handed, and
+          # the previous `find .` handed it ./artifacts_darwin_arm64/gomgr_...
+          # -- a runner build directory nobody downloading the release has. So
+          # `sha256sum -c checksums.txt` beside the archives reported them
+          # missing, which reads like a tampered download rather than a broken
+          # manifest. Affected v0.7.0 through v0.7.2.
+          sha256sum *.tar.gz *.zip > checksums.txt
+          cat checksums.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
@@ -90,8 +100,8 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            dist/**/*.tar.gz
-            dist/**/*.zip
+            dist/*.tar.gz
+            dist/*.zip
             dist/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
