@@ -1,0 +1,99 @@
+version: dragonguard/v1
+project: gomgr
+
+# Asset context. This is what separates "CVSS 9.8" from "fix this today":
+# the same vulnerability is not the same problem in a public payments API and
+# in an internal batch job.
+asset:
+  name: gomgr
+  environment: production      # production | staging | development | test
+  criticality: medium          # critical | high | medium | low
+  internet_exposed: false
+  handles_pii: false
+  handles_payments: false
+  # owner: platform-team
+
+engines:
+  trivy:
+    enabled: true
+  opengrep:
+    enabled: true
+    # This list replaces the default rather than adding to it, so "builtin"
+    # keeps DragonGuard's own pack in play. Dropping it is a decision, not a
+    # side effect of naming a second ruleset.
+    #
+    # Point at your own rules too. Engine compatibility with Semgrep-format
+    # rules is not permission to redistribute someone else's ruleset; check
+    # the licence of any pack you bundle.
+    rules:
+      - builtin
+      - p/security-audit
+  gitleaks:
+    enabled: true
+
+# Go alone does not record which dependencies are build-only: a
+# code-generation tool sits in the same go.mod as the driver the server opens
+# at startup. Name what this project actually ships and the toolchain works out
+# the rest -- everything outside the closure of these packages is build-only.
+#
+# Leave it out and the scan says the question is unanswered, rather than
+# reporting that every dependency reaches production.
+# gomgr is a single binary: the only main package is the module root, and
+# ./cmd and ./internal reach production through it. Everything outside that
+# import closure -- the linters, the release tooling -- is build-only.
+ships:
+  - .
+
+policies:
+  - policies
+
+baseline: .dragon-baseline.yaml
+
+# Findings this project has looked at and decided to carry, with the reasoning
+# next to them.
+#
+# Selected by fingerprint, which is the narrowest selector there is: a rule id
+# would accept every future occurrence of that rule anywhere in the tree, and
+# these are decisions about two specific lines. The fingerprint already pins
+# the file -- it is computed over category, rule id, file and the matched text.
+#
+# No `expires` on either. An expiry is a reminder to re-examine a decision made
+# against a situation that could change; neither of these is that. A PEM fixture
+# is a fixture for as long as the test exists, and backoff jitter does not
+# acquire a security property later. An expiry here would be recurring work with
+# a known answer.
+#
+# The platform does not apply this block -- `accept` is platform-owned, like
+# `policies` and `baseline`, because removing a finding from the score and the
+# gate is the one decision a repository cannot make about itself. It is offered
+# in the DragonGuard console as a proposed triage for somebody to approve, and
+# `dragon scan` honours it locally in the meantime.
+accept:
+  - fingerprint: e9ce87e441cabbaa22ca9c742d30228f
+    reason: >-
+      gitleaks private-key in internal/gh/client_test.go. These are the inputs
+      to maybeReadPEM's table of PEM-parsing tests: a well-formed PEM envelope
+      wrapped around twenty base64 characters of filler, which is what the test
+      needs and what makes it not a credential. Note that a secret's fingerprint
+      is computed over the redacted snippet, so it does not move with the key
+      material -- this acceptance would swallow a real private key added to that
+      file, which must therefore never hold one.
+    approved_by: allanice001
+
+  - fingerprint: c077b5a2c5de4d085f1330cdd08211e3
+    reason: >-
+      opengrep math-random-used in internal/gh/retry.go. The single use is the
+      jitter added to exponential backoff before a GitHub API request is retried
+      (retry.go:89). CWE-338 is about predictable randomness where
+      unpredictability is the security property; nothing here is a secret, a
+      token or an identifier, and the only consequence of a predictable value is
+      that two clients retry in step. gosec already carries the same judgement
+      inline as #nosec G404.
+    approved_by: allanice001
+
+ignore:
+  - node_modules
+  - vendor
+  - .git
+
+state_dir: .dragon

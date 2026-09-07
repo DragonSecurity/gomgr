@@ -158,3 +158,19 @@ fabric.properties
 # posture and trust boundaries, plus review and design reports. Useful working
 # notes, but this repository is public and none of it is meant to be.
 .dragon-buddy/
+session.txt
+
+# DragonGuard's KEV cache, and the goreleaser output directory. Only the cache
+# is ignored: the per-branch baseline snapshots beside it are tracked on
+# purpose, because the regression gate compares a branch against the *default
+# branch's* snapshot, and a snapshot nothing can read is a gate that always
+# reports "nothing recorded".
+.dragon/cache
+dist/
+
+# repomix's default output path. A flattened dump of the whole tree, useful to
+# generate and not to commit: it goes stale silently, and it duplicates every
+# source file -- so a secret-shaped string in the tree is found twice, once
+# where it lives and once in here. Regenerate with `npx repomix` when needed;
+# repomix.config.json and .repomixignore stay tracked.
+repomix-output.md

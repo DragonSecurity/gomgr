@@ -1,0 +1,178 @@
+{
+  "scorecard": {
+    "project": "gomgr",
+    "asset": "gomgr",
+    "timestamp": "2026-09-06T20:48:01.31172Z",
+    "commit": "9adf5bbd70a2a5f3d515c34979bd65f375749c3b",
+    "branch": "main",
+    "score": 100,
+    "dimensions": {
+      "api": {
+        "name": "api",
+        "score": 0,
+        "assessed": false,
+        "supported": false,
+        "reason": "no engine configured for this dimension",
+        "counts": {
+          "critical": 0,
+          "high": 0,
+          "medium": 0,
+          "low": 0,
+          "info": 0,
+          "total": 0
+        },
+        "new": 0,
+        "worst_risk": 0
+      },
+      "code": {
+        "name": "code",
+        "score": 100,
+        "assessed": true,
+        "supported": true,
+        "counts": {
+          "critical": 0,
+          "high": 0,
+          "medium": 0,
+          "low": 0,
+          "info": 0,
+          "total": 0
+        },
+        "new": 0,
+        "worst_risk": 0
+      },
+      "container": {
+        "name": "container",
+        "score": 100,
+        "assessed": true,
+        "supported": true,
+        "counts": {
+          "critical": 0,
+          "high": 0,
+          "medium": 0,
+          "low": 0,
+          "info": 0,
+          "total": 0
+        },
+        "new": 0,
+        "worst_risk": 0
+      },
+      "dependencies": {
+        "name": "dependencies",
+        "score": 100,
+        "assessed": true,
+        "supported": true,
+        "counts": {
+          "critical": 0,
+          "high": 0,
+          "medium": 0,
+          "low": 0,
+          "info": 0,
+          "total": 0
+        },
+        "new": 0,
+        "worst_risk": 0
+      },
+      "iac": {
+        "name": "iac",
+        "score": 100,
+        "assessed": true,
+        "supported": true,
+        "counts": {
+          "critical": 0,
+          "high": 0,
+          "medium": 0,
+          "low": 0,
+          "info": 0,
+          "total": 0
+        },
+        "new": 0,
+        "worst_risk": 0
+      },
+      "secrets": {
+        "name": "secrets",
+        "score": 100,
+        "assessed": true,
+        "supported": true,
+        "counts": {
+          "critical": 0,
+          "high": 0,
+          "medium": 0,
+          "low": 0,
+          "info": 0,
+          "total": 0
+        },
+        "new": 0,
+        "worst_risk": 0
+      },
+      "supply_chain": {
+        "name": "supply_chain",
+        "score": 100,
+        "assessed": true,
+        "supported": true,
+        "counts": {
+          "critical": 0,
+          "high": 0,
+          "medium": 0,
+          "low": 0,
+          "info": 0,
+          "total": 0
+        },
+        "new": 0,
+        "worst_risk": 0
+      }
+    },
+    "counts": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 0,
+      "total": 0
+    },
+    "new": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 0,
+      "total": 0
+    },
+    "policy": {
+      "blocking": 0,
+      "warnings": 0,
+      "exempt": 2,
+      "errors": 0
+    },
+    "engines_run": [
+      "gitleaks",
+      "opengrep",
+      "osv",
+      "trivy",
+      "supplychain"
+    ],
+    "engines_unavailable": [
+      "schemathesis",
+      "zap"
+    ],
+    "engines_skipped": [
+      "schemathesis",
+      "zap"
+    ],
+    "degraded": false,
+    "mandatory": {
+      "no_active_secrets": true,
+      "no_critical_risk": true,
+      "no_kev_in_production": true,
+      "no_policy_errors": true,
+      "no_reachable_critical_vulnerability": true
+    }
+  },
+  "fingerprints": [
+    "c077b5a2c5de4d085f1330cdd08211e3",
+    "e9ce87e441cabbaa22ca9c742d30228f"
+  ],
+  "first_seen": {
+    "c077b5a2c5de4d085f1330cdd08211e3": "2026-09-06T14:35:17.891803Z",
+    "e9ce87e441cabbaa22ca9c742d30228f": "2026-09-06T14:35:17.891803Z"
+  }
+}
