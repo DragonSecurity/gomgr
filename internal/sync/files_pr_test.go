@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/DragonSecurity/gomgr/internal/gh"
 	"github.com/DragonSecurity/gomgr/internal/util"

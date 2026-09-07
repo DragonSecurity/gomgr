@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/DragonSecurity/gomgr/internal/gh"
 	"github.com/DragonSecurity/gomgr/internal/util"
@@ -57,7 +57,7 @@ func applyTeamCreate(ctx context.Context, c *gh.Client, ch util.Change) error {
 	if dv := detailString(d, "description"); dv != "" {
 		descPtr = github.Ptr(dv)
 	}
-	newTeam := github.NewTeam{Name: name, Privacy: privacyPtr, Description: descPtr}
+	newTeam := github.CreateTeamRequest{Name: name, Privacy: privacyPtr, Description: descPtr}
 	if nv := detailString(d, "notification_setting"); nv != "" {
 		newTeam.NotificationSetting = github.Ptr(nv)
 	}
@@ -99,7 +99,7 @@ func applyTeamUpdate(ctx context.Context, c *gh.Client, ch util.Change) error {
 	org := detailString(d, "org")
 	slug := detailString(d, "slug")
 	name := detailString(d, "name")
-	newTeam := github.NewTeam{Name: name}
+	newTeam := github.UpdateTeamRequest{Name: github.Ptr(name)}
 	// Presence of the key, not truthiness of the value. planTeams only includes
 	// "description" when it differs, so an empty one means "clear it" — and
 	// skipping it left the planner detecting a removal the apply never sent,
@@ -114,17 +114,18 @@ func applyTeamUpdate(ctx context.Context, c *gh.Client, ch util.Change) error {
 		newTeam.NotificationSetting = github.Ptr(nv)
 	}
 	// parent_team_id carries omitempty, so leaving it nil preserves whatever
-	// nesting the team already has. Clearing one takes the separate
-	// removeParent argument, which is why the planner distinguishes the two.
-	removeParent := detailBool(d, "remove_parent")
-	if parent := detailString(d, "parent"); parent != "" && !removeParent {
+	// nesting the team already has. Clearing one takes RemoveParentTeam, whose
+	// marshaller sends an explicit null instead, which is why the planner
+	// distinguishes the two.
+	newTeam.RemoveParentTeam = detailBool(d, "remove_parent")
+	if parent := detailString(d, "parent"); parent != "" && !newTeam.RemoveParentTeam {
 		id, err := parentTeamID(ctx, c, org, parent)
 		if err != nil {
 			return fmt.Errorf("update team %q: %w", slug, err)
 		}
 		newTeam.ParentTeamID = github.Ptr(id)
 	}
-	_, _, err = c.REST.Teams.EditTeamBySlug(ctx, org, slug, newTeam, removeParent)
+	_, _, err = c.REST.Teams.UpdateTeamBySlug(ctx, org, slug, newTeam)
 	if err != nil {
 		return fmt.Errorf("update team %q: %w", slug, err)
 	}
