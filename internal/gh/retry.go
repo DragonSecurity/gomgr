@@ -1,8 +1,9 @@
 package gh
 
 import (
+	"crypto/rand"
 	"math"
-	"math/rand"
+	"math/big"
 	"net/http"
 	"strconv"
 	"time"
@@ -81,13 +82,30 @@ func calcBackoff(attempt int) time.Duration {
 	if exp > 30*time.Second {
 		exp = 30 * time.Second
 	}
-	// Jitter only has to spread concurrent retries apart. It is not a secret
-	// and nothing is gained by an attacker predicting it, so the weak generator
-	// is the right tool. Annotated at the call site rather than excluded
-	// repo-wide, so a future use of math/rand where randomness *is* a security
-	// property still gets caught.
-	jitter := time.Duration(rand.Int63n(int64(500 * time.Millisecond))) // #nosec G404
-	return exp + jitter
+	return exp + jitter(500*time.Millisecond)
+}
+
+// jitter returns a duration in [0, limit) to spread concurrent retries apart.
+//
+// crypto/rand is not required here on the merits. Jitter is not a secret and
+// an attacker who predicts it gains nothing, which is why this was math/rand
+// under a #nosec G404 saying so. It reads from the system source now because
+// the explanation cost more than the call does: every scanner flags the weak
+// generator, and each one wants that exemption written down, reviewed and
+// approved again. A read from the entropy pool on a path that is about to
+// sleep for hundreds of milliseconds is cheaper than an exception with a
+// maintenance tail behind it.
+func jitter(limit time.Duration) time.Duration {
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(limit)))
+	if err != nil {
+		// Not worth abandoning a retry over a failed read from the system
+		// entropy source. A constant would be, though: it puts every caller
+		// back in step, which is the one thing jitter exists to prevent. The
+		// clock is not random, but it is unshared, and spreading callers is
+		// all this has to do.
+		return time.Duration(time.Now().UnixNano()) % limit
+	}
+	return time.Duration(n.Int64())
 }
 
 // retryAfterDuration parses the Retry-After header if present.
