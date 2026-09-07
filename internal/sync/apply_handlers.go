@@ -52,14 +52,14 @@ func applyTeamCreate(ctx context.Context, c *gh.Client, ch util.Change) error {
 	name := detailString(d, "name")
 	var privacyPtr, descPtr *string
 	if pv := detailString(d, "privacy"); pv != "" {
-		privacyPtr = github.Ptr(pv)
+		privacyPtr = new(pv)
 	}
 	if dv := detailString(d, "description"); dv != "" {
-		descPtr = github.Ptr(dv)
+		descPtr = new(dv)
 	}
 	newTeam := github.CreateTeamRequest{Name: name, Privacy: privacyPtr, Description: descPtr}
 	if nv := detailString(d, "notification_setting"); nv != "" {
-		newTeam.NotificationSetting = github.Ptr(nv)
+		newTeam.NotificationSetting = new(nv)
 	}
 	// The plan names the parent by slug, because at plan time the parent may
 	// not exist yet and so has no ID to name it by. hierarchyOrder guarantees
@@ -69,7 +69,7 @@ func applyTeamCreate(ctx context.Context, c *gh.Client, ch util.Change) error {
 		if err != nil {
 			return fmt.Errorf("create team %q: %w", name, err)
 		}
-		newTeam.ParentTeamID = github.Ptr(id)
+		newTeam.ParentTeamID = new(id)
 	}
 	_, _, err = c.REST.Teams.CreateTeam(ctx, org, newTeam)
 	if err != nil {
@@ -99,19 +99,19 @@ func applyTeamUpdate(ctx context.Context, c *gh.Client, ch util.Change) error {
 	org := detailString(d, "org")
 	slug := detailString(d, "slug")
 	name := detailString(d, "name")
-	newTeam := github.UpdateTeamRequest{Name: github.Ptr(name)}
+	newTeam := github.UpdateTeamRequest{Name: new(name)}
 	// Presence of the key, not truthiness of the value. planTeams only includes
 	// "description" when it differs, so an empty one means "clear it" — and
 	// skipping it left the planner detecting a removal the apply never sent,
 	// re-planning the same change on every run while the description stayed.
 	if dv, ok := d["description"]; ok {
-		newTeam.Description = github.Ptr(fmt.Sprint(dv))
+		newTeam.Description = new(fmt.Sprint(dv))
 	}
 	if pv := detailString(d, "privacy"); pv != "" {
-		newTeam.Privacy = github.Ptr(pv)
+		newTeam.Privacy = new(pv)
 	}
 	if nv := detailString(d, "notification_setting"); nv != "" {
-		newTeam.NotificationSetting = github.Ptr(nv)
+		newTeam.NotificationSetting = new(nv)
 	}
 	// parent_team_id carries omitempty, so leaving it nil preserves whatever
 	// nesting the team already has. Clearing one takes RemoveParentTeam, whose
@@ -123,7 +123,7 @@ func applyTeamUpdate(ctx context.Context, c *gh.Client, ch util.Change) error {
 		if err != nil {
 			return fmt.Errorf("update team %q: %w", slug, err)
 		}
-		newTeam.ParentTeamID = github.Ptr(id)
+		newTeam.ParentTeamID = new(id)
 	}
 	_, _, err = c.REST.Teams.UpdateTeamBySlug(ctx, org, slug, newTeam)
 	if err != nil {
@@ -192,8 +192,8 @@ func applyRepoEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
 
 		_, _, err := c.REST.Repositories.CreateFromTemplate(ctx, templateOrg, templateRepo, github.TemplateRepoRequest{
 			Name:    name,
-			Owner:   github.Ptr(org),
-			Private: github.Ptr(private),
+			Owner:   new(org),
+			Private: new(private),
 		})
 		if err != nil {
 			if !isRepoAlreadyExists(err) {
@@ -203,16 +203,16 @@ func applyRepoEnsure(ctx context.Context, c *gh.Client, ch util.Change) error {
 		}
 	} else {
 		repo := &github.Repository{
-			Name:                github.Ptr(name),
-			Private:             github.Ptr(private),
-			IsTemplate:          github.Ptr(isTemplate),
-			AllowAutoMerge:      github.Ptr(true),
-			AllowMergeCommit:    github.Ptr(false),
-			DeleteBranchOnMerge: github.Ptr(true),
-			HasIssues:           github.Ptr(true),
+			Name:                new(name),
+			Private:             new(private),
+			IsTemplate:          new(isTemplate),
+			AllowAutoMerge:      new(true),
+			AllowMergeCommit:    new(false),
+			DeleteBranchOnMerge: new(true),
+			HasIssues:           new(true),
 		}
 		if visibility != "" {
-			repo.Visibility = github.Ptr(visibility)
+			repo.Visibility = new(visibility)
 		}
 		_, _, err := c.REST.Repositories.Create(ctx, org, repo)
 		if err != nil {
@@ -308,9 +308,9 @@ func applyRepoFileEnsure(ctx context.Context, c *gh.Client, ch util.Change) erro
 	}
 	if file == nil {
 		_, _, err := c.REST.Repositories.CreateFile(ctx, org, repo, path, &github.RepositoryContentFileOptions{
-			Message: github.Ptr(message),
+			Message: new(message),
 			Content: content,
-			Branch:  github.Ptr(branch),
+			Branch:  new(branch),
 		})
 		if err != nil {
 			// Handle race condition: If repository was created from template,
@@ -341,10 +341,10 @@ func applyRepoFileEnsure(ctx context.Context, c *gh.Client, ch util.Change) erro
 		return nil
 	}
 	_, _, err = c.REST.Repositories.UpdateFile(ctx, org, repo, path, &github.RepositoryContentFileOptions{
-		Message: github.Ptr(message),
+		Message: new(message),
 		Content: content,
-		Branch:  github.Ptr(branch),
-		SHA:     github.Ptr(file.GetSHA()),
+		Branch:  new(branch),
+		SHA:     new(file.GetSHA()),
 	})
 	if err != nil {
 		return fmt.Errorf("update file %s in %s/%s: %w", path, org, repo, err)
@@ -370,9 +370,9 @@ func applyRepoFileDelete(ctx context.Context, c *gh.Client, ch util.Change) erro
 		return nil
 	}
 	_, _, err = c.REST.Repositories.DeleteFile(ctx, org, repo, path, &github.RepositoryContentFileOptions{
-		Message: github.Ptr(message),
-		Branch:  github.Ptr(branch),
-		SHA:     github.Ptr(file.GetSHA()),
+		Message: new(message),
+		Branch:  new(branch),
+		SHA:     new(file.GetSHA()),
 	})
 	if err != nil {
 		return fmt.Errorf("delete file %s in %s/%s: %w", path, org, repo, err)
@@ -421,7 +421,7 @@ func applyRepoTemplateEnsure(ctx context.Context, c *gh.Client, ch util.Change) 
 	repo := detailString(d, "repo")
 
 	_, _, err = c.REST.Repositories.Edit(ctx, org, repo, &github.Repository{
-		IsTemplate: github.Ptr(true),
+		IsTemplate: new(true),
 	})
 	if err != nil {
 		return fmt.Errorf("mark repo %s/%s as template: %w", org, repo, err)
@@ -466,7 +466,7 @@ func applyOrgOwnerEnsure(ctx context.Context, c *gh.Client, ch util.Change) erro
 	org := detailString(d, "org")
 	user := detailString(d, "user")
 	_, _, err = c.REST.Organizations.EditOrgMembership(ctx, user, org, &github.Membership{
-		Role: github.Ptr(orgRoleAdmin),
+		Role: new(orgRoleAdmin),
 	})
 	if err != nil {
 		return fmt.Errorf("make %q an owner of org %q: %w", user, org, err)
@@ -486,7 +486,7 @@ func applyOrgOwnerRemove(ctx context.Context, c *gh.Client, ch util.Change) erro
 	org := detailString(d, "org")
 	user := detailString(d, "user")
 	_, _, err = c.REST.Organizations.EditOrgMembership(ctx, user, org, &github.Membership{
-		Role: github.Ptr(orgRoleMember),
+		Role: new(orgRoleMember),
 	})
 	if err != nil {
 		return fmt.Errorf("demote owner %q of org %q to member: %w", user, org, err)

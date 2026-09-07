@@ -46,37 +46,37 @@ var settingFields = []settingField{
 		name:    "allow_auto_merge",
 		want:    func(c config.RepoSettingsConfig) *bool { return c.AllowAutoMerge },
 		current: func(r *github.Repository) (bool, bool) { return known(r.AllowAutoMerge) },
-		apply:   func(r *github.Repository, v bool) { r.AllowAutoMerge = github.Ptr(v) },
+		apply:   func(r *github.Repository, v bool) { r.AllowAutoMerge = new(v) },
 	},
 	{
 		name:    "allow_squash_merge",
 		want:    func(c config.RepoSettingsConfig) *bool { return c.AllowSquashMerge },
 		current: func(r *github.Repository) (bool, bool) { return known(r.AllowSquashMerge) },
-		apply:   func(r *github.Repository, v bool) { r.AllowSquashMerge = github.Ptr(v) },
+		apply:   func(r *github.Repository, v bool) { r.AllowSquashMerge = new(v) },
 	},
 	{
 		name:    "allow_merge_commit",
 		want:    func(c config.RepoSettingsConfig) *bool { return c.AllowMergeCommit },
 		current: func(r *github.Repository) (bool, bool) { return known(r.AllowMergeCommit) },
-		apply:   func(r *github.Repository, v bool) { r.AllowMergeCommit = github.Ptr(v) },
+		apply:   func(r *github.Repository, v bool) { r.AllowMergeCommit = new(v) },
 	},
 	{
 		name:    "allow_rebase_merge",
 		want:    func(c config.RepoSettingsConfig) *bool { return c.AllowRebaseMerge },
 		current: func(r *github.Repository) (bool, bool) { return known(r.AllowRebaseMerge) },
-		apply:   func(r *github.Repository, v bool) { r.AllowRebaseMerge = github.Ptr(v) },
+		apply:   func(r *github.Repository, v bool) { r.AllowRebaseMerge = new(v) },
 	},
 	{
 		name:    "delete_branch_on_merge",
 		want:    func(c config.RepoSettingsConfig) *bool { return c.DeleteBranchOnMerge },
 		current: func(r *github.Repository) (bool, bool) { return known(r.DeleteBranchOnMerge) },
-		apply:   func(r *github.Repository, v bool) { r.DeleteBranchOnMerge = github.Ptr(v) },
+		apply:   func(r *github.Repository, v bool) { r.DeleteBranchOnMerge = new(v) },
 	},
 	{
 		name:    "allow_update_branch",
 		want:    func(c config.RepoSettingsConfig) *bool { return c.AllowUpdateBranch },
 		current: func(r *github.Repository) (bool, bool) { return known(r.AllowUpdateBranch) },
-		apply:   func(r *github.Repository, v bool) { r.AllowUpdateBranch = github.Ptr(v) },
+		apply:   func(r *github.Repository, v bool) { r.AllowUpdateBranch = new(v) },
 	},
 }
 
@@ -303,7 +303,7 @@ func applyRepoVisibilityEnsure(ctx context.Context, c *gh.Client, ch util.Change
 	want := detailString(d, "visibility")
 
 	updated, _, err := c.REST.Repositories.Edit(ctx, org, repo, &github.Repository{
-		Visibility: github.Ptr(want),
+		Visibility: new(want),
 	})
 	if err != nil {
 		return fmt.Errorf("change visibility of %s/%s to %s: %w", org, repo, want, err)

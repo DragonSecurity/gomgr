@@ -395,12 +395,12 @@ func TestPlanRulesetSetCreatesUpdatesAndSkips(t *testing.T) {
 
 func TestPlanRulesetCleanup(t *testing.T) {
 	orgOwned := &github.RepositoryRuleset{
-		ID:         github.Ptr(int64(7)),
+		ID:         new(int64(7)),
 		Name:       "legacy",
 		SourceType: ptrTo(github.RulesetSourceTypeOrganization),
 	}
 	inherited := &github.RepositoryRuleset{
-		ID:         github.Ptr(int64(8)),
+		ID:         new(int64(8)),
 		Name:       "enterprise-wide",
 		SourceType: ptrTo(github.RulesetSourceTypeEnterprise),
 	}

@@ -18,12 +18,12 @@ import (
 
 func repoWith(name string, autoMerge, mergeCommit, deleteBranch bool) *github.Repository {
 	return &github.Repository{
-		Name:                github.Ptr(name),
-		AllowAutoMerge:      github.Ptr(autoMerge),
-		AllowMergeCommit:    github.Ptr(mergeCommit),
-		DeleteBranchOnMerge: github.Ptr(deleteBranch),
-		AllowSquashMerge:    github.Ptr(true),
-		Visibility:          github.Ptr("private"),
+		Name:                new(name),
+		AllowAutoMerge:      new(autoMerge),
+		AllowMergeCommit:    new(mergeCommit),
+		DeleteBranchOnMerge: new(deleteBranch),
+		AllowSquashMerge:    new(true),
+		Visibility:          new("private"),
 	}
 }
 
@@ -95,7 +95,7 @@ func TestPlanRepoSettingsRepoOverridesOrgDefault(t *testing.T) {
 func TestPlanRepoSettingsSkipsWhatItCannotTouch(t *testing.T) {
 	cfg := cfgWithDefaults(houseStyle)
 	archived := repoWith("frozen", false, true, false)
-	archived.Archived = github.Ptr(true)
+	archived.Archived = new(true)
 	bySettings := map[string]repoSettings{"frozen": {}, "brand-new": {}}
 	existing := map[string]*github.Repository{"frozen": archived}
 

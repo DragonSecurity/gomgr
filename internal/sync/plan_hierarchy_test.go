@@ -49,8 +49,8 @@ func TestPlanTeamsPlansAReParent(t *testing.T) {
 		config.TeamConfig{Name: "Oncall", Slug: "oncall", Parents: []string{"platform"}},
 	)
 	st := &State{Org: "myorg", ActualTeams: []*github.Team{
-		{Slug: github.Ptr("platform")},
-		{Slug: github.Ptr("oncall")},
+		{Slug: new("platform")},
+		{Slug: new("oncall")},
 	}}
 
 	changes, _, err := planTeams(context.Background(), nil, cfg, st)
@@ -70,7 +70,7 @@ func TestPlanTeamsPlansAReParent(t *testing.T) {
 func TestPlanTeamsPlansAnUnNesting(t *testing.T) {
 	cfg := hierarchyCfg(config.TeamConfig{Name: "Oncall", Slug: "oncall"})
 	st := &State{Org: "myorg", ActualTeams: []*github.Team{
-		{Slug: github.Ptr("oncall"), Parent: &github.Team{Slug: github.Ptr("platform")}},
+		{Slug: new("oncall"), Parent: &github.Team{Slug: new("platform")}},
 	}}
 
 	changes, _, err := planTeams(context.Background(), nil, cfg, st)
@@ -93,7 +93,7 @@ func TestPlanTeamsPlansAnUnNesting(t *testing.T) {
 func TestPlanTeamsLeavesMatchingNestingAlone(t *testing.T) {
 	cfg := hierarchyCfg(config.TeamConfig{Name: "Oncall", Slug: "oncall", Parents: []string{"Platform"}})
 	st := &State{Org: "myorg", ActualTeams: []*github.Team{
-		{Slug: github.Ptr("oncall"), Parent: &github.Team{Slug: github.Ptr("platform")}},
+		{Slug: new("oncall"), Parent: &github.Team{Slug: new("platform")}},
 	}}
 
 	changes, _, err := planTeams(context.Background(), nil, cfg, st)

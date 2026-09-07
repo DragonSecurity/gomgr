@@ -375,10 +375,10 @@ func buildRules(ctx context.Context, r config.RulesetRules, l *refLookup) (*gith
 				entry.RepositoryID = &id
 			}
 			if w.Ref != "" {
-				entry.Ref = github.Ptr(w.Ref)
+				entry.Ref = new(w.Ref)
 			}
 			if w.SHA != "" {
-				entry.SHA = github.Ptr(w.SHA)
+				entry.SHA = new(w.SHA)
 			}
 			params.Workflows = append(params.Workflows, entry)
 		}
@@ -427,7 +427,7 @@ func buildPattern(p *config.PatternRule) *github.PatternRuleParameters {
 		Negate:   p.Negate,
 	}
 	if p.Name != "" {
-		params.Name = github.Ptr(p.Name)
+		params.Name = new(p.Name)
 	}
 	return params
 }

@@ -150,7 +150,7 @@ func applyRepoArchiveEnsure(ctx context.Context, c *gh.Client, ch util.Change) e
 	archived := detailBool(d, detailArchived)
 
 	_, _, err = c.REST.Repositories.Edit(ctx, org, repo, &github.Repository{
-		Archived: github.Ptr(archived),
+		Archived: new(archived),
 	})
 	if err != nil {
 		verb := "archive"

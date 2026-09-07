@@ -15,8 +15,8 @@ func deciderFor(t *testing.T, org []config.RulesetConfig, perRepo map[string][]c
 	cfg.Org.Rulesets = org
 
 	st := &State{Org: "myorg", ActualRepos: []*github.Repository{
-		{Name: github.Ptr("infra"), DefaultBranch: github.Ptr("main")},
-		{Name: github.Ptr("legacy"), DefaultBranch: github.Ptr("master")},
+		{Name: new("infra"), DefaultBranch: new("main")},
+		{Name: new("legacy"), DefaultBranch: new("master")},
 	}}
 	settings := map[string]repoSettings{}
 	for repo, rs := range perRepo {

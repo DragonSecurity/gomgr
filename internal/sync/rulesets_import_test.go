@@ -74,12 +74,12 @@ func TestImportedConfigReproducesTheRuleset(t *testing.T) {
 		Enforcement: github.RulesetEnforcementActive,
 		BypassActors: []*github.BypassActor{
 			{
-				ActorID:    github.Ptr(int64(77)),
+				ActorID:    new(int64(77)),
 				ActorType:  ptrTo(github.BypassActorTypeTeam),
 				BypassMode: ptrTo(github.BypassModePullRequest),
 			},
 			{
-				ActorID:    github.Ptr(int64(4242)),
+				ActorID:    new(int64(4242)),
 				ActorType:  ptrTo(github.BypassActorTypeIntegration),
 				BypassMode: ptrTo(github.BypassModeAlways),
 			},
@@ -177,9 +177,9 @@ func TestImportKeepsUnknownActorIDs(t *testing.T) {
 		Target:      ptrTo(github.RulesetTargetBranch),
 		Enforcement: github.RulesetEnforcementActive,
 		BypassActors: []*github.BypassActor{
-			{ActorID: github.Ptr(int64(999)), ActorType: ptrTo(github.BypassActorTypeTeam), BypassMode: ptrTo(github.BypassModeAlways)},
-			{ActorID: github.Ptr(int64(5)), ActorType: ptrTo(github.BypassActorTypeRepositoryRole), BypassMode: ptrTo(github.BypassModeAlways)},
-			{ActorID: github.Ptr(int64(1)), ActorType: ptrTo(github.BypassActorTypeOrganizationAdmin), BypassMode: ptrTo(github.BypassModeAlways)},
+			{ActorID: new(int64(999)), ActorType: ptrTo(github.BypassActorTypeTeam), BypassMode: ptrTo(github.BypassModeAlways)},
+			{ActorID: new(int64(5)), ActorType: ptrTo(github.BypassActorTypeRepositoryRole), BypassMode: ptrTo(github.BypassModeAlways)},
+			{ActorID: new(int64(1)), ActorType: ptrTo(github.BypassActorTypeOrganizationAdmin), BypassMode: ptrTo(github.BypassModeAlways)},
 		},
 		Rules: &github.RepositoryRulesetRules{NonFastForward: &github.EmptyRuleParameters{}},
 	}
@@ -205,11 +205,11 @@ func TestImportDropsGitHubSuppliedFalses(t *testing.T) {
 			CommitMessagePattern: &github.PatternRuleParameters{
 				Operator: github.PatternRuleOperatorContains,
 				Pattern:  "Signed-off-by:",
-				Negate:   github.Ptr(false),
+				Negate:   new(false),
 			},
 			RequiredStatusChecks: &github.RequiredStatusChecksRuleParameters{
 				RequiredStatusChecks: []*github.RuleStatusCheck{{Context: "build"}},
-				DoNotEnforceOnCreate: github.Ptr(false),
+				DoNotEnforceOnCreate: new(false),
 			},
 		},
 	}

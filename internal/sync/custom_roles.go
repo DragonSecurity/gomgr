@@ -197,7 +197,7 @@ func applyCustomRoleChanges(ctx context.Context, c *gh.Client, changes []util.Ch
 				Permissions: d.Permissions,
 			}
 			if d.Description != "" {
-				req.Description = github.Ptr(d.Description)
+				req.Description = new(d.Description)
 			}
 
 			_, _, err := c.REST.Organizations.CreateCustomRepoRole(ctx, d.Org, req)
@@ -208,12 +208,12 @@ func applyCustomRoleChanges(ctx context.Context, c *gh.Client, changes []util.Ch
 
 		case "custom-role:update":
 			req := github.UpdateCustomRepoRoleRequest{
-				Name:        github.Ptr(d.Name),
-				BaseRole:    github.Ptr(d.BaseRole),
+				Name:        new(d.Name),
+				BaseRole:    new(d.BaseRole),
 				Permissions: d.Permissions,
 			}
 			if d.Description != "" {
-				req.Description = github.Ptr(d.Description)
+				req.Description = new(d.Description)
 			}
 
 			_, _, err := c.REST.Organizations.UpdateCustomRepoRole(ctx, d.Org, d.ID, req)
