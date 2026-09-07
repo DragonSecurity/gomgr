@@ -71,14 +71,18 @@ baseline: .dragon-baseline.yaml
 #
 # Selected by fingerprint, which is the narrowest selector there is: a rule id
 # would accept every future occurrence of that rule anywhere in the tree, and
-# these are decisions about two specific lines. The fingerprint already pins
-# the file -- it is computed over category, rule id, file and the matched text.
+# this is a decision about one specific line. The fingerprint already pins the
+# file -- it is computed over category, rule id, file and the matched text.
 #
-# No `expires` on either. An expiry is a reminder to re-examine a decision made
-# against a situation that could change; neither of these is that. A PEM fixture
-# is a fixture for as long as the test exists, and backoff jitter does not
-# acquire a security property later. An expiry here would be recurring work with
-# a known answer.
+# No `expires`. An expiry is a reminder to re-examine a decision made against a
+# situation that could change, and this is not that: a PEM fixture is a fixture
+# for as long as the test exists. An expiry here would be recurring work with a
+# known answer.
+#
+# There were two entries. The other carried opengrep's math-random-used against
+# the retry backoff jitter, which was a false positive on the merits and still
+# cost more to keep explaining than to remove -- internal/gh/retry.go now reads
+# from crypto/rand and the finding is gone rather than accepted.
 #
 # The platform does not apply this block -- `accept` is platform-owned, like
 # `policies` and `baseline`, because removing a finding from the score and the
@@ -95,17 +99,6 @@ accept:
       is computed over the redacted snippet, so it does not move with the key
       material -- this acceptance would swallow a real private key added to that
       file, which must therefore never hold one.
-    approved_by: allanice001
-
-  - fingerprint: c077b5a2c5de4d085f1330cdd08211e3
-    reason: >-
-      opengrep math-random-used in internal/gh/retry.go. The single use is the
-      jitter added to exponential backoff before a GitHub API request is retried
-      (retry.go:89). CWE-338 is about predictable randomness where
-      unpredictability is the security property; nothing here is a secret, a
-      token or an identifier, and the only consequence of a predictable value is
-      that two clients retry in step. gosec already carries the same judgement
-      inline as #nosec G404.
     approved_by: allanice001
 
 ignore:
