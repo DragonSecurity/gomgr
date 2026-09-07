@@ -7,8 +7,25 @@ project: gomgr
 asset:
   name: gomgr
   environment: production      # production | staging | development | test
-  criticality: medium          # critical | high | medium | low
+
+  # gomgr is consumed by other repositories as git-as-code, and it runs holding
+  # a GitHub App private key with administration, members and contents write
+  # across every organization it manages. A compromise here is organization
+  # takeover, in the plural. That blast radius is what criticality is for.
+  criticality: high            # critical | high | medium | low
+
+  # False, and deliberately so despite the repository being public. The field
+  # is "an unauthenticated attacker can reach it": gomgr listens on nothing and
+  # is invoked from a pipeline, so there is no inbound path to reach. A public
+  # repository makes the source readable, not the asset reachable, and the App
+  # key lives in secrets rather than in the tree.
+  #
+  # Setting this true to buy a stricter gate would also arm the policy rule
+  # reachable-critical-internet-facing, which is about network-reachable attack
+  # paths -- and would tell the next reader something untrue about how gomgr is
+  # attacked. Criticality above carries the blast radius honestly instead.
   internet_exposed: false
+
   handles_pii: false
   handles_payments: false
   # owner: platform-team
