@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
@@ -343,7 +343,7 @@ func fetchOrgRulesets(ctx context.Context, c *gh.Client, org string) ([]*github.
 // inherited from the organization, and expands each one.
 func fetchRepoRulesets(ctx context.Context, c *gh.Client, org, repo string) ([]*github.RepositoryRuleset, error) {
 	var summaries []*github.RepositoryRuleset
-	listOpts := &github.RepositoryListRulesetsOptions{IncludesParents: github.Ptr(false)}
+	listOpts := &github.RepositoryListRulesetsOptions{IncludesParents: new(false)}
 	if err := paginate(func(opts *github.ListOptions) (*github.Response, error) {
 		listOpts.ListOptions = *opts
 		page, resp, err := c.REST.Repositories.GetAllRulesets(ctx, org, repo, listOpts)

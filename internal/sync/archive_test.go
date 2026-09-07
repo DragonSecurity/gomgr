@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/util"
@@ -17,7 +17,7 @@ import (
 func boolPtr(b bool) *bool { return &b }
 
 func repoFixture(name string, archived bool) *github.Repository {
-	return &github.Repository{Name: github.Ptr(name), Archived: github.Ptr(archived)}
+	return &github.Repository{Name: new(name), Archived: new(archived)}
 }
 
 // Omitting `archived:` and setting it to false are different instructions. An

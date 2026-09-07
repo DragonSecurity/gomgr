@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/util"
@@ -123,7 +123,7 @@ func (w collabWorld) state() *State {
 		st.ManagedRepos[repo] = true
 	}
 	for _, slug := range w.teams {
-		st.ActualTeams = append(st.ActualTeams, &github.Team{Slug: github.Ptr(slug)})
+		st.ActualTeams = append(st.ActualTeams, &github.Team{Slug: new(slug)})
 	}
 	return st
 }
@@ -345,8 +345,8 @@ func TestPlanCollaboratorsFollowsParentInheritance(t *testing.T) {
 
 func TestCollaboratorPermissionPrefersRoleName(t *testing.T) {
 	u := &github.User{
-		RoleName:    github.Ptr("write"),
-		Permissions: &github.RepositoryPermissions{Pull: github.Ptr(true)},
+		RoleName:    new("write"),
+		Permissions: &github.RepositoryPermissions{Pull: new(true)},
 	}
 	if got := collaboratorPermission(u); got != permPush {
 		t.Errorf("role_name should win and normalize to push, got %q", got)
@@ -355,7 +355,7 @@ func TestCollaboratorPermissionPrefersRoleName(t *testing.T) {
 
 func TestCollaboratorPermissionFallsBackToPermissionBlock(t *testing.T) {
 	u := &github.User{Permissions: &github.RepositoryPermissions{
-		Pull: github.Ptr(true), Push: github.Ptr(true), Maintain: github.Ptr(true),
+		Pull: new(true), Push: new(true), Maintain: new(true),
 	}}
 	if got := collaboratorPermission(u); got != permMaintain {
 		t.Errorf("want maintain, got %q", got)

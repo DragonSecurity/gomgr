@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/util"
@@ -754,8 +754,8 @@ func TestPlanTeams(t *testing.T) {
 	st := &State{
 		Org: "myorg",
 		ActualTeams: []*github.Team{
-			{ID: github.Ptr(int64(1)), Slug: github.Ptr("backend"), Name: github.Ptr("Backend"), Description: github.Ptr("Backend team"), Privacy: github.Ptr("closed")},
-			{ID: github.Ptr(int64(2)), Slug: github.Ptr("frontend"), Name: github.Ptr("Frontend"), Description: github.Ptr("Old desc"), Privacy: github.Ptr("closed")},
+			{ID: new(int64(1)), Slug: new("backend"), Name: new("Backend"), Description: new("Backend team"), Privacy: new("closed")},
+			{ID: new(int64(2)), Slug: new("frontend"), Name: new("Frontend"), Description: new("Old desc"), Privacy: new("closed")},
 		},
 	}
 
@@ -871,7 +871,7 @@ func TestPlanRepoPerms(t *testing.T) {
 	st := &State{
 		Org: "myorg",
 		ActualRepos: []*github.Repository{
-			{Name: github.Ptr("api"), Topics: []string{"backend"}},
+			{Name: new("api"), Topics: []string{"backend"}},
 		},
 	}
 
@@ -917,12 +917,12 @@ func TestPlanCleanups(t *testing.T) {
 		Org:          "myorg",
 		ManagedRepos: map[string]bool{"api": true},
 		ActualTeams: []*github.Team{
-			{ID: github.Ptr(int64(1)), Slug: github.Ptr("backend")},
-			{ID: github.Ptr(int64(2)), Slug: github.Ptr("old-team")},
+			{ID: new(int64(1)), Slug: new("backend")},
+			{ID: new(int64(2)), Slug: new("old-team")},
 		},
 		ActualRepos: []*github.Repository{
-			{Name: github.Ptr("api")},
-			{Name: github.Ptr("legacy-app")},
+			{Name: new("api")},
+			{Name: new("legacy-app")},
 		},
 	}
 
@@ -1456,9 +1456,9 @@ func TestPlanTeams_NotificationSetting(t *testing.T) {
 	st := &State{
 		Org: "myorg",
 		ActualTeams: []*github.Team{
-			{Slug: github.Ptr("agrees"), Name: github.Ptr("Agrees"), NotificationSetting: github.Ptr(config.NotificationsDisabled)},
-			{Slug: github.Ptr("differs"), Name: github.Ptr("Differs"), NotificationSetting: github.Ptr(config.NotificationsEnabled)},
-			{Slug: github.Ptr("silent"), Name: github.Ptr("Silent"), NotificationSetting: github.Ptr(config.NotificationsEnabled)},
+			{Slug: new("agrees"), Name: new("Agrees"), NotificationSetting: new(config.NotificationsDisabled)},
+			{Slug: new("differs"), Name: new("Differs"), NotificationSetting: new(config.NotificationsEnabled)},
+			{Slug: new("silent"), Name: new("Silent"), NotificationSetting: new(config.NotificationsEnabled)},
 		},
 	}
 

@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
@@ -150,7 +150,7 @@ func applyRepoArchiveEnsure(ctx context.Context, c *gh.Client, ch util.Change) e
 	archived := detailBool(d, detailArchived)
 
 	_, _, err = c.REST.Repositories.Edit(ctx, org, repo, &github.Repository{
-		Archived: github.Ptr(archived),
+		Archived: new(archived),
 	})
 	if err != nil {
 		verb := "archive"

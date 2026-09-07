@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/DragonSecurity/gomgr/internal/gh"
 	"github.com/DragonSecurity/gomgr/internal/util"
@@ -118,9 +118,9 @@ func writeFileOnBranch(ctx context.Context, c *gh.Client, org, repo, path, branc
 	}
 
 	opts := &github.RepositoryContentFileOptions{
-		Message: github.Ptr(message),
+		Message: new(message),
 		Content: content,
-		Branch:  github.Ptr(branch),
+		Branch:  new(branch),
 	}
 	if file == nil {
 		if _, _, err := c.REST.Repositories.CreateFile(ctx, org, repo, path, opts); err != nil {
@@ -136,7 +136,7 @@ func writeFileOnBranch(ctx context.Context, c *gh.Client, org, repo, path, branc
 	if current == string(content) {
 		return nil
 	}
-	opts.SHA = github.Ptr(file.GetSHA())
+	opts.SHA = new(file.GetSHA())
 	if _, _, err := c.REST.Repositories.UpdateFile(ctx, org, repo, path, opts); err != nil {
 		return fmt.Errorf("update %s on %s/%s@%s: %w", path, org, repo, branch, err)
 	}
@@ -160,10 +160,10 @@ func ensurePullRequest(ctx context.Context, c *gh.Client, org, repo, base, head,
 
 	title, body := splitCommitMessage(message)
 	pr, _, err := c.REST.PullRequests.Create(ctx, org, repo, github.CreatePullRequest{
-		Title: github.Ptr(title),
+		Title: new(title),
 		Head:  head,
 		Base:  base,
-		Body:  github.Ptr(body),
+		Body:  new(body),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("open pull request on %s/%s: %w", org, repo, err)

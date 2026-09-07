@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/DragonSecurity/gomgr/internal/config"
 	"github.com/DragonSecurity/gomgr/internal/gh"
@@ -395,12 +395,12 @@ func TestPlanRulesetSetCreatesUpdatesAndSkips(t *testing.T) {
 
 func TestPlanRulesetCleanup(t *testing.T) {
 	orgOwned := &github.RepositoryRuleset{
-		ID:         github.Ptr(int64(7)),
+		ID:         new(int64(7)),
 		Name:       "legacy",
 		SourceType: ptrTo(github.RulesetSourceTypeOrganization),
 	}
 	inherited := &github.RepositoryRuleset{
-		ID:         github.Ptr(int64(8)),
+		ID:         new(int64(8)),
 		Name:       "enterprise-wide",
 		SourceType: ptrTo(github.RulesetSourceTypeEnterprise),
 	}
