@@ -79,7 +79,7 @@ var settingFields = []settingField{
 		apply:   func(r *github.Repository, v bool) { r.AllowUpdateBranch = new(v) },
 	},
 	{
-		name: "secret_scanning",
+		name: settingSecretScanning,
 		want: func(c config.RepoSettingsConfig) *bool { return c.SecretScanning },
 		current: func(r *github.Repository) (bool, bool) {
 			return statusKnown(r.GetSecurityAndAnalysis().GetSecretScanning().GetStatus())
@@ -89,7 +89,7 @@ var settingFields = []settingField{
 		},
 	},
 	{
-		name: "secret_scanning_push_protection",
+		name: settingSecretScanningPushProtection,
 		want: func(c config.RepoSettingsConfig) *bool { return c.SecretScanningPushProtection },
 		current: func(r *github.Repository) (bool, bool) {
 			return statusKnown(r.GetSecurityAndAnalysis().GetSecretScanningPushProtection().GetStatus())
@@ -99,7 +99,7 @@ var settingFields = []settingField{
 		},
 	},
 	{
-		name: "secret_scanning_validity_checks",
+		name: settingSecretScanningValidityChecks,
 		want: func(c config.RepoSettingsConfig) *bool { return c.SecretScanningValidityChecks },
 		current: func(r *github.Repository) (bool, bool) {
 			return statusKnown(r.GetSecurityAndAnalysis().GetSecretScanningValidityChecks().GetStatus())
@@ -109,7 +109,7 @@ var settingFields = []settingField{
 		},
 	},
 	{
-		name: "dependabot_security_updates",
+		name: settingDependabotSecurityUpdates,
 		want: func(c config.RepoSettingsConfig) *bool { return c.DependabotSecurityUpdates },
 		current: func(r *github.Repository) (bool, bool) {
 			return statusKnown(r.GetSecurityAndAnalysis().GetDependabotSecurityUpdates().GetStatus())
@@ -119,6 +119,16 @@ var settingFields = []settingField{
 		},
 	},
 }
+
+// The security_and_analysis setting names, shared by the settingField table,
+// the warning below and the cross-team merge in teams.go, which all have to
+// agree on the spelling.
+const (
+	settingSecretScanning               = "secret_scanning"
+	settingSecretScanningPushProtection = "secret_scanning_push_protection"
+	settingSecretScanningValidityChecks = "secret_scanning_validity_checks"
+	settingDependabotSecurityUpdates    = "dependabot_security_updates"
+)
 
 // The two values GitHub reports and accepts for every security_and_analysis
 // feature. It is a status string rather than a flag because the object is
@@ -147,9 +157,9 @@ func statusKnown(status string) (bool, bool) {
 
 func statusOf(v bool) *string {
 	if v {
-		return github.Ptr(statusEnabled)
+		return new(statusEnabled)
 	}
-	return github.Ptr(statusDisabled)
+	return new(statusDisabled)
 }
 
 // security returns the edit's security_and_analysis object, creating it on
@@ -290,8 +300,8 @@ func warnSecretScanningDependency(desired config.RepoSettingsConfig, current *gi
 		name string
 		want *bool
 	}{
-		{"secret_scanning_push_protection", desired.SecretScanningPushProtection},
-		{"secret_scanning_validity_checks", desired.SecretScanningValidityChecks},
+		{settingSecretScanningPushProtection, desired.SecretScanningPushProtection},
+		{settingSecretScanningValidityChecks, desired.SecretScanningValidityChecks},
 	} {
 		if wants(dep.want) {
 			warnings = append(warnings, fmt.Sprintf(

@@ -828,10 +828,10 @@ func mergeRepoSettingsConfig(into, from config.RepoSettingsConfig, conflict func
 		{"allow_rebase_merge", &into.AllowRebaseMerge, from.AllowRebaseMerge},
 		{"delete_branch_on_merge", &into.DeleteBranchOnMerge, from.DeleteBranchOnMerge},
 		{"allow_update_branch", &into.AllowUpdateBranch, from.AllowUpdateBranch},
-		{"secret_scanning", &into.SecretScanning, from.SecretScanning},
-		{"secret_scanning_push_protection", &into.SecretScanningPushProtection, from.SecretScanningPushProtection},
-		{"secret_scanning_validity_checks", &into.SecretScanningValidityChecks, from.SecretScanningValidityChecks},
-		{"dependabot_security_updates", &into.DependabotSecurityUpdates, from.DependabotSecurityUpdates},
+		{settingSecretScanning, &into.SecretScanning, from.SecretScanning},
+		{settingSecretScanningPushProtection, &into.SecretScanningPushProtection, from.SecretScanningPushProtection},
+		{settingSecretScanningValidityChecks, &into.SecretScanningValidityChecks, from.SecretScanningValidityChecks},
+		{settingDependabotSecurityUpdates, &into.DependabotSecurityUpdates, from.DependabotSecurityUpdates},
 	}
 	for _, f := range fields {
 		if f.from == nil {

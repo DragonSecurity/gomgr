@@ -235,15 +235,15 @@ func structFields(v any) string { return fmt.Sprintf("%#v", v) }
 func securityRepo(name string, statuses map[string]string) *github.Repository {
 	sa := &github.SecurityAndAnalysis{}
 	if v, ok := statuses["secret_scanning"]; ok {
-		sa.SecretScanning = &github.SecretScanning{Status: github.Ptr(v)}
+		sa.SecretScanning = &github.SecretScanning{Status: new(v)}
 	}
 	if v, ok := statuses["secret_scanning_push_protection"]; ok {
-		sa.SecretScanningPushProtection = &github.SecretScanningPushProtection{Status: github.Ptr(v)}
+		sa.SecretScanningPushProtection = &github.SecretScanningPushProtection{Status: new(v)}
 	}
 	if v, ok := statuses["dependabot_security_updates"]; ok {
-		sa.DependabotSecurityUpdates = &github.DependabotSecurityUpdates{Status: github.Ptr(v)}
+		sa.DependabotSecurityUpdates = &github.DependabotSecurityUpdates{Status: new(v)}
 	}
-	return &github.Repository{Name: github.Ptr(name), Visibility: github.Ptr("public"), SecurityAndAnalysis: sa}
+	return &github.Repository{Name: new(name), Visibility: new("public"), SecurityAndAnalysis: sa}
 }
 
 func TestPlanRepoSettingsReconcilesSecurityAnalyses(t *testing.T) {
@@ -292,7 +292,7 @@ func TestPlanRepoSettingsLeavesUnreportedSecurityAlone(t *testing.T) {
 	cfg := cfgWithDefaults(config.RepoSettingsConfig{SecretScanning: ptrTo(true)})
 	bySettings := map[string]repoSettings{"quiet": {}}
 	existing := map[string]*github.Repository{
-		"quiet": {Name: github.Ptr("quiet"), Visibility: github.Ptr("public")},
+		"quiet": {Name: new("quiet"), Visibility: new("public")},
 	}
 
 	changes, warnings, err := planRepoSettings(context.Background(), nil, cfg, bySettings, existing)
@@ -340,7 +340,7 @@ func TestWarnSecretScanningDependency(t *testing.T) {
 	t.Run("stays quiet when GitHub did not say", func(t *testing.T) {
 		got := warnSecretScanningDependency(
 			config.RepoSettingsConfig{SecretScanningPushProtection: ptrTo(true)},
-			&github.Repository{Name: github.Ptr("ward")}, "ward")
+			&github.Repository{Name: new("ward")}, "ward")
 		if len(got) != 0 {
 			t.Errorf("warnings = %v, want none; a guess here is noise", got)
 		}
