@@ -684,7 +684,7 @@ conditions and rules without restating them:
 | `no-force-push` | Every branch is append-only. The minimum guard rail if you are not ready to require reviews |
 | `require-signed-commits` | Every commit on the default branch carries a verified signature |
 | `require-dco` | Commit messages must contain `Signed-off-by:`, enforced at the ref rather than by a pull-request check |
-| `no-committed-keys` | Push rule rejecting `.pem`, `.key`, `.p12`, `.pfx`, `.jks`, `.keystore`, `.ppk` |
+| `no-committed-keys` | Push rule rejecting `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, `*.ppk`. Push rulesets are private/internal only |
 
 Anything you set alongside a preset wins, **at whole-rule granularity**: naming
 a rule key replaces the preset's version of that rule outright rather than
@@ -878,10 +878,20 @@ Branch and tag targets: `creation`, `update`, `deletion`,
 `workflows`, `code_scanning`.
 
 Push target: `file_extension_restriction`, `file_path_restriction`,
-`max_file_path_length`, `max_file_size`. Push rulesets need GitHub Enterprise
-Cloud on private repositories. GitHub requires each
+`max_file_path_length`, `max_file_size`. GitHub requires each
 `restricted_file_extensions` entry in the glob form `*.pem`; `pem` and `.pem`
 are accepted and rewritten to it, and anything else is refused by name.
+
+**Push rulesets only work on private and internal repositories.** They protect
+a repository and its whole fork network, and GitHub refuses one on a public
+source repository outright:
+
+    422 Validation Failed: Source public repos cannot have push rules
+
+The dry run warns when a push ruleset is declared on a repository that is
+public, or that this run is about to make public, so you find out before the
+apply. On a public repository, secret scanning push protection is the control
+that does work.
 
 `gomgr validate -c <config>` checks all of this offline — unknown presets,
 invalid enumerations, duplicate names, and rules used on the wrong target — so
