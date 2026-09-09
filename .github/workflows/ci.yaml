@@ -119,6 +119,39 @@ jobs:
       - name: Run security checks
         run: make security
 
+  workflows:
+    name: Workflows
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # A workflow file that parses as YAML can still be one GitHub refuses to
+      # load: expression substitution is a separate pass over the whole file,
+      # comments inside a script block included, and an expression with nothing
+      # in it is a parse error that stops the workflow loading at all. Nothing
+      # else here looks at workflow syntax -- CodeQL reads the code.
+      #
+      # actionlint also runs shellcheck over every `run:` block, which is where
+      # release.yaml's `sha256sum *.tar.gz` came from: an archive named with a
+      # leading dash would have been read as an option.
+      - name: Install actionlint
+        env:
+          # renovate: datasource=github-releases depName=rhysd/actionlint
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          set -euo pipefail
+          TARBALL="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "$TARBALL" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${TARBALL}"
+          echo "${ACTIONLINT_SHA256}  ${TARBALL}" | sha256sum -c -
+          tar -xzf "$TARBALL" actionlint
+          ./actionlint --version
+
+      - name: Lint workflows
+        run: ./actionlint -color
+
   build:
     name: Build
     runs-on: ubuntu-24.04
