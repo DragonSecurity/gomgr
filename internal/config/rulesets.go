@@ -306,7 +306,46 @@ func (r RulesetConfig) Resolve() (RulesetConfig, error) {
 	if r.Enforcement == "" {
 		r.Enforcement = RulesetEnforcementActive
 	}
+
+	// GitHub only accepts a restricted file extension in the glob form "*.ext"
+	// and answers anything else with an opaque 422 at apply time. "pem" and
+	// ".pem" plainly mean the same extension, so they are canonicalised rather
+	// than refused. Doing it here also keeps the plan honest: a live ruleset
+	// always reads back canonical, so an uncanonicalised config would compare
+	// unequal on every run and plan an update that could never settle.
+	if fe := r.Rules.FileExtensionRestriction; fe != nil {
+		exts := make([]string, len(fe.RestrictedFileExtensions))
+		for i, ext := range fe.RestrictedFileExtensions {
+			exts[i] = canonicalFileExtension(ext)
+		}
+		// A fresh rule rather than an in-place write: the pointer is shared
+		// with the caller's configuration and with the preset it came from,
+		// and Resolve does not modify its receiver.
+		r.Rules.FileExtensionRestriction = &FileExtensionRestrictionRule{RestrictedFileExtensions: exts}
+	}
+
 	return r, nil
+}
+
+// canonicalFileExtension rewrites a restricted file extension into the "*.ext"
+// form GitHub requires, accepting the two spellings people actually write:
+// "pem" and ".pem". Anything else — empty, a path, or a glob of its own — is
+// returned untouched for ValidateRulesets to reject by name, because guessing
+// at what it was meant to be would silently protect the wrong files.
+func canonicalFileExtension(ext string) string {
+	e := strings.TrimSpace(ext)
+	switch {
+	case e == "" || strings.ContainsAny(e, `/\`):
+		return ext
+	case strings.HasPrefix(e, "*."):
+		return e
+	case strings.HasPrefix(e, "."):
+		return "*" + e
+	case strings.ContainsAny(e, "*?["):
+		return ext
+	default:
+		return "*." + e
+	}
 }
 
 // mergeRules fills every nil field in dst from src. All RulesetRules fields are
