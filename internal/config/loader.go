@@ -187,6 +187,9 @@ func (r *Root) Validate() error {
 			if err := ValidateRulesets(ScopeRepo, where, rulesets); err != nil {
 				return err
 			}
+			if err := validateRepoSettings(where, val); err != nil {
+				return err
+			}
 			if err := validateRepoFiles(where, val); err != nil {
 				return err
 			}
@@ -267,11 +270,30 @@ func (r *Root) validateRepoDefinitions() error {
 		if err := ValidateRulesets(ScopeRepo, where, rulesets); err != nil {
 			return err
 		}
+		if err := validateRepoSettings(where, val); err != nil {
+			return err
+		}
 		if err := validateRepoFiles(where, val); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// validateRepoSettings checks the `settings:` block on one repository entry.
+// The block is parsed again here rather than threaded through, because these
+// entries are held as untyped YAML until the sync collects them, and a
+// contradiction is worth naming at load time either way.
+func validateRepoSettings(where string, val any) error {
+	m, ok := asStringMap(val)
+	if !ok {
+		return nil
+	}
+	settings, err := ParseRepoSettings(m["settings"])
+	if err != nil {
+		return fmt.Errorf("%s: %w", where, err)
+	}
+	return settings.Validate(where)
 }
 
 // validateRepoFiles checks a repository's own `files:` block. Beyond the rules

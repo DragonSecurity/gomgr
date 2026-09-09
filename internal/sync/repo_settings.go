@@ -78,6 +78,89 @@ var settingFields = []settingField{
 		current: func(r *github.Repository) (bool, bool) { return known(r.AllowUpdateBranch) },
 		apply:   func(r *github.Repository, v bool) { r.AllowUpdateBranch = new(v) },
 	},
+	{
+		name: "secret_scanning",
+		want: func(c config.RepoSettingsConfig) *bool { return c.SecretScanning },
+		current: func(r *github.Repository) (bool, bool) {
+			return statusKnown(r.GetSecurityAndAnalysis().GetSecretScanning().GetStatus())
+		},
+		apply: func(r *github.Repository, v bool) {
+			security(r).SecretScanning = &github.SecretScanning{Status: statusOf(v)}
+		},
+	},
+	{
+		name: "secret_scanning_push_protection",
+		want: func(c config.RepoSettingsConfig) *bool { return c.SecretScanningPushProtection },
+		current: func(r *github.Repository) (bool, bool) {
+			return statusKnown(r.GetSecurityAndAnalysis().GetSecretScanningPushProtection().GetStatus())
+		},
+		apply: func(r *github.Repository, v bool) {
+			security(r).SecretScanningPushProtection = &github.SecretScanningPushProtection{Status: statusOf(v)}
+		},
+	},
+	{
+		name: "secret_scanning_validity_checks",
+		want: func(c config.RepoSettingsConfig) *bool { return c.SecretScanningValidityChecks },
+		current: func(r *github.Repository) (bool, bool) {
+			return statusKnown(r.GetSecurityAndAnalysis().GetSecretScanningValidityChecks().GetStatus())
+		},
+		apply: func(r *github.Repository, v bool) {
+			security(r).SecretScanningValidityChecks = &github.SecretScanningValidityChecks{Status: statusOf(v)}
+		},
+	},
+	{
+		name: "dependabot_security_updates",
+		want: func(c config.RepoSettingsConfig) *bool { return c.DependabotSecurityUpdates },
+		current: func(r *github.Repository) (bool, bool) {
+			return statusKnown(r.GetSecurityAndAnalysis().GetDependabotSecurityUpdates().GetStatus())
+		},
+		apply: func(r *github.Repository, v bool) {
+			security(r).DependabotSecurityUpdates = &github.DependabotSecurityUpdates{Status: statusOf(v)}
+		},
+	},
+}
+
+// The two values GitHub reports and accepts for every security_and_analysis
+// feature. It is a status string rather than a flag because the object is
+// shared with features that have more than two states.
+const (
+	statusEnabled  = "enabled"
+	statusDisabled = "disabled"
+)
+
+// statusKnown adapts a security_and_analysis status into the (value, reported)
+// pair settingField.current speaks. GitHub reports one of exactly two strings,
+// so an empty one means it said nothing — an absent security_and_analysis
+// object, or a feature missing from it. That is not the same as saying the
+// feature is off, and reading it as off would plan a change on every
+// repository GitHub declines to describe.
+func statusKnown(status string) (bool, bool) {
+	switch status {
+	case statusEnabled:
+		return true, true
+	case statusDisabled:
+		return false, true
+	default:
+		return false, false
+	}
+}
+
+func statusOf(v bool) *string {
+	if v {
+		return github.Ptr(statusEnabled)
+	}
+	return github.Ptr(statusDisabled)
+}
+
+// security returns the edit's security_and_analysis object, creating it on
+// first use. Each feature is a separate settingField, and several of them can
+// be applied in one edit, so they have to write into the same object rather
+// than each replacing it.
+func security(r *github.Repository) *github.SecurityAndAnalysis {
+	if r.SecurityAndAnalysis == nil {
+		r.SecurityAndAnalysis = &github.SecurityAndAnalysis{}
+	}
+	return r.SecurityAndAnalysis
 }
 
 // repoDetailFetcher reads a repository's full representation.
@@ -142,6 +225,8 @@ func planRepoSettings(ctx context.Context, fetch repoDetailFetcher, cfg *config.
 			continue
 		}
 
+		warnings = append(warnings, warnSecretScanningDependency(desired, current, repo)...)
+
 		changed := map[string]any{}
 		var names []string
 		for _, f := range settingFields {
@@ -181,6 +266,40 @@ func planRepoSettings(ctx context.Context, fetch repoDetailFetcher, cfg *config.
 		})
 	}
 	return out, warnings, nil
+}
+
+// warnSecretScanningDependency reports a secret scanning feature asked for on a
+// repository where secret scanning itself is off and staying off. GitHub
+// refuses the pair, and its 422 names neither setting.
+//
+// A configuration that switches secret scanning off in the same breath is
+// refused by RepoSettingsConfig.Validate offline. This is the other half: the
+// configuration says nothing about secret scanning, so only the live state can
+// settle it.
+func warnSecretScanningDependency(desired config.RepoSettingsConfig, current *github.Repository, repo string) []string {
+	wants := func(b *bool) bool { return b != nil && *b }
+	if wants(desired.SecretScanning) {
+		return nil // being enabled in this same edit
+	}
+	if on, reported := statusKnown(current.GetSecurityAndAnalysis().GetSecretScanning().GetStatus()); on || !reported {
+		return nil // already on, or GitHub did not say and a guess would be noise
+	}
+
+	var warnings []string
+	for _, dep := range []struct {
+		name string
+		want *bool
+	}{
+		{"secret_scanning_push_protection", desired.SecretScanningPushProtection},
+		{"secret_scanning_validity_checks", desired.SecretScanningValidityChecks},
+	} {
+		if wants(dep.want) {
+			warnings = append(warnings, fmt.Sprintf(
+				"%s is enabled for %s but secret scanning is off there and this configuration does not turn it on; "+
+					"GitHub will refuse the change. Add secret_scanning: true.", dep.name, repo))
+		}
+	}
+	return warnings
 }
 
 // planRepoVisibility emits a change for a repository whose visibility differs
