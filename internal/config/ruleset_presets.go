@@ -128,8 +128,12 @@ func RulesetPresets() map[string]RulesetConfig {
 			Enforcement: RulesetEnforcementActive,
 			Rules: RulesetRules{
 				FileExtensionRestriction: &FileExtensionRestrictionRule{
+					// GitHub requires each entry in the glob form "*.ext" and
+					// rejects the whole ruleset with a 422 otherwise. Resolve
+					// canonicalises hand-written entries; the preset is already
+					// in the form the API wants.
 					RestrictedFileExtensions: []string{
-						".pem", ".key", ".p12", ".pfx", ".jks", ".keystore", ".ppk",
+						"*.pem", "*.key", "*.p12", "*.pfx", "*.jks", "*.keystore", "*.ppk",
 					},
 				},
 			},

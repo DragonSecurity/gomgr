@@ -879,7 +879,9 @@ Branch and tag targets: `creation`, `update`, `deletion`,
 
 Push target: `file_extension_restriction`, `file_path_restriction`,
 `max_file_path_length`, `max_file_size`. Push rulesets need GitHub Enterprise
-Cloud on private repositories.
+Cloud on private repositories. GitHub requires each
+`restricted_file_extensions` entry in the glob form `*.pem`; `pem` and `.pem`
+are accepted and rewritten to it, and anything else is refused by name.
 
 `gomgr validate -c <config>` checks all of this offline — unknown presets,
 invalid enumerations, duplicate names, and rules used on the wrong target — so

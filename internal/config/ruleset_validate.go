@@ -282,8 +282,18 @@ func validateRules(fail func(string, ...any) error, target string, rules Ruleset
 		}
 	}
 
-	if fe := rules.FileExtensionRestriction; fe != nil && len(fe.RestrictedFileExtensions) == 0 {
-		return fail("file_extension_restriction: restricted_file_extensions must not be empty")
+	if fe := rules.FileExtensionRestriction; fe != nil {
+		if len(fe.RestrictedFileExtensions) == 0 {
+			return fail("file_extension_restriction: restricted_file_extensions must not be empty")
+		}
+		// Resolve has already rewritten "pem" and ".pem" into the "*.ext" glob
+		// GitHub demands, so anything still not in that form is something it
+		// could not make sense of, and GitHub would reject the whole ruleset.
+		for i, ext := range fe.RestrictedFileExtensions {
+			if !strings.HasPrefix(ext, "*.") || len(ext) == len("*.") || strings.ContainsAny(ext, `/\`) {
+				return fail("file_extension_restriction: restricted_file_extensions[%d]: %q is not a file extension; write it as \"*.pem\"", i, ext)
+			}
+		}
 	}
 	if fp := rules.FilePathRestriction; fp != nil && len(fp.RestrictedFilePaths) == 0 {
 		return fail("file_path_restriction: restricted_file_paths must not be empty")

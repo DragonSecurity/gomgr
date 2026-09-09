@@ -345,3 +345,73 @@ func TestBypassActorTeamIsNotIdentifiedByTypeAlone(t *testing.T) {
 }
 
 func int64Ptr(v int64) *int64 { return &v }
+
+// GitHub rejects a whole ruleset with an opaque 422 — "File extension must
+// start with *." — if any restricted extension is not a glob, so the preset
+// shipping ".pem" made no-committed-keys unappliable on every repository that
+// asked for it.
+func TestNoCommittedKeysPresetUsesGlobExtensions(t *testing.T) {
+	preset := RulesetPresets()[PresetNoCommittedKeys]
+	fe := preset.Rules.FileExtensionRestriction
+	if fe == nil {
+		t.Fatal("preset has no file extension restriction")
+	}
+	for _, ext := range fe.RestrictedFileExtensions {
+		if !strings.HasPrefix(ext, "*.") {
+			t.Errorf("extension %q is not a glob; GitHub answers 422 for the whole ruleset", ext)
+		}
+	}
+}
+
+func TestResolveCanonicalisesFileExtensions(t *testing.T) {
+	rule := &FileExtensionRestrictionRule{
+		RestrictedFileExtensions: []string{"pem", ".key", "*.p12", " jks "},
+	}
+	spec := RulesetConfig{
+		Name:   "no-keys",
+		Target: RulesetTargetPush,
+		Rules:  RulesetRules{FileExtensionRestriction: rule},
+	}
+
+	got, err := spec.Resolve()
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+
+	want := []string{"*.pem", "*.key", "*.p12", "*.jks"}
+	gotExts := got.Rules.FileExtensionRestriction.RestrictedFileExtensions
+	if len(gotExts) != len(want) {
+		t.Fatalf("extensions = %v, want %v", gotExts, want)
+	}
+	for i := range want {
+		if gotExts[i] != want[i] {
+			t.Errorf("extension[%d] = %q, want %q", i, gotExts[i], want[i])
+		}
+	}
+	// Resolve does not modify its receiver, and the rule is a pointer the
+	// caller's configuration still holds.
+	if rule.RestrictedFileExtensions[0] != "pem" {
+		t.Errorf("the caller's rule was rewritten in place: %v", rule.RestrictedFileExtensions)
+	}
+}
+
+func TestValidateRejectsUnrecognisableFileExtension(t *testing.T) {
+	for _, ext := range []string{"keys/*.pem", "*.", "secret*", ""} {
+		t.Run(ext, func(t *testing.T) {
+			spec := RulesetConfig{
+				Name:   "no-keys",
+				Target: RulesetTargetPush,
+				Rules: RulesetRules{FileExtensionRestriction: &FileExtensionRestrictionRule{
+					RestrictedFileExtensions: []string{ext},
+				}},
+			}
+			err := ValidateRulesets(ScopeRepo, "team x, repo y", []RulesetConfig{spec})
+			if err == nil {
+				t.Fatalf("expected %q to be refused before it reaches GitHub", ext)
+			}
+			if !strings.Contains(err.Error(), "*.pem") {
+				t.Errorf("error %q should show the form GitHub wants", err)
+			}
+		})
+	}
+}
