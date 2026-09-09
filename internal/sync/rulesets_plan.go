@@ -84,9 +84,9 @@ func planRepoRulesets(ctx context.Context, c *gh.Client, cfg *config.Root, st *S
 		return nil, nil, err
 	}
 
-	existingRepos := map[string]bool{}
+	existingRepos := map[string]*github.Repository{}
 	for _, r := range st.ActualRepos {
-		existingRepos[strings.ToLower(r.GetName())] = true
+		existingRepos[strings.ToLower(r.GetName())] = r
 	}
 
 	lookup := newPlanLookup(c, st)
@@ -102,7 +102,8 @@ func planRepoRulesets(ctx context.Context, c *gh.Client, cfg *config.Root, st *S
 		// A repository this run is creating cannot be queried yet; everything
 		// declared for it is a create.
 		var existing []*github.RepositoryRuleset
-		if existingRepos[repo] {
+		current := existingRepos[repo]
+		if current != nil {
 			fetched, err := fetchRepoRulesets(ctx, c, org, repo)
 			if err != nil {
 				return nil, nil, err
@@ -125,9 +126,50 @@ func planRepoRulesets(ctx context.Context, c *gh.Client, cfg *config.Root, st *S
 			warnings = append(warnings, fmt.Sprintf("Found %d unmanaged rulesets on %s/%s: %v", len(unmanaged), org, repo, unmanaged))
 		}
 		warnings = append(warnings, warnSelfLockout(cfg, settings.rulesets, org+"/"+repo)...)
+		warnings = append(warnings, warnPushRulesetsOnPublicRepo(settings.rulesets, current, settings.visibility, org+"/"+repo)...)
 	}
 
 	return out, warnings, nil
+}
+
+// warnPushRulesetsOnPublicRepo reports push rulesets GitHub is going to refuse.
+// Push rules protect a private or internal repository and its fork network; a
+// public source repository cannot carry them, and the API says so only at
+// apply, one repository at a time:
+//
+//	422 Validation Failed: Source public repos cannot have push rules
+//
+// The change is still planned rather than dropped. A security control the
+// configuration asks for should not disappear quietly because it cannot be
+// installed — the failing apply is the honest record that it is not in place,
+// and this warning is what puts the reason in front of whoever approves it.
+func warnPushRulesetsOnPublicRepo(rulesets []config.RulesetConfig, current *github.Repository, desiredVisibility, where string) []string {
+	// What the configuration asks for wins: a repository being made private on
+	// this same run can carry a push ruleset by the time it is created.
+	visibility := desiredVisibility
+	if visibility == "" && current != nil {
+		visibility = current.GetVisibility()
+	}
+	// A fork is exempt: GitHub names the *source* repository in its refusal,
+	// and a fork inherits its network's push rules rather than holding them.
+	if visibility != visPublic || current.GetFork() {
+		return nil
+	}
+
+	var warnings []string
+	for _, raw := range rulesets {
+		spec, err := raw.Resolve()
+		if err != nil || spec.Target != config.RulesetTargetPush {
+			continue
+		}
+		warnings = append(warnings, fmt.Sprintf(
+			"Ruleset %q on %s is a push ruleset, and GitHub allows those only on private or internal "+
+				"repositories; this one is public, so the create will be refused with \"Source public "+
+				"repos cannot have push rules\". Make the repository private, or drop the ruleset and "+
+				"rely on secret scanning push protection, which does work on public repositories.",
+			spec.Name, where))
+	}
+	return warnings
 }
 
 // rulesetScopeArgs bundles the details that distinguish an org ruleset from a

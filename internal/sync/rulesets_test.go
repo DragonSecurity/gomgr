@@ -938,3 +938,54 @@ func TestPlanLookupTakesAppIDFromClient(t *testing.T) {
 		t.Errorf("appID under PAT auth = %d, want 0", got)
 	}
 }
+
+func TestWarnPushRulesetsOnPublicRepo(t *testing.T) {
+	keys := []config.RulesetConfig{{Name: "no-committed-keys", Preset: config.PresetNoCommittedKeys}}
+	repo := func(visibility string, fork bool) *github.Repository {
+		return &github.Repository{Visibility: github.Ptr(visibility), Fork: github.Ptr(fork)}
+	}
+
+	t.Run("warns for a public repository", func(t *testing.T) {
+		got := warnPushRulesetsOnPublicRepo(keys, repo("public", false), "", "myorg/ward")
+		if len(got) != 1 {
+			t.Fatalf("warnings = %v, want one", got)
+		}
+		if !strings.Contains(got[0], "Source public repos cannot have push rules") {
+			t.Errorf("warning %q should quote what GitHub will answer", got[0])
+		}
+	})
+
+	t.Run("stays quiet for a private repository", func(t *testing.T) {
+		if got := warnPushRulesetsOnPublicRepo(keys, repo("private", false), "", "myorg/infra"); len(got) != 0 {
+			t.Errorf("warnings = %v, want none", got)
+		}
+	})
+
+	t.Run("stays quiet for a fork, which GitHub does not refuse", func(t *testing.T) {
+		if got := warnPushRulesetsOnPublicRepo(keys, repo("public", true), "", "myorg/upstream"); len(got) != 0 {
+			t.Errorf("warnings = %v, want none", got)
+		}
+	})
+
+	t.Run("follows the visibility this run is about to set", func(t *testing.T) {
+		// Public today, private by the time the ruleset is created.
+		if got := warnPushRulesetsOnPublicRepo(keys, repo("public", false), "private", "myorg/ward"); len(got) != 0 {
+			t.Errorf("warnings = %v, want none once the repo is being made private", got)
+		}
+		// And the other way: a repository this run is creating public.
+		got := warnPushRulesetsOnPublicRepo(keys, nil, "public", "myorg/new")
+		if len(got) != 1 {
+			t.Errorf("warnings = %v, want one for a repository being created public", got)
+		}
+	})
+
+	t.Run("stays quiet for branch and tag rulesets", func(t *testing.T) {
+		branch := []config.RulesetConfig{
+			{Name: "baseline", Preset: config.PresetBranchProtection},
+			{Name: "tags", Preset: config.PresetTagProtection},
+		}
+		if got := warnPushRulesetsOnPublicRepo(branch, repo("public", false), "", "myorg/ward"); len(got) != 0 {
+			t.Errorf("warnings = %v, want none", got)
+		}
+	})
+}
