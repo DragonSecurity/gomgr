@@ -29,7 +29,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Set VERSION
-        run: echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
 
       - name: Build
         env:
@@ -91,7 +91,10 @@ jobs:
           # `sha256sum -c checksums.txt` beside the archives reported them
           # missing, which reads like a tampered download rather than a broken
           # manifest. Affected v0.7.0 through v0.7.2.
-          sha256sum *.tar.gz *.zip > checksums.txt
+          # -- so an archive whose name began with a dash would be read as a
+          # filename rather than an option. Nothing produces such a name today;
+          # the guard costs two characters and the failure would be obscure.
+          sha256sum -- *.tar.gz *.zip > checksums.txt
           cat checksums.txt
 
       - name: Create Release
