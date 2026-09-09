@@ -39,6 +39,21 @@ custom_roles:
       - read_secret_scanning_alerts
       - write_secret_scanning_alerts
 
+# The house style for every managed repository. A repository's own `settings:`
+# block overrides these key by key; a key neither states is left alone on
+# GitHub, so adding a default here never switches anything off by omission.
+repo_defaults:
+  allow_squash_merge: true
+  allow_merge_commit: false
+  delete_branch_on_merge: true
+  allow_auto_merge: true
+
+  # Free on public repositories, GitHub Advanced Security on private ones.
+  # Push protection needs secret scanning, so the two travel together.
+  secret_scanning: true
+  secret_scanning_push_protection: true
+  dependabot_security_updates: true
+
 # Organization-wide rulesets — the guard rails every repository inherits.
 # A `preset` supplies the target, conditions and rules; anything set alongside
 # it wins, at whole-rule granularity (naming a rule replaces the preset's

@@ -446,6 +446,55 @@ repositories:
     permission: admin       # visibility omitted → private (backwards-compatible)
 ```
 
+### Repository settings (`settings:`)
+
+A repository entry accepts a `settings:` block, and `org.yaml` accepts the same
+block as `repo_defaults:` for every managed repository. A repository's own value
+wins; a key it omits falls through to the default. **Every key is optional and
+omitting one leaves GitHub alone** — that is the difference between "not
+mentioned" and "set to false", and it is why an org-wide default block does not
+switch things off across the organization the first time anybody adds one.
+
+```yaml
+# org.yaml — the house style, applied to every managed repository
+repo_defaults:
+  # Merge and branch hygiene
+  allow_squash_merge: true
+  allow_merge_commit: false
+  allow_rebase_merge: true
+  allow_update_branch: true
+  delete_branch_on_merge: true
+  allow_auto_merge: true
+
+  # Security analyses
+  secret_scanning: true
+  secret_scanning_push_protection: true      # needs secret_scanning
+  secret_scanning_validity_checks: false     # needs secret_scanning
+  dependabot_security_updates: true
+```
+
+```yaml
+# repos.yaml — one repository departing from it
+repos:
+  vendored-mirror:
+    settings:
+      secret_scanning: false     # third-party history, all alerts are theirs
+```
+
+Secret scanning and push protection are free on public repositories and need
+GitHub Advanced Security on private ones, so a private repository in an
+organization without GHAS is refused by the API. Push protection and validity
+checks are secret scanning features: gomgr refuses a config that asks for one
+while switching secret scanning off, and the dry run warns when a repository has
+secret scanning off and the configuration does not turn it on.
+
+`advanced_security` and `code_security` are deliberately **not** settable. Those
+turn GHAS itself on, which is a billing decision rather than a hygiene one.
+
+Anything gomgr cannot read back is left alone rather than guessed at: if GitHub
+does not report a setting for a repository, the plan says so and moves on
+instead of reporting drift it cannot see.
+
 ### `org.yaml`
 Define organization owners and custom repository roles:
 ```yaml
