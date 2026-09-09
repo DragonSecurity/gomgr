@@ -942,7 +942,7 @@ func TestPlanLookupTakesAppIDFromClient(t *testing.T) {
 func TestWarnPushRulesetsOnPublicRepo(t *testing.T) {
 	keys := []config.RulesetConfig{{Name: "no-committed-keys", Preset: config.PresetNoCommittedKeys}}
 	repo := func(visibility string, fork bool) *github.Repository {
-		return &github.Repository{Visibility: github.Ptr(visibility), Fork: github.Ptr(fork)}
+		return &github.Repository{Visibility: new(visibility), Fork: new(fork)}
 	}
 
 	t.Run("warns for a public repository", func(t *testing.T) {
