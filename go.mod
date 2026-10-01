@@ -4,7 +4,7 @@ go 1.27.1
 
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.19.0
-	github.com/google/go-github/v91 v91.0.0
+	github.com/google/go-github/v92 v92.0.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	golang.org/x/oauth2 v0.37.0

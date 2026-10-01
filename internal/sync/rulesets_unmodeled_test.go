@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/v91/github"
+	"github.com/google/go-github/v92/github"
 )
 
 // The whole point of the modeled set is that it cannot fall behind go-github.
